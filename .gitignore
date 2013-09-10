@@ -1,0 +1,13 @@
+.eunit/
+.ditz-config
+.directory
+.kateproject
+.kateproject.d/
+ebin/
+logs/
+deps/
+*.swp
+*.beam
+*~
+*.kate-swp
+ttb_last_config

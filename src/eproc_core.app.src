@@ -1,0 +1,13 @@
+{application, eproc_core, [
+    {description, "EProc Core"},
+    {vsn, git},
+    {registered, []},
+    {applications, [
+        kernel,
+        stdlib,
+        sasl,
+        gproc,
+        lager
+    ]},
+    {mod, {eproc_core_app, []}}
+]}.
