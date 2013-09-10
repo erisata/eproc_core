@@ -16,18 +16,8 @@
 %|  specific language governing permissions and limitations
 %|  under the License.
 %\--------------------------------------------------------------------
-{erl_opts, [debug_info, fail_on_warning]}.
-{deps, [
-    %%
-    %%  Transitive deps.
-    %%
-    {goldrush,   ".*", {git, "https://github.com/DeadZen/goldrush.git", {tag, "879c69874a"}}},      % For lager
-    {gen_leader, ".*", {git, "https://github.com/garret-smith/gen_leader_revival.git", "HEAD"}},    % For gproc
-    %%
-    %%  Main deps.
-    %%
-    {gproc, ".*", {git, "https://github.com/uwiger/gproc.git", {tag, "0.2.17"}}},
-    {lager, ".*", {git, "https://github.com/basho/lager.git",  {tag, "2.0.0"}}},
-    {meck,  ".*", {git, "https://github.com/eproxus/meck.git", {tag, "0.7.2"}}}
-]}.
-{ct_dir, "itest"}.
+-module(eproc_store).
+-export_type([ref/0]).
+
+-opaque ref() :: {Callback :: module(), Args :: term()}.
+
