@@ -23,9 +23,33 @@
 
 -module(eproc_fsm_void).
 -behaviour(eproc_fsm).
+-compile([{parse_transform, lager_transform}]).
+-export([start_link/3]).
 -export([init/3, handle_state/5, handle_status/4, state_change/2]).
+-include("eproc.hrl").
+
+
+%% =============================================================================
+%%  Public API.
+%% =============================================================================
+
+%%
+%%
+%%
+start_link(Event, Store, Registry) ->
+    InstanceId = erlang:make_ref(),
+    Definition = #definition{},
+    {ok, ProcessId} = eproc_fsm:start_link(InstanceId, Definition, Event, Store, Registry),
+    {ok, InstanceId, ProcessId}.
+
+
+
+%% =============================================================================
+%%  Internal data structures.
+%% =============================================================================
 
 -record(state, {}).
+
 
 
 %% =============================================================================

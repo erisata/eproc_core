@@ -14,6 +14,7 @@
 %| limitations under the License.
 %\--------------------------------------------------------------------
 -module(eproc_store_tests).
+-compile([{parse_transform, lager_transform}]).
 -include_lib("eunit/include/eunit.hrl").
 
 %%

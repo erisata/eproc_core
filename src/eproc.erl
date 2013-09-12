@@ -14,3 +14,4 @@
 %| limitations under the License.
 %\--------------------------------------------------------------------
 -module(eproc).
+-compile([{parse_transform, lager_transform}]).

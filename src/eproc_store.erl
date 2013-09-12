@@ -14,6 +14,7 @@
 %| limitations under the License.
 %\--------------------------------------------------------------------
 -module(eproc_store).
+-compile([{parse_transform, lager_transform}]).
 -export_type([ref/0]).
 
 -opaque ref() :: {Callback :: module(), Args :: term()}.

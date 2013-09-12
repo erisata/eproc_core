@@ -13,12 +13,9 @@
 %| See the License for the specific language governing permissions and
 %| limitations under the License.
 %\--------------------------------------------------------------------
+-module(eproc_registry).
+-compile([{parse_transform, lager_transform}]).
+-export_type([ref/0]).
 
-
--record(definition, {
-}).
-
-
--type store_ref()       :: eproc_store:ref().
--type registry_ref()    :: eproc_registry:ref().
+-opaque ref() :: {Callback :: module(), Args :: term()}.
 
