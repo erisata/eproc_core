@@ -14,11 +14,22 @@
 %| limitations under the License.
 %\--------------------------------------------------------------------
 
-
--record(definition, {
-}).
-
-
+-type proplist()        :: [{term(), term()}].
+-type timestamp()       :: calendar:timestamp().
 -type store_ref()       :: eproc_store:ref().
 -type registry_ref()    :: eproc_registry:ref().
+
+
+-record(definition, {
+    application         :: atom(),
+    process             :: atom(),
+    version = [0, 0, 0] :: list(),
+    module              :: module(),
+    args                :: term(),
+    description         :: binary(),
+    valid_from          :: timestamp(), % Inclusive
+    valid_till          :: timestamp(), % Exclusive
+    options = []        :: list()
+}).
+
 

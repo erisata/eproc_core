@@ -38,8 +38,7 @@
 %%
 start_link(Event, Store, Registry) ->
     InstanceId = erlang:make_ref(),
-    Definition = #definition{},
-    {ok, ProcessId} = eproc_fsm:start_link(InstanceId, Definition, Event, Store, Registry),
+    {ok, ProcessId} = eproc_fsm:start_link({via, Registry, InstanceId}, ?MODULE, {}, Event, Store, []),
     {ok, InstanceId, ProcessId}.
 
 

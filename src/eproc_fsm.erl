@@ -31,7 +31,7 @@
 -module(eproc_fsm).
 %-behaviour(gen_server).
 -compile([{parse_transform, lager_transform}]).
--export([start_link/5, call/2, cast/2, kill/2, suspend/2, resume/2, set_state/4]).
+-export([start_link/6, call/2, cast/2, kill/2, suspend/2, resume/2, set_state/4]).
 -export([reply/2]).
 -export_type([inst_id/0, inst_ref/0]).
 -include("eproc.hrl").
@@ -112,11 +112,19 @@
 %% =============================================================================
 
 %%
+%%  Start new eproc_fsm instance.
 %%
-%%
--spec start_link(inst_id(), #definition{}, state_event(), store_ref(), registry_ref()) -> ok.
+-spec start_link(
+        Name    :: {via, Registry :: module(), InstanceId :: inst_id()},
+        Module  :: module(),
+        Args    :: term(),
+        Event   :: state_event(),
+        Store   :: store_ref(),
+        Options :: proplist()
+        ) ->
+        {ok, pid()} | term().
 
-start_link(_InstanceId, _Definition, _Event, _Store, _Registry) ->
+start_link(_Name, _Module, _Args, _Event, _Store, _Options) ->
     ok.
 
 
