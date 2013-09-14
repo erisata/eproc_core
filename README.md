@@ -63,6 +63,30 @@ The same goes for messages, that are received by an instance, that
 is currently suspended.
 
 
+Startup and shutdown procedures
+----------------------------------------
+
+Startup should be done in several phases:
+
+  1. Initialization
+  1.1. Setup application environment.
+  1.2. Load channels.
+  1.3. Load services.
+  2. Startup
+  2.1. Load all FSMs.
+  2.2. Start outgoing channel flows.
+  2.3. Register an application to the router.???
+  2.4. Start all FSMs.
+  2.5. Start incoming flows.
+
+Shutdown procedures:
+
+  1. Stop incoming flows.
+  2. Stop all FSMs.
+  3. Stop outgoing flows.
+  4. Shutdown application.
+
+
 Data model
 ----------------------------------------
 
