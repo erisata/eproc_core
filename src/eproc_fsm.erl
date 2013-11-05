@@ -31,13 +31,13 @@
 %%  Several states are maintained during lifeycle of the process:
 %%    * `initializing` - while FSM initializes itself asynchronously.
 %%    * `running`   - when the FSM is running.
-%%    * `suspended` - when the FSM is suspended by an administrator.
+%%    * `paused`    - when the FSM is suspended (paused) by an administrator.
 %%    * `faulty'    - when the FSM is suspended because of errors.
 %%
 %%  FSM can reach the following terminal states:
 %%    * `{done, success}` - when the FSM was completed successfully.
 %%    * `{done, failure}` - when the FSM was completed by the callback module returning special response TODO.
-%%    * `{term, killed}`  - when the FSM was killed in the `running` or the `suspended` state.
+%%    * `{term, killed}`  - when the FSM was killed in the `running` or the `paused` state.
 %%    * `{term, failed}`  - when the FSM was terminated in the `faulty` state.
 %%
 -module(eproc_fsm).
@@ -46,7 +46,7 @@
 -export([start_link/6, call/2, call/3, cast/2, kill/2, suspend/2, resume/2, set_state/4]).
 -export([reply/2]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
--export([initializing/2, initializing/3, running/2, running/3, suspended/2, suspended/3, faulty/2, faulty/3]).
+-export([initializing/2, initializing/3, running/2, running/3, paused/2, paused/3, faulty/2, faulty/3]).
 -export_type([name/0, inst_id/0, inst_ref/0]).
 -include("eproc.hrl").
 
@@ -66,6 +66,10 @@
 -type state_action() :: term().
 -type state_phase() :: event | entry | exit.
 
+
+%%
+%%  Internal state of the `eproc_fsm`.
+%%
 -record(state, {
     inst_id,
     module,
@@ -74,13 +78,16 @@
     options
 }).
 
+
+
 %% =============================================================================
 %%  Callback definitions.
 %% =============================================================================
 
 
 %%
-%%
+%%  Invoked when initializing the FSM. This fuction is invoked only on first
+%%  initialization. I.e. it is not invoked on restarts.
 %%
 -callback init(
         #definition{},
@@ -112,10 +119,10 @@
 %%
 %%
 -callback handle_status(
-    state_name(),
-    state_data(),
-    Query           :: atom(),
-    MediaType       :: atom()
+        state_name(),
+        state_data(),
+        Query           :: atom(),
+        MediaType       :: atom()
     ) ->
     {ok, MediaType :: atom(), Status :: binary() | term()} |
     {error, Reason :: term()}.
@@ -125,8 +132,8 @@
 %%
 %%
 -callback state_change(
-    OldStateData    :: state_data(),
-    InstRef         :: inst_ref()
+        OldStateData    :: state_data(),
+        InstRef         :: inst_ref()
     ) ->
     {ok, NewStateData :: state_data()}.
 
@@ -269,12 +276,12 @@ running(_Event, _From, State) ->
 
 
 %%
-%%  Handles the `suspended` state.
+%%  Handles the `paused` state.
 %%
-suspended(_Event, State) ->
+paused(_Event, State) ->
     {noreply, State}.
 
-suspended(_Event, _From, State) ->
+paused(_Event, _From, State) ->
     {reply, ok, State}.
 
 
