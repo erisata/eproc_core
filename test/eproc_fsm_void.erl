@@ -72,7 +72,7 @@ handle_state([ready], entry, initial, StateData, _InstRef) ->
 %%
 %%
 %%
-handle_status(_StateName, _StateData, Query, MediaType) ->
+handle_status(_StateName, _StateData, _Query, _MediaType) ->
     {error, undefined}.
 
 

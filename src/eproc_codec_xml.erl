@@ -13,17 +13,36 @@
 %| See the License for the specific language governing permissions and
 %| limitations under the License.
 %\--------------------------------------------------------------------
--module(eproc_fsm_tests).
--compile([{parse_transform, lager_transform}]).
--include_lib("eunit/include/eunit.hrl").
 
 %%
+%%  Encodes / decodes erlang terms to/from XML using xmerl.
 %%
+-module(eproc_codec_xml).
+-export([encode/1, decode/1]).
+
+
+%% =============================================================================
+%%  Public API.
+%% =============================================================================
+
 %%
-void_fsm_test() ->
-    %Event = a,
-    %Store = undefined,
-    %Registry = undefined,
-    %{ok, InstanceId, ProcessId} = eproc_fsm_void:start_link(Event, Store, Registry),
-    %TODO: Asserts
-    ok.
+%%  Encode term to XML.
+%%
+encode(_Term) ->
+    % TODO: Implement.
+    {error, not_implemented}.
+
+
+%%
+%%  Decode XML to Erlang term.
+%%
+decode(_Xml) ->
+    % TODO: Implement.
+    {error, not_implemented}.
+
+
+
+%% =============================================================================
+%%  Internal functions.
+%% =============================================================================
+

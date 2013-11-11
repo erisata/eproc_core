@@ -13,17 +13,5 @@
 %| See the License for the specific language governing permissions and
 %| limitations under the License.
 %\--------------------------------------------------------------------
--module(eproc_fsm_tests).
--compile([{parse_transform, lager_transform}]).
--include_lib("eunit/include/eunit.hrl").
 
-%%
-%%
-%%
-void_fsm_test() ->
-    %Event = a,
-    %Store = undefined,
-    %Registry = undefined,
-    %{ok, InstanceId, ProcessId} = eproc_fsm_void:start_link(Event, Store, Registry),
-    %TODO: Asserts
-    ok.
+-module(eproc_codec).
