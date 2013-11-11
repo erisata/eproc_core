@@ -43,7 +43,20 @@
 -module(eproc_fsm).
 -behaviour(gen_fsm).
 -compile([{parse_transform, lager_transform}]).
--export([start_link/6, call/2, call/3, cast/2, kill/2, suspend/2, resume/2, set_state/4]).
+-export([
+    create/0,
+    start_link/6,
+    send_create_event/0,
+    sync_send_create_event/0,
+    sync_send_create_event/1,
+    send_event/2,
+    sync_send_event/2,
+    sync_send_event/3,
+    kill/2,
+    suspend/2,
+    resume/2,
+    set_state/4
+]).
 -export([reply/2]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 -export([initializing/2, initializing/3, running/2, running/3, paused/2, paused/3, faulty/2, faulty/3]).
@@ -143,6 +156,14 @@
 %%  Public API.
 %% =============================================================================
 
+
+%%
+%%
+%%
+create() ->
+    ok.
+
+
 %%
 %%  Start new eproc_fsm instance.
 %%
@@ -176,22 +197,46 @@ start_link(Name = {via, Registry, InstanceId}, Module, Args, Event, Store, Optio
 %%
 %%
 %%
-call(Name, Event) ->
-    gen_fsm:sync_send_event(Name, {'eproc_fsm$call', Event}).
+send_create_event() ->
+    %create(),
+    %start_link(),
+    %send_event(),
+    ok.
 
 
 %%
 %%
 %%
-call(Name, Event, Timeout) ->
-    gen_fsm:sync_send_event(Name, {'eproc_fsm$call', Event}, Timeout).
+sync_send_create_event() ->
+    ok.
 
 
 %%
 %%
 %%
-cast(Name, Event) ->
-    gen_fsm:send_event(Name, {'eproc_fsm$cast', Event}).
+sync_send_create_event(_Timeout) ->
+    ok.
+
+
+%%
+%%
+%%
+send_event(Name, Event) ->
+    gen_fsm:send_event(Name, {'eproc_fsm$send_event', Event}).
+
+
+%%
+%%
+%%
+sync_send_event(Name, Event) ->
+    gen_fsm:sync_send_event(Name, {'eproc_fsm$sync_send_event', Event}).
+
+
+%%
+%%
+%%
+sync_send_event(Name, Event, Timeout) ->
+    gen_fsm:sync_send_event(Name, {'eproc_fsm$sync_send_event', Event}, Timeout).
 
 
 %%
