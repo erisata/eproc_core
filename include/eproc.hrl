@@ -16,6 +16,9 @@
 
 -type proplist()        :: [{term(), term()}].
 -type timestamp()       :: calendar:timestamp().
+-type inst_id()         :: eproc_fsm:id().
+-type inst_ref()        :: eproc_fsm:ref().
+-type inst_group()      :: eproc_fsm:group().
 -type store_ref()       :: eproc_store:ref().
 -type registry_ref()    :: eproc_registry:ref().
 

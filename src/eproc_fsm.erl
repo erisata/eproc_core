@@ -44,12 +44,12 @@
 -behaviour(gen_fsm).
 -compile([{parse_transform, lager_transform}]).
 -export([
-    create/0,
-    start_link/6,
-    send_create_event/0,
+    create/4, create/3,
+    start_link/5, start_link/3,
+    send_create_event/9, send_create_event/8, send_create_event/5,
     sync_send_create_event/0,
     sync_send_create_event/1,
-    send_event/2,
+    send_event/3, send_event/2,
     sync_send_event/2,
     sync_send_event/3,
     kill/2,
@@ -60,7 +60,7 @@
 -export([reply/2]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 -export([initializing/2, initializing/3, running/2, running/3, paused/2, paused/3, faulty/2, faulty/3]).
--export_type([name/0, inst_id/0, inst_ref/0]).
+-export_type([name/0, id/0, ref/0, group/0]).
 -include("eproc.hrl").
 
 
@@ -68,11 +68,16 @@
 %%  Structure, passed to all callbacks, to be used to indicate process.
 %%
 -record(inst_ref, {
+    id          :: inst_id(),
+    group       :: inst_group(),
+    registry    :: registry_ref(),
+    store       :: store_ref()
 }).
 
--type name() :: {via, Registry :: module(), InstanceId :: inst_id()}.
--opaque inst_id()   :: integer().
--opaque inst_ref()  :: #inst_ref{}.
+-type name() :: {via, Registry :: module(), InstId :: inst_id()}.
+-opaque id()  :: integer().
+-opaque ref() :: #inst_ref{}.
+-opaque group() :: integer().
 -type state_event() :: term().
 -type state_name()  :: list().
 -type state_data()  :: term().
@@ -158,50 +163,121 @@
 
 
 %%
+%%  Creates new persistent FSM.
 %%
+%%  This function should be considered as a low-level API. The functions
+%%  `send_create_event/*` and `sync_send_create_event/*` should be used
+%%  in an ordinary case.
 %%
-create() ->
-    ok.
+%%  Parameters:
+%%
+%%  `Module`
+%%  :   is a callback module implementing `eproc_fsm` behaviour.
+%%  `Args`
+%%  :   is passed to the `Module:init/3` function as the `Args` parameter. This
+%%      is similar to the Args parameter in `gen_fsm` and other OTP behaviours.
+%%  `Store'
+%%  :   is used to persist FSM state. One can use either void, transient or
+%%      persistent store implementations.
+%%
+%%  On success, this function returns instance id of the newly created FSM.
+%%  It can be used then to start the instance and to reference it.
+%%
+-spec create(
+        Module  :: module(),
+        Args    :: term(),
+        Group   :: inst_group(),
+        Store   :: store_ref()
+        ) ->
+        {ok, inst_id()}.
+
+create(Module, Args, Group, Store) ->
+    eproc_store:add_instance(Store, Module, Args, Group).
 
 
 %%
-%%  Start new eproc_fsm instance.
+%%  Convenience function for creating instance with new group.
+%%  See `create/4` for more details.
 %%
-%%  `Name` is used to identify the FSM instance. Name should always be provided
+create(Module, Args, Store) ->
+    create(Module, Args, undefined, Store).
+
+
+%%
+%%  Start previously created (using `create/3`) `eproc_fsm` instance.
+%%
+%%  This function should be considered as a low-level API. The functions
+%%  `send_create_event/*` and `sync_send_create_event/*` should be used
+%%  in an ordinary case.
+%%
+%%  Parameters:
+%%
+%%  `Name`
+%%  :   is used to identify the FSM instance. Name should always be provided
 %%      in the form of `{via, module(), term()}`. This notation is compatible with
 %%      the standard OTP process registry behaviour. The registry provided in this
 %%      parameter is also used to reference other processes (can be overriden using options).
-%%  `Module` is a callback module implementing `eproc_fsm` behaviour.
-%%  `Args` is passed to the `Module:init/3` function as the `Args` parameter. This
-%%      is similar to the Args parameter in `gen_fsm` and other OTP behaviours.
-%%  `Event` stands for the initial event of the FSM, i.e. event that created the FSM.
+%%  `Event`
+%%  :   stands for the initial event of the FSM, i.e. event that created the FSM.
 %%      This event is used for invoking state transition callbacks for the transition
 %%      from the `initial` state.
-%%  `Store' is used to persist FSM state. One can use either void, transient or
+%%  `Store'
+%%  :   is used to persist FSM state. One can use either void, transient or
 %%      persistent store implementations.
 %%
 -spec start_link(
-        Name    :: name(),
-        Module  :: module(),
-        Args    :: term(),
-        Event   :: state_event(),
-        Store   :: store_ref(),
-        Options :: proplist()
+        Name        :: name(),
+        InstId      :: inst_id(),
+        Registry    :: registry_ref(),
+        Store       :: store_ref(),
+        Options     :: proplist()
         ) ->
         {ok, pid()} | ignore | {error, term()}.
 
-start_link(Name = {via, Registry, InstanceId}, Module, Args, Event, Store, Options) ->
-    gen_fsm:start_link(Name, ?MODULE, {InstanceId, Module, Args, Event, Registry, Store, Options}).
+start_link(Name, InstId, Registry, Store, Options) ->
+    gen_fsm:start_link(Name, ?MODULE, {InstId, Registry, Store, Options}).
+
+
+%%
+%%  Convenience function for calling `start_link/5` with InstId and Registry
+%%  resolved from the Name parameter.
+%%
+-spec start_link(
+        Name        :: name(),
+        Store       :: store_ref(),
+        Options     :: proplist()
+        ) ->
+        {ok, pid()} | ignore | {error, term()}.
+
+start_link(Name = {via, Registry, InstId}, Store, Options) ->
+    start_link(Name, InstId, Registry, Store, Options).
 
 
 %%
 %%
 %%
-send_create_event() ->
-    %create(),
-    %start_link(),
-    %send_event(),
-    ok.
+send_create_event(Name, Module, Args, Group, Event, From, Registry, Store, Options) ->
+    {ok, InstId} = create(Module, Args, Group, Store),
+    ResolvedName = case Name of
+        undefined -> {via, Registry, InstId};
+        _ -> Name
+    end,
+    {ok, _PID} = eproc_registry:start_inst(Registry, ResolvedName, InstId, Registry, Store, Options),
+    {ok, Response} = send_event(ResolvedName, Event, From),
+    {ok, InstId, Response}.
+
+
+send_create_event(Module, Args, Group, Event, From, Registry, Store, Options) ->
+    send_create_event(undefined, Module, Args, Group, Event, From, Registry, Store, Options).
+
+
+send_create_event(Module, Args, Event, From, Options) when is_record(From, inst_ref) ->
+    #inst_ref{
+        group = CallerGroup,
+        registry = Registry,
+        store = Store
+    } = From,
+    send_create_event(undefined, Module, Args, CallerGroup, Event, From, Registry, Store, Options).
 
 
 %%
@@ -221,8 +297,12 @@ sync_send_create_event(_Timeout) ->
 %%
 %%
 %%
+send_event(Name, Event, From) ->
+    gen_fsm:send_event(Name, {'eproc_fsm$send_event', Event, From}).
+
+
 send_event(Name, Event) ->
-    gen_fsm:send_event(Name, {'eproc_fsm$send_event', Event}).
+    send_event(Name, Event, undefined).
 
 
 %%
@@ -288,9 +368,9 @@ reply(_Response, _InstRef) ->
 %%  The initialization is implemented asynchronously to avoid timeouts when
 %%  restarting the engine with a lot of running fsm's.
 %%
-init({InstanceId, Module, Args, Event, Registry, Store, Options}) ->
+init({InstId, Module, Args, Event, Registry, Store, Options}) ->
     State = #state{
-        inst_id     = InstanceId,
+        inst_id     = InstId,
         module      = Module,
         registry    = Registry,
         store       = Store,

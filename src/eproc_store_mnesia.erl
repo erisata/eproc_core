@@ -13,45 +13,32 @@
 %| See the License for the specific language governing permissions and
 %| limitations under the License.
 %\--------------------------------------------------------------------
--module(eproc_store).
+
+%%
+%%  Mnesia-based EProc store implementation.
+%%
+-module(eproc_store_mnesia).
+-behaviour(eproc_store).
 -compile([{parse_transform, lager_transform}]).
--export([ref/2, add_instance/4]).
--export_type([ref/0]).
+-export([add_instance/4]).
 -include("eproc.hrl").
 
--opaque ref() :: {Callback :: module(), Args :: term()}.
-
 
 %% =============================================================================
-%%  Callback definitions.
-%% =============================================================================
-
--callback add_instance(
-        StoreArgs   :: term(),
-        FsmModule   :: module(),
-        FsmArgs     :: term(),
-        FsmGroup    :: inst_group()
-    ) ->
-    {ok, inst_ref()}.
-
-
-%% =============================================================================
-%%  Public API.
+%%  Callbacks for `gen_fsm`.
 %% =============================================================================
 
 %%
-%%  Create store reference.
 %%
--spec ref(module(), term())
-        -> {ok, store_ref()}.
-
-ref(Module, Args) ->
-    {ok, {Module, Args}}.
+%%
+add_instance(_StoreArgs, _FsmModule, _FsmArgs, _FsmGroup) ->
+    % TODO: Implement.
+    {ok, undefined}.
 
 
-%%
-%%
-%%
-add_instance({StoreMod, StoreArgs}, FsmModule, FsmArgs, FsmGroup) ->
-    StoreMod:add_instance(StoreArgs, FsmModule, FsmArgs, FsmGroup).
+
+%% =============================================================================
+%%  Internal functions.
+%% =============================================================================
+
 
