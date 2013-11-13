@@ -15,47 +15,40 @@
 %\--------------------------------------------------------------------
 
 %%
-%%  TODO: Desc.
+%%  Testcases that should be valid for all the `eproc_store` implementations.
+%%  See `eproc_store_ets_SUITE` for an example of using it.
 %%
--module(eproc_store).
--compile([{parse_transform, lager_transform}]).
--export([ref/2, add_instance/4]).
--export_type([ref/0]).
+-module(eproc_store_TCK).
+-export([all/0]).
+-export([test_add_instance/1]).
+-include_lib("common_test/include/ct.hrl").
 -include("eproc.hrl").
 
--opaque ref() :: {Callback :: module(), Args :: term()}.
+
+%%
+%%
+%%
+all() ->
+    [test_add_instance].
+
+%%
+%%
+%%
+store(Config) ->
+    proplists:get_value(store, Config).
+
 
 
 %% =============================================================================
-%%  Callback definitions.
-%% =============================================================================
-
--callback add_instance(
-        StoreArgs   :: term(),
-        FsmModule   :: module(),
-        FsmArgs     :: term(),
-        FsmGroup    :: inst_group()
-    ) ->
-    {ok, inst_ref()}.
-
-
-%% =============================================================================
-%%  Public API.
+%%  Testcases.
 %% =============================================================================
 
 %%
-%%  Create store reference.
 %%
--spec ref(module(), term())
-        -> {ok, store_ref()}.
+%%
+test_add_instance(Config) ->
+    InstId = asd,
+    {ok, InstId} = eproc_store:add_instance(store(Config), #instance{id = InstId}),
+    ok.
 
-ref(Module, Args) ->
-    {ok, {Module, Args}}.
-
-
-%%
-%%
-%%
-add_instance({StoreMod, StoreArgs}, FsmModule, FsmArgs, FsmGroup) ->
-    StoreMod:add_instance(StoreArgs, FsmModule, FsmArgs, FsmGroup).
 

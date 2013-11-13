@@ -46,12 +46,10 @@
 -export([
     create/4, create/3,
     start_link/5, start_link/3,
-    send_create_event/9, send_create_event/8, send_create_event/5,
-    sync_send_create_event/0,
-    sync_send_create_event/1,
+    send_create_event/9, send_create_event/8, send_create_event/7, send_create_event/5,
+    sync_send_create_event/9, sync_send_create_event/8, sync_send_create_event/7, sync_send_create_event/5,
     send_event/3, send_event/2,
-    sync_send_event/2,
-    sync_send_event/3,
+    sync_send_event/4, sync_send_event/3,
     kill/2,
     suspend/2,
     resume/2,
@@ -271,6 +269,10 @@ send_create_event(Module, Args, Group, Event, From, Registry, Store, Options) ->
     send_create_event(undefined, Module, Args, Group, Event, From, Registry, Store, Options).
 
 
+send_create_event(Module, Args, Group, Event, Registry, Store, Options) ->
+    send_create_event(undefined, Module, Args, Group, Event, undefined, Registry, Store, Options).
+
+
 send_create_event(Module, Args, Event, From, Options) when is_record(From, inst_ref) ->
     #inst_ref{
         group = CallerGroup,
@@ -282,16 +284,38 @@ send_create_event(Module, Args, Event, From, Options) when is_record(From, inst_
 
 %%
 %%
+%%  `Options :: [ {timeout, integer()} ]`
+%%  :   Options, that can be specified when starting the FSM.
 %%
-sync_send_create_event() ->
-    ok.
+sync_send_create_event(Name, Module, Args, Group, Event, From, Registry, Store, Options) ->
+    {ok, InstId} = create(Module, Args, Group, Store),
+    ResolvedName = case Name of
+        undefined -> {via, Registry, InstId};
+        _ -> Name
+    end,
+    {ok, _PID} = eproc_registry:start_inst(Registry, ResolvedName, InstId, Registry, Store, Options),
+    {ok, Response} = case proplists:get_value(timeout, Options) of
+        undefined -> sync_send_event(ResolvedName, Event, From);
+        Timeout   -> sync_send_event(ResolvedName, Event, From, Timeout)
+    end,
+    {ok, InstId, Response}.
 
 
-%%
-%%
-%%
-sync_send_create_event(_Timeout) ->
-    ok.
+sync_send_create_event(Module, Args, Group, Event, From, Registry, Store, Options) ->
+    sync_send_create_event(undefined, Module, Args, Group, Event, From, Registry, Store, Options).
+
+
+sync_send_create_event(Module, Args, Group, Event, Registry, Store, Options) ->
+    sync_send_create_event(undefined, Module, Args, Group, Event, undefined, Registry, Store, Options).
+
+
+sync_send_create_event(Module, Args, Event, From, Options) when is_record(From, inst_ref) ->
+    #inst_ref{
+        group = CallerGroup,
+        registry = Registry,
+        store = Store
+    } = From,
+    sync_send_create_event(undefined, Module, Args, CallerGroup, Event, From, Registry, Store, Options).
 
 
 %%
@@ -308,15 +332,15 @@ send_event(Name, Event) ->
 %%
 %%
 %%
-sync_send_event(Name, Event) ->
-    gen_fsm:sync_send_event(Name, {'eproc_fsm$sync_send_event', Event}).
+sync_send_event(Name, Event, From) ->
+    gen_fsm:sync_send_event(Name, {'eproc_fsm$sync_send_event', Event, From}).
 
 
 %%
 %%
 %%
-sync_send_event(Name, Event, Timeout) ->
-    gen_fsm:sync_send_event(Name, {'eproc_fsm$sync_send_event', Event}, Timeout).
+sync_send_event(Name, Event, From, Timeout) ->
+    gen_fsm:sync_send_event(Name, {'eproc_fsm$sync_send_event', Event, From}, Timeout).
 
 
 %%
