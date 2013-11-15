@@ -13,16 +13,39 @@
 %| See the License for the specific language governing permissions and
 %| limitations under the License.
 %\--------------------------------------------------------------------
-{application, eproc_core, [
-    {description, "EProc: Core"},
-    {vsn, git},
-    {registered, [eproc_core]},
-    {mod, {eproc_core_app, []}},
-    {applications, [
-        kernel,
-        stdlib,
-        sasl,
-        gproc,
-        lager
-    ]}
-]}.
+
+%%
+%%
+%%
+-module(eproc_core_sup).
+-behaviour(supervisor).
+-export([start_link/1]). % API
+-export([init/1]). % CB
+
+
+%% =============================================================================
+%% API functions.
+%% =============================================================================
+
+
+%%
+%%  Create this supervisor.
+%%
+start_link() ->
+    supervisor:start_link(?MODULE, {}).
+
+
+
+%% =============================================================================
+%% Callbacks for supervisor.
+%% =============================================================================
+
+
+%%
+%%  Supervisor initialization.
+%%
+init({}) ->
+    Specs = [],
+    {ok, {{one_for_all, 100, 10}, Specs}}.
+
+
