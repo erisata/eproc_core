@@ -43,18 +43,41 @@
 -module(eproc_fsm).
 -behaviour(gen_fsm).
 -compile([{parse_transform, lager_transform}]).
+
+%%
+%%  Client-side functions.
+%%
 -export([
     create/3, start_link/2, await/2,
     send_create_event/5, sync_send_create_event/5,
     send_event/3, send_event/2, sync_send_event/4, sync_send_event/3,
     kill/2, suspend/2, resume/2, set_state/4
 ]).
--export([reply/2]).
+
+%%
+%%  Process side functions.
+%%
+-export([
+    reply/2, add_key_sync/3, add_key/3,
+    add_timer/5, add_timer/4, cancel_timer/2,
+    add_prop/3, set_name/2
+]).
+
+%%
+%%  Functions for `gen_fsm`.
+%%
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 -export([initializing/2, initializing/3, running/2, running/3, paused/2, paused/3, faulty/2, faulty/3]).
--export_type([name/0, id/0, ref/0, group/0]).
--include("eproc.hrl").
 
+%%
+%%  Type exports.
+%%
+-export_type([name/0, id/0, ref/0, group/0]).
+
+%%
+%%  Internal things...
+%%
+-include("eproc.hrl").
 -define(DEFAULT_TIMEOUT, 10000).
 
 
@@ -434,6 +457,57 @@ set_state(Name, NewStateName, NewStateData, Reason) ->
 
 reply(_Response, _InstRef) ->
     ok.
+
+
+%%
+%%
+%%
+add_key_sync(Key, Scope, Actions) ->
+    % TODO: Register the key to the registry synchronously.
+    [ {key, Key, Scope, [sync]} | Actions ].
+
+
+%%
+%%
+%%
+add_key(Key, Scope, Actions) ->
+    [ {key, Key, Scope} | Actions ].
+
+
+%%
+%%  Creates or modifies a timer.
+%%
+add_timer(Name, After, Event, Scope, Actions) ->
+    [ {timer, Name, After, Event, Scope} | Actions ].
+
+
+%%
+%%
+%%
+add_timer(After, Event, Scope, Actions) ->
+    add_timer(undefined, After, Event, Scope, Actions).
+
+
+%%
+%%  Cancels a timer by name.
+%%
+cancel_timer(Name, Actions) ->
+    [ {timer, Name, cancel} | Actions ].
+
+
+%%
+%%
+%%
+add_prop(Name, Value, Actions) ->
+    [ {prop, Name, Value} | Actions].
+
+
+%%
+%%
+%%
+set_name(Name, Actions) ->
+    [ {name, Name} | Actions ].
+
 
 
 %% =============================================================================
