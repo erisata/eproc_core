@@ -19,8 +19,8 @@
 %%
 -module(eproc_core_sup).
 -behaviour(supervisor).
--export([start_link/1]). % API
--export([init/1]). % CB
+-export([start_link/0]).
+-export([init/1]).
 
 
 %% =============================================================================

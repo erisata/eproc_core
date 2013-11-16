@@ -15,3 +15,16 @@
 %\--------------------------------------------------------------------
 -module(eproc).
 -compile([{parse_transform, lager_transform}]).
+-export([now/0]).
+-include("eproc.hrl").
+
+
+
+%%
+%%  Returns current time, consistelly for the entire system.
+%%
+-spec now() -> datetime().
+
+now() ->
+    calendar:universal_time().
+

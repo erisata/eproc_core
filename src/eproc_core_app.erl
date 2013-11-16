@@ -69,7 +69,7 @@ validate_env(Env) ->
 %%  Checks if mandatory key is presented in the application env.
 %%
 validate_env_mandatory(Key, Env, Message) ->
-    case proplists:lookup(store) of
+    case proplists:lookup(store, Env) of
         none -> {error, Message};
         {Key, _} -> ok
     end.

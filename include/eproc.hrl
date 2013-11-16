@@ -15,12 +15,14 @@
 %\--------------------------------------------------------------------
 
 -type proplist()        :: [{term(), term()}].
--type timestamp()       :: calendar:timestamp().
+-type datetime()        :: calendar:datetime().     % {Date, Time} in UTC
+-type timestamp()       :: erlang:timestamp().      % {Mega, Secs, Micro}
 -type duration()        :: integer().               % in ms.
 -type inst_id()         :: eproc_fsm:id().
 -type inst_ref()        :: eproc_fsm:ref().
+-type inst_name()       :: term().
 -type inst_group()      :: eproc_fsm:group().
--type inst_status()     :: atom().
+-type inst_status()     :: running | suspended | done | failed | killed.
 -type store_ref()       :: eproc_store:ref().
 -type registry_ref()    :: eproc_registry:ref().
 -type trns_id()         :: integer().
@@ -51,9 +53,16 @@
 %%
 -record(instance, {
     id          :: inst_id(),
+    group       :: inst_group(),
+    name        :: inst_name(),
+    keys        :: proplist(),
+    props       :: proplist(),
     module      :: module(),        %% TODO: Change it to definition?
-    start_time  :: timestamp(),
-    status      :: inst_status()
+    args        :: term(),
+    opts        :: proplist(),
+    start_time  :: datetime(),
+    status      :: inst_status(),
+    archived    :: datetime()
 }).
 
 

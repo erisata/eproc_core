@@ -23,18 +23,18 @@
 %%
 %%    * State name supports substates and orthogonal states.
 %%    * Callback `Module:handle_state/4` is used instead of `Module:StateName/2-3`.
-%%    * Process configuration is passed as a separate argument to the fsm.
+%%    * Process configuration is passed as a separate argument to the fsm. TODO: WTF?
 %%    * Has support for state entry and exit actions.
 %%    * Has support for scopes. The scopes can be used to manage timers and keys.
 %%    * Supports automatic state persistence.
 %%
 %%  Several states are maintained during lifeycle of the process:
-%%    * `initializing` - while FSM initializes itself asynchronously.
+%%    * `initializing` - while FSM initializes itself asynchronously.   TODO: Remove?
 %%    * `running`   - when the FSM is running.
 %%    * `paused`    - when the FSM is suspended (paused) by an administrator.
 %%    * `faulty'    - when the FSM is suspended because of errors.
 %%
-%%  FSM can reach the following terminal states:
+%%  FSM can reach the following terminal states:    TODO: Map it with the UML diagram.
 %%    * `{done, success}` - when the FSM was completed successfully.
 %%    * `{done, failure}` - when the FSM was completed by the callback module returning special response TODO.
 %%    * `{term, killed}`  - when the FSM was killed in the `running` or the `paused` state.
@@ -44,22 +44,18 @@
 -behaviour(gen_fsm).
 -compile([{parse_transform, lager_transform}]).
 -export([
-    create/4, create/3,
-    start_link/5, start_link/3,
-    send_create_event/9, send_create_event/8, send_create_event/7, send_create_event/5,
-    sync_send_create_event/9, sync_send_create_event/8, sync_send_create_event/7, sync_send_create_event/5,
-    send_event/3, send_event/2,
-    sync_send_event/4, sync_send_event/3,
-    kill/2,
-    suspend/2,
-    resume/2,
-    set_state/4
+    create/3, start_link/2, await/2,
+    send_create_event/5, sync_send_create_event/5,
+    send_event/3, send_event/2, sync_send_event/4, sync_send_event/3,
+    kill/2, suspend/2, resume/2, set_state/4
 ]).
 -export([reply/2]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 -export([initializing/2, initializing/3, running/2, running/3, paused/2, paused/3, faulty/2, faulty/3]).
 -export_type([name/0, id/0, ref/0, group/0]).
 -include("eproc.hrl").
+
+-define(DEFAULT_TIMEOUT, 10000).
 
 
 %%
@@ -76,6 +72,8 @@
 -opaque id()  :: integer().
 -opaque ref() :: #inst_ref{}.
 -opaque group() :: integer().
+-type fsm_ref() :: {inst, id()} | {name, term()} | {key, term()}.   % TODO: Rename, differentiate from ref().
+-type event_src() :: undefined | #inst_ref{} | term().
 -type state_event() :: term().
 -type state_name()  :: list().
 -type state_data()  :: term().
@@ -174,35 +172,67 @@
 %%  `Args`
 %%  :   is passed to the `Module:init/3` function as the `Args` parameter. This
 %%      is similar to the Args parameter in `gen_fsm` and other OTP behaviours.
-%%  `Store'
-%%  :   is used to persist FSM state. One can use either void, transient or
-%%      persistent store implementations.
+%%  `Options`
+%%  :   Proplist with options for the persistent FSM. The list can have
+%%      options used by this module (listed bellows) as well as unknown
+%%      options that can be used as a metadata for the FSM.
 %%
 %%  On success, this function returns instance id of the newly created FSM.
 %%  It can be used then to start the instance and to reference it.
 %%
+%%  Options known by this module:
+%%
+%%  `{group, group() | new}`
+%%  :   Its a group ID to which the FSM should be assigned or atom `new`
+%%      indicating that new group should be created for this FSM.
+%%  `{name, Name}`
+%%  :   Name of the FSM. It uniquelly identifies the FSM.
+%%      Name is valid for the entire FSM lifecycle, including
+%%      the `completed` state.
+%%  `{keys, [Key]}`
+%%  :   List of keys, that can be used to locate the FSM. Keys are
+%%      not required to identify the FSM uniquelly. The keys passed to this
+%%      function will be valid for all the lifetime of the FSM (i.e. scope = []).
+%%  `{props, proplist()}`
+%%  :   List of properties that are later converted to the normalized form
+%%      `{Name :: binary(), Value :: binary()}`. The properties are similar
+%%      to labels, and are to help organize the FSMs by humans.
+%%
+%%  TODO: Add various runtime limits here.
+%%
 -spec create(
         Module  :: module(),
         Args    :: term(),
-        Group   :: inst_group(),
-        Store   :: store_ref()
+        Options :: proplist()
         ) ->
-        {ok, inst_id()}.
+        {ok, inst_id()} |
+        {error, already_created}.
 
-create(Module, Args, Group, Store) ->
-    eproc_store:add_instance(Store, Module, Args, Group).
-
-
-%%
-%%  Convenience function for creating instance with new group.
-%%  See `create/4` for more details.
-%%
-create(Module, Args, Store) ->
-    create(Module, Args, undefined, Store).
+create(Module, Args, Options) ->
+    {KnownOpts, UnknownOpts} = proplists:split(Options, [group, name, keys, props]),
+    Instance = #instance{
+        id = undefined,
+        group = proplists:get_value(group, KnownOpts, new),
+        name = proplists:get_value(name, KnownOpts),
+        keys = proplists:get_value(keys, KnownOpts, []),
+        props = proplists:get_value(props, KnownOpts, []),
+        module = Module,
+        args = Args,
+        opts = UnknownOpts,
+        start_time = eproc:now(),
+        status = running,
+        archived = undefined
+    },
+    eproc_store:add_instance(undefined, Instance). % TODO: Create a name and new group if needed.
 
 
 %%
 %%  Start previously created (using `create/3`) `eproc_fsm` instance.
+%%
+%%  As part of initialization procedure, the FSM registers itself to the
+%%  registry. Registration by InstId is done synchronously and registrations
+%%  by Name and Keys are done asynchronously. One can use `await/2` to
+%%  synchronize with the FSM. Name is registered after all keys are registered.
 %%
 %%  This function should be considered as a low-level API. The functions
 %%  `send_create_event/*` and `sync_send_create_event/*` should be used
@@ -210,116 +240,138 @@ create(Module, Args, Store) ->
 %%
 %%  Parameters:
 %%
-%%  `Name`
-%%  :   is used to identify the FSM instance. Name should always be provided
-%%      in the form of `{via, module(), term()}`. This notation is compatible with
-%%      the standard OTP process registry behaviour. The registry provided in this
-%%      parameter is also used to reference other processes (can be overriden using options).
+%%  `InstId`
+%%  :   InstanceId of the previously created FSM. This Id is returned by the
+%%      `create/3` function.
+%%  `Options'
+%%  :   Runtime-level options. The options listed bellow are used by this
+%%      FSM implementation and the rest are passed to the `gen_fsm:start_link/3`.
+%%
+%%  Options supprted by this function: TODO: None, for this time.
+%%
+-spec start_link(
+        InstId      :: inst_id(),
+        Options     :: proplist()
+        ) ->
+        {ok, pid()} | ignore | {error, term()}.
+
+start_link(InstId, Options) ->
+    {KnownOpts, UnknownOpts} = proplists:split(Options, []),
+    gen_fsm:start_link(?MODULE, {InstId, KnownOpts}, UnknownOpts).
+
+
+%%
+%%  Awaits for the specified FSM by an instance id, a name or a key.
+%%
+%%  This function should be considered as a low-level API. The functions
+%%  `send_create_event/*` and `sync_send_create_event/*` should be used
+%%  in an ordinary case.
+%%
+%%  Parameters:
+%%
+%%  `FsmRef`
+%%  :   An id, a name or a key to await.
+%%  `Timeout`
+%%  :   Number of milliseconds to await.
+%%
+-spec await(
+        FsmRef :: fsm_ref(),
+        Timeout :: integer()
+        ) ->
+        ok | {error, timeout} | {error, term()}.
+
+await(FsmRef, Timeout) ->
+    eproc_registry:await(undefined, FsmRef, Timeout).
+
+
+%%
+%%  Use this function in the `eproc_fsm` callback module implementation to start
+%%  the FSM asynchronously.
+%%
+%%  This function awaits for the FSM to be initialized. I.e. it is guaranteed,
+%%  that the name and the keys, if were provided, are registered before this
+%%  function exits. Nevertheless, the initial message is processes asynchronously.
+%%
+%%  Parameters are the following:
+%%
+%%  `Module`
+%%  :   is passed to the `create/3` function (see its description for more details).
+%%  `Args`
+%%  :   is passed to the `create/3` function (see its description for more details).
 %%  `Event`
 %%  :   stands for the initial event of the FSM, i.e. event that created the FSM.
 %%      This event is used for invoking state transition callbacks for the transition
 %%      from the `initial` state.
-%%  `Store'
-%%  :   is used to persist FSM state. One can use either void, transient or
-%%      persistent store implementations.
+%%  `From`
+%%  :   is passed to the `send_event/3` function (see its description for more details).
+%%  `Options`
+%%  :   Options, that can be specified when starting the FSM. They are listed bellow.
 %%
--spec start_link(
-        Name        :: name(),
-        InstId      :: inst_id(),
-        Registry    :: registry_ref(),
-        Store       :: store_ref(),
-        Options     :: proplist()
+%%  Available options:
+%%
+%%  `{timeout, Timeout}`
+%%  :   Timeout to await for the FSM to be started.
+%%  `{group, Group}`
+%%  :   can be used to prevent derining group from the parent process
+%%      or to specify group for a process created based on external message.
+%%      For more details see description of `create/3` function.
+%%  All options handled by `create/3`
+%%  :   All the options are passed to the `create/3` function.
+%%
+%%  Group is derived from the `From` parameter unless it was explicitly specified
+%%  in the `Options` parameter. In that case, the group will be ingerited from the
+%%  caller FSM or new group will be created if mesage is from an external source.
+%%
+-spec send_create_event(
+        Module  :: module(),
+        Args    :: term(),
+        Event   :: state_event(),
+        From    :: event_src(),
+        Options :: proplist()
         ) ->
-        {ok, pid()} | ignore | {error, term()}.
+        {ok, inst_id()} |
+        {error, already_created} |
+        {error, timeout} |
+        {error, term()}.
 
-start_link(Name, InstId, Registry, Store, Options) ->
-    gen_fsm:start_link(Name, ?MODULE, {InstId, Registry, Store, Options}).
+send_create_event(Module, Args, Event, From, Options) ->
+    Timeout = resolve_timeout(Options),
+    {ok, InstId} = create_start_link(Module, Args, From, Options, Timeout),
+    ok = send_event({inst, InstId}, Event, From),
+    ok = await_for_created(Options, Timeout),
+    {ok, InstId}.
+
 
 
 %%
-%%  Convenience function for calling `start_link/5` with InstId and Registry
-%%  resolved from the Name parameter.
+%%  Use this function in the `eproc_fsm` callback module implementation to start
+%%  the FSM chronously. All the parameters and the options are the same as for the
+%%  `send_create_event/5` function (see its description for more details).
 %%
--spec start_link(
-        Name        :: name(),
-        Store       :: store_ref(),
-        Options     :: proplist()
+-spec sync_send_create_event(
+        Module  :: module(),
+        Args    :: term(),
+        Event   :: state_event(),
+        From    :: event_src(),
+        Options :: proplist()
         ) ->
-        {ok, pid()} | ignore | {error, term()}.
+        {ok, inst_id(), Reply :: term()} |
+        {error, already_created} |
+        {error, timeout} |
+        {error, term()}.
 
-start_link(Name = {via, Registry, InstId}, Store, Options) ->
-    start_link(Name, InstId, Registry, Store, Options).
-
-
-%%
-%%
-%%
-send_create_event(Name, Module, Args, Group, Event, From, Registry, Store, Options) ->
-    {ok, InstId} = create(Module, Args, Group, Store),
-    ResolvedName = case Name of
-        undefined -> {via, Registry, InstId};
-        _ -> Name
-    end,
-    {ok, _PID} = eproc_registry:start_inst(Registry, ResolvedName, InstId, Registry, Store, Options),
-    {ok, Response} = send_event(ResolvedName, Event, From),
-    {ok, InstId, Response}.
-
-
-send_create_event(Module, Args, Group, Event, From, Registry, Store, Options) ->
-    send_create_event(undefined, Module, Args, Group, Event, From, Registry, Store, Options).
-
-
-send_create_event(Module, Args, Group, Event, Registry, Store, Options) ->
-    send_create_event(undefined, Module, Args, Group, Event, undefined, Registry, Store, Options).
-
-
-send_create_event(Module, Args, Event, From, Options) when is_record(From, inst_ref) ->
-    #inst_ref{
-        group = CallerGroup,
-        registry = Registry,
-        store = Store
-    } = From,
-    send_create_event(undefined, Module, Args, CallerGroup, Event, From, Registry, Store, Options).
-
-
-%%
-%%
-%%  `Options :: [ {timeout, integer()} ]`
-%%  :   Options, that can be specified when starting the FSM.
-%%
-sync_send_create_event(Name, Module, Args, Group, Event, From, Registry, Store, Options) ->
-    {ok, InstId} = create(Module, Args, Group, Store),
-    ResolvedName = case Name of
-        undefined -> {via, Registry, InstId};
-        _ -> Name
-    end,
-    {ok, _PID} = eproc_registry:start_inst(Registry, ResolvedName, InstId, Registry, Store, Options),
-    {ok, Response} = case proplists:get_value(timeout, Options) of
-        undefined -> sync_send_event(ResolvedName, Event, From);
-        Timeout   -> sync_send_event(ResolvedName, Event, From, Timeout)
+sync_send_create_event(Module, Args, Event, From, Options) ->
+    Timeout = resolve_timeout(Options),
+    {ok, InstId} = create_start_link(Module, Args, From, Options, Timeout),
+    {ok, Response} = case proplists:is_defined(timeout, Options) of
+        false -> sync_send_event({inst, InstId}, Event, From);
+        true  -> sync_send_event({inst, InstId}, Event, From, Timeout)
     end,
     {ok, InstId, Response}.
 
 
-sync_send_create_event(Module, Args, Group, Event, From, Registry, Store, Options) ->
-    sync_send_create_event(undefined, Module, Args, Group, Event, From, Registry, Store, Options).
-
-
-sync_send_create_event(Module, Args, Group, Event, Registry, Store, Options) ->
-    sync_send_create_event(undefined, Module, Args, Group, Event, undefined, Registry, Store, Options).
-
-
-sync_send_create_event(Module, Args, Event, From, Options) when is_record(From, inst_ref) ->
-    #inst_ref{
-        group = CallerGroup,
-        registry = Registry,
-        store = Store
-    } = From,
-    sync_send_create_event(undefined, Module, Args, CallerGroup, Event, From, Registry, Store, Options).
-
-
 %%
-%%
+%%  Sends an event to the FSM asynchronously.
 %%
 send_event(Name, Event, From) ->
     gen_fsm:send_event(Name, {'eproc_fsm$send_event', Event, From}).
@@ -330,7 +382,7 @@ send_event(Name, Event) ->
 
 
 %%
-%%
+%%  Sends an event to the FSM synchronously.
 %%
 sync_send_event(Name, Event, From) ->
     gen_fsm:sync_send_event(Name, {'eproc_fsm$sync_send_event', Event, From}).
@@ -489,4 +541,45 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 %% =============================================================================
 %%  Internal functions.
 %% =============================================================================
+
+%%
+%%  Create and start FSM.
+%%
+create_start_link(Module, Args, From, Options, Timeout) ->
+    GroupOpts = resolve_group_opts(From, Options),
+    {ok, InstId} = create(Module, Args, Options ++ GroupOpts),
+    {ok, _PID} = eproc_registry:start_inst(undefined, InstId, [{timeout, Timeout}]),
+    {ok, InstId}.
+
+
+%%
+%%  Extracts timeout from the options.
+%%
+resolve_timeout(Options) ->
+    proplists:get_value(timeout, Options, ?DEFAULT_TIMEOUT).
+
+
+%%
+%%  Creates `group` option if needed.
+%%
+resolve_group_opts(From, Options) ->
+    case {proplists:is_defined(group, Options), From} of
+        {false, #inst_ref{group = Group}} -> [{group, Group}];
+        {false, _} -> [];
+        {true, _} -> []
+    end.
+
+
+%%
+%%  Awaits for the newly created FSM.
+%%
+await_for_created(Options, Timeout) ->
+    Name = proplists:get_value(name, Options, undefined),
+    Keys = proplists:get_value(keys, Options, []),
+    case {Name, lists:reverse(Keys)} of
+        {undefined, []}         -> ok;
+        {undefined, [Key | _]}  -> await({key, Key}, Timeout);
+        {Name, _}               -> await({name, Name}, Timeout)
+    end.
+
 
