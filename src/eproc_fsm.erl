@@ -95,7 +95,6 @@
 -opaque id()  :: integer().
 -opaque ref() :: #inst_ref{}.
 -opaque group() :: integer().
--type fsm_ref() :: {inst, id()} | {name, term()} | {key, term()}.   % TODO: Rename, differentiate from ref().
 -type event_src() :: undefined | #inst_ref{} | term().
 -type state_event() :: term().
 -type state_name()  :: list().
@@ -360,6 +359,8 @@ await(FsmRef, Timeout) ->
 send_create_event(Module, Args, Event, From, Options) ->
     Timeout = resolve_timeout(Options),
     {ok, InstId} = create_start_link(Module, Args, From, Options, Timeout),
+    % TODO: The following is the second remote call in the case of riak.
+    %       Await - is probably the third. Move it somehow to the remote part.
     ok = send_event({inst, InstId}, Event, From),
     ok = await_for_created(Options, Timeout),
     {ok, InstId}.
@@ -386,6 +387,8 @@ send_create_event(Module, Args, Event, From, Options) ->
 sync_send_create_event(Module, Args, Event, From, Options) ->
     Timeout = resolve_timeout(Options),
     {ok, InstId} = create_start_link(Module, Args, From, Options, Timeout),
+    % TODO: The following is the second remote call in the case of riak.
+    %       Move it somehow to the remote part.
     {ok, Response} = case proplists:is_defined(timeout, Options) of
         false -> sync_send_event({inst, InstId}, Event, From);
         true  -> sync_send_event({inst, InstId}, Event, From, Timeout)
@@ -622,7 +625,7 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 create_start_link(Module, Args, From, Options, Timeout) ->
     GroupOpts = resolve_group_opts(From, Options),
     {ok, InstId} = create(Module, Args, Options ++ GroupOpts),
-    {ok, _PID} = eproc_registry:start_inst(undefined, InstId, [{timeout, Timeout}]),
+    ok = eproc_registry:start_instance(undefined, InstId, [{timeout, Timeout}]),
     {ok, InstId}.
 
 

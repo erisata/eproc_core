@@ -13,9 +13,143 @@
 %| See the License for the specific language governing permissions and
 %| limitations under the License.
 %\--------------------------------------------------------------------
+
+%%
+%%  Interface module for a registry. The registry is responsible for:
+%%
+%%   1. Supervising running FSMs.   TODO: Is registry a correct place for the FSM supervisor?
+%%   2. Locating FSMs by an instance id, a name or a key.
+%%   3. Await for specific FSM.
+%%   4. Send message to a FSM.
+%%
 -module(eproc_registry).
 -compile([{parse_transform, lager_transform}]).
+-export([
+    start_instance/3, await/3,
+    register_inst_id/2, register_name/3, register_keys/3,
+    send_event/3
+]).
 -export_type([ref/0]).
+-include("eproc.hrl").
 
 -opaque ref() :: {Callback :: module(), Args :: term()}.
+
+%% =============================================================================
+%%  Callback definitions.
+%% =============================================================================
+
+%%
+%%
+%%
+-callback start_instance(
+        RegistryArgs    :: term(),
+        InstId          :: inst_id(),
+        StartOpts       :: term()
+    ) ->
+    ok.
+
+
+%%
+%%
+%%
+-callback await(
+        RegistryArgs    :: term(),
+        FsmRef          :: fsm_ref(),
+        Timeout         :: integer()
+    ) ->
+    ok | {error, timeout}.
+
+
+%%
+%%
+%%
+-callback register_inst_id(
+        RegistryArgs    :: term(),
+        InstId          :: inst_id()
+    ) ->
+    ok.
+
+
+%%
+%%
+%%
+-callback register_name(
+        RegistryArgs    :: term(),
+        InstId          :: inst_id(),
+        Name            :: term()
+    ) ->
+    ok.
+
+
+%%
+%%
+%%
+-callback register_keys(
+        RegistryArgs    :: term(),
+        InstId          :: inst_id(),
+        Keys            :: [term()]
+    ) ->
+    ok.
+
+
+%%
+%%
+%%
+-callback send_event(
+        RegistryArgs    :: term(),
+        FsmRef          :: fsm_ref(),
+        Message         :: term()
+    ) ->
+    ok.
+
+
+
+%% =============================================================================
+%%  Public API.
+%% =============================================================================
+
+
+start_instance(Registry, InstId, StartOpts) ->
+    {RegistryMod, RegistryArgs} = ref(Registry),
+    RegistryMod:start_instance(RegistryArgs, InstId, StartOpts).
+
+
+await(Registry, FsmRef, Timeout) ->
+    {RegistryMod, RegistryArgs} = ref(Registry),
+    RegistryMod:await(RegistryArgs, FsmRef, Timeout).
+
+
+register_inst_id(Registry, InstId) ->
+    {RegistryMod, RegistryArgs} = ref(Registry),
+    RegistryMod:register_inst_id(RegistryArgs, InstId).
+
+
+register_name(Registry, InstId, Name) ->
+    {RegistryMod, RegistryArgs} = ref(Registry),
+    RegistryMod:register_name(RegistryArgs, InstId, Name).
+
+
+register_keys(Registry, InstId, Keys) ->
+    {RegistryMod, RegistryArgs} = ref(Registry),
+    RegistryMod:register_keys(RegistryArgs, InstId, Keys).
+
+
+send_event(Registry, FsmRef, Message) ->
+    {RegistryMod, RegistryArgs} = ref(Registry),
+    RegistryMod:send_event(RegistryArgs, FsmRef, Message).
+
+
+
+%% =============================================================================
+%%  Internal functions.
+%% =============================================================================
+
+%%
+%%  Resolves a registry.
+%%
+ref(undefined) ->
+    eproc:get_registry();
+
+ref(Registry) ->
+    Registry.
 
