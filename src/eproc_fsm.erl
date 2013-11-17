@@ -29,7 +29,7 @@
 %%    * Supports automatic state persistence.
 %%
 %%  Several states are maintained during lifeycle of the process:
-%%    * `initializing` - while FSM initializes itself asynchronously.   TODO: Remove?
+%%    * `initializing` - while FSM initializes itself asynchronously.
 %%    * `running`   - when the FSM is running.
 %%    * `paused`    - when the FSM is suspended (paused) by an administrator.
 %%    * `faulty'    - when the FSM is suspended because of errors.
@@ -67,7 +67,7 @@
 %%  Functions for `gen_fsm`.
 %%
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
--export([initializing/2, initializing/3, running/2, running/3, paused/2, paused/3, faulty/2, faulty/3]).
+-export([running/2, running/3, paused/2, paused/3, faulty/2, faulty/3]).
 
 %%
 %%  Type exports.
@@ -85,21 +85,69 @@
 %%  Structure, passed to all callbacks, to be used to indicate process.
 %%
 -record(inst_ref, {
-    id          :: inst_id(),
-    group       :: inst_group(),
-    registry    :: registry_ref(),
-    store       :: store_ref()
+    id      :: inst_id(),
+    group   :: inst_group()
 }).
+
+
+-record(inst_key, { % TODO
+    key,
+    scope
+}).
+-record(inst_timer, { % TODO
+    from,
+    duration,
+    event
+}).
+-record(inst_prop, { % TODO
+    name,
+    value
+}).
+
 
 -type name() :: {via, Registry :: module(), InstId :: inst_id()}.
 -opaque id()  :: integer().
 -opaque ref() :: #inst_ref{}.
 -opaque group() :: integer().
+-type prop_elem() :: list() | binary() | integer().
 -type event_src() :: undefined | #inst_ref{} | term().
+
+%%
+%%  An event, received by the FSM.
+%%
 -type state_event() :: term().
--type state_name()  :: list().
--type state_data()  :: term().
--type state_action() :: term().
+
+%%
+%%  State name
+%%  TODO: Describe its structure.
+%%
+-type state_name() :: list().
+
+%%
+%%  TODO: Describe.
+%%
+-type state_scope() :: state_name().
+
+%%
+%%  Internal state of the callback module. The state is considered
+%%  opaque by the `eproc_fsm`, but its usually an instance of the
+%%  #state{} record in the user module.
+%%
+-type state_data() :: term().
+
+%%
+%%  TODO: Describe.
+%%
+-type state_action() ::
+    {name, Name :: term()} |
+    {key, Key :: term(), Scope :: state_scope()} |  % Options are left as undocumented feature.
+    {prop, PropName :: prop_elem(), PropValue :: prop_elem()} |
+    {timer, TimerName :: term(), After :: integer(), Event :: state_event(), Scope :: state_scope()} |
+    {timer, TimerName :: term(), cancel}.
+
+%%
+%%  TODO: Describe.
+%%
 -type state_phase() :: event | entry | exit.
 
 
@@ -109,9 +157,14 @@
 -record(state, {
     inst_id,
     module,
+    sname,
+    sdata,
+    trn_id,
+    keys,
+    props,
+    timers,
     registry,
-    store,
-    options
+    store
 }).
 
 
@@ -125,13 +178,29 @@
 %%  Invoked when initializing the FSM. This fuction is invoked only on first
 %%  initialization. I.e. it is not invoked on restarts.
 %%
+%%  Parameters:
+%%
+%%  `Args`
+%%  :   is the value passed as the `Args` parameter to the `create/3`,
+%%      `send_create_event/5` or `sync_send_create_event/5` function.
+%%  `InstRef`
+%%  :   Instance reference. It can be used to send messages via connectors
+%%      (channels) and to access other information. InstRef identifies
+%%      the FSM instance and its state.
+%%
+%%  The function needs to return `StateData` - state data of the process
+%%  and optionally state name and actions.
+%%
+%%  If `StateName` is not provided, the state name `initial` is assumed.
+%%  Actions can be used here to set FSM name, keys, properties and timers.
+%%
 -callback init(
-        #definition{},
-        state_event(),
-        inst_ref()
+        Args    :: term(),
+        InstRef :: inst_ref()
     ) ->
-    {ok, state_name(), state_data()} |
-    {ok, state_name(), state_data(), [state_action()]}.
+    {ok, StateData :: state_data()} |
+    {ok, StateName :: state_name(), StateData :: state_data()} |
+    {ok, StateName :: state_name(), StateData :: state_data(), Actions :: [state_action()]}.
 
 
 %%
@@ -235,9 +304,9 @@ create(Module, Args, Options) ->
     Instance = #instance{
         id = undefined,
         group = proplists:get_value(group, KnownOpts, new),
-        name = proplists:get_value(name, KnownOpts),
-        keys = proplists:get_value(keys, KnownOpts, []),
-        props = proplists:get_value(props, KnownOpts, []),
+        name = proplists:get_value(name, KnownOpts, undefined), % TODO: Is it good to set it from options. Maybe init/2 is better?
+        keys = proplists:get_value(keys, KnownOpts, []),        % TODO: Is it good to set it from options. Maybe init/2 is better?
+        props = proplists:get_value(props, KnownOpts, []),      % TODO: Is it good to set it from options. Maybe init/2 is better?
         module = Module,
         args = Args,
         opts = UnknownOpts,
@@ -521,26 +590,17 @@ set_name(Name, Actions) ->
 %%  The initialization is implemented asynchronously to avoid timeouts when
 %%  restarting the engine with a lot of running fsm's.
 %%
-init({InstId, Module, Args, Event, Registry, Store, Options}) ->
+init({InstId, _Options}) ->
+    Registry = eproc:registry(),
+    Store = eproc:store(),
     State = #state{
         inst_id     = InstId,
-        module      = Module,
         registry    = Registry,
-        store       = Store,
-        options     = Options
+        store       = Store
     },
-    self() ! {'eproc_fsm$init', Args, Event},
+    ok = eproc_registry:register_inst(Registry, InstId),
+    self() ! {'eproc_fsm$init'},
     {ok, initializing, State}.
-
-
-%%
-%%  Handles the `initializing` state.
-%%
-initializing(_Event, State) ->
-    {noreply, State}.
-
-initializing(_Event, _From, State) ->
-    {reply, ok, State}.
 
 
 %%
@@ -588,10 +648,65 @@ handle_sync_event(_Event, _From, StateName, StateData) ->
 
 
 %%
-%%  Does asynchronous initialization.
+%%  Asynchronous FSM initialization.
 %%
-handle_info({'eproc_fsm$init', _Args, _Event}, initializing, StateData) ->
-    {noreply, running, StateData};
+handle_info({'eproc_fsm$init'}, initializing, StateData) ->
+    #state{
+        inst_id = InstId,
+        store = Store,
+        registry = Registry
+    } = StateData,
+    {ok, Instance, Transition} = eproc_store:load_instance(Store, InstId),
+    #instance{
+        group = Group,
+        name = InitialName,
+        keys = InitialKeys,
+        props = InitialProps,
+        module = Module,
+        args = Args
+    } = Instance,
+    case Transition of
+        undefined ->
+            %%
+            %%  Initial startup.
+            %%
+            TrnId = undefined,
+            InstRef = #inst_ref{id = InstId, group = Group},
+            case Module:init(Args, InstRef) of
+                {ok, SData} ->
+                    SName = initial,
+                    StateDataAfterInit = StateData;
+                {ok, SName, SData} ->
+                    StateDataAfterInit = StateData;
+                {ok, SName, SData, Actions} ->
+                    {ok, StateDataAfterInit} = handle_actions(Actions, StateData)
+            end;
+        #transition{id = TrnId, sname = SName, sdata = SData} ->
+            %%
+            %%  Instance was restarted.
+            %%
+            StateDataAfterInit = StateData
+    end,
+    % TODO: Load them properly
+    Keys = undefined,
+    Name = undefined,
+    Props = undefined,
+    Timers = undefined,
+
+    {ok, CleanedKeys} = cleanup_keys(Keys, SName),
+    ok = eproc_registry:register_keys(Registry, InstId, Keys),
+    ok = eproc_registry:register_name(Registry, InstId, Name),
+    {ok, CleanedTimers} = cleanup_timers(Timers, SName),
+    {ok, SetupedTimers} = setup_timers(CleanedTimers),
+    NewStateData = StateDataAfterInit#state{
+        trn_id = TrnId,
+        sname = SName,
+        sdata = SData,
+        keys = CleanedKeys,
+        props = Props,
+        timers = SetupedTimers
+    },
+    {noreply, running, NewStateData};
 
 %%
 %%  Handles FSM timers.
@@ -658,5 +773,39 @@ await_for_created(Options, Timeout) ->
         {undefined, [Key | _]}  -> await({key, Key}, Timeout);
         {Name, _}               -> await({name, Name}, Timeout)
     end.
+
+
+%%
+%%
+%%
+handle_actions(_Actions, StateData) ->
+    % TODO: Implement.
+    {ok, StateData}.
+
+
+%%
+%%
+%%
+cleanup_keys(Keys, _SName) ->
+    % TODO: Implement.
+    {ok, Keys}.
+
+
+%%
+%%
+%%
+cleanup_timers(Timers, _SName) ->
+    % TODO: Implement.
+    {ok, Timers}.
+
+
+%%
+%%
+%%
+setup_timers(Timers) ->
+    % TODO: Implement.
+    {ok, Timers}.
+
+
 
 

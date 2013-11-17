@@ -46,8 +46,11 @@
 %%
 %%  Create store reference.
 %%
--spec ref(module(), term())
-        -> {ok, store_ref()}.
+-spec ref(
+        module(),
+        term()
+        ) ->
+        {ok, store_ref()}.
 
 ref(Module, Args) ->
     {ok, {Module, Args}}.

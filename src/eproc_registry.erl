@@ -25,14 +25,15 @@
 -module(eproc_registry).
 -compile([{parse_transform, lager_transform}]).
 -export([
-    start_instance/3, await/3,
-    register_inst_id/2, register_name/3, register_keys/3,
+    ref/2, start_instance/3, await/3,
+    register_inst/2, register_name/3, register_keys/3,
     send_event/3
 ]).
 -export_type([ref/0]).
 -include("eproc.hrl").
 
 -opaque ref() :: {Callback :: module(), Args :: term()}.
+
 
 %% =============================================================================
 %%  Callback definitions.
@@ -63,7 +64,7 @@
 %%
 %%
 %%
--callback register_inst_id(
+-callback register_inst(
         RegistryArgs    :: term(),
         InstId          :: inst_id()
     ) ->
@@ -108,34 +109,70 @@
 %%  Public API.
 %% =============================================================================
 
+%%
+%%  Create a registry reference.
+%%
+-spec ref(
+        module(),
+        term()
+        ) ->
+        {ok, registry_ref()}.
 
+ref(Module, Args) ->
+    {ok, {Module, Args}}.
+
+
+%%
+%%
+%%
 start_instance(Registry, InstId, StartOpts) ->
-    {RegistryMod, RegistryArgs} = ref(Registry),
+    {RegistryMod, RegistryArgs} = resolve_ref(Registry),
     RegistryMod:start_instance(RegistryArgs, InstId, StartOpts).
 
 
+%%
+%%
+%%
 await(Registry, FsmRef, Timeout) ->
-    {RegistryMod, RegistryArgs} = ref(Registry),
+    {RegistryMod, RegistryArgs} = resolve_ref(Registry),
     RegistryMod:await(RegistryArgs, FsmRef, Timeout).
 
 
-register_inst_id(Registry, InstId) ->
-    {RegistryMod, RegistryArgs} = ref(Registry),
-    RegistryMod:register_inst_id(RegistryArgs, InstId).
+%%
+%%
+%%
+register_inst(Registry, InstId) ->
+    {RegistryMod, RegistryArgs} = resolve_ref(Registry),
+    RegistryMod:register_inst(RegistryArgs, InstId).
 
+
+%%
+%%
+%%
+register_name(Registry, InstId, undefined) ->
+    ok;
 
 register_name(Registry, InstId, Name) ->
-    {RegistryMod, RegistryArgs} = ref(Registry),
+    {RegistryMod, RegistryArgs} = resolve_ref(Registry),
     RegistryMod:register_name(RegistryArgs, InstId, Name).
 
 
-register_keys(Registry, InstId, Keys) ->
-    {RegistryMod, RegistryArgs} = ref(Registry),
+%%
+%%
+%%
+register_keys(Registry, InstId, []) ->
+    ok;
+
+register_keys(Registry, InstId, Keys) when is_list(Keys) ->
+    {RegistryMod, RegistryArgs} = resolve_ref(Registry),
     RegistryMod:register_keys(RegistryArgs, InstId, Keys).
 
 
+%%
+%%
+%%
 send_event(Registry, FsmRef, Message) ->
-    {RegistryMod, RegistryArgs} = ref(Registry),
+    {RegistryMod, RegistryArgs} = resolve_ref(Registry),
     RegistryMod:send_event(RegistryArgs, FsmRef, Message).
 
 
@@ -147,9 +184,9 @@ send_event(Registry, FsmRef, Message) ->
 %%
 %%  Resolves a registry.
 %%
-ref(undefined) ->
-    eproc:get_registry();
+resolve_ref(undefined) ->
+    eproc:registry();
 
-ref(Registry) ->
+resolve_ref(Registry) ->
     Registry.
 

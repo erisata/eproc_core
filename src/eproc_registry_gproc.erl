@@ -23,7 +23,7 @@
 -compile([{parse_transform, lager_transform}]).
 -export([
     start_instance/3, await/3,
-    register_inst_id/2, register_name/3, register_keys/3,
+    register_inst/2, register_name/3, register_keys/3,
     send_event/3
 ]).
 -include("eproc.hrl").
@@ -31,6 +31,16 @@
 -define(BY_INST(I), {n, l, {eproc_inst, I}}).
 -define(BY_NAME(N), {n, l, {eproc_name, N}}).
 -define(BY_KEY(K),  {p, l, {eproc_key,  K}}).
+
+
+%% =============================================================================
+%%  Public API.
+%% =============================================================================
+
+
+
+%% TODO: Load all active instances on startup?
+
 
 
 %% =============================================================================
@@ -67,7 +77,7 @@ await(GProcKey, Timeout) ->
 %%
 %%  Registers FSM with its InstId.
 %%
-register_inst_id(_RegistryArgs, InstId) ->
+register_inst(_RegistryArgs, InstId) ->
     true = gproc:reg(?BY_INST(InstId)),
     ok.
 
