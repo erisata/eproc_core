@@ -651,6 +651,10 @@ handle_sync_event(_Event, _From, StateName, StateData) ->
 %%  Asynchronous FSM initialization.
 %%
 handle_info({'eproc_fsm$init'}, initializing, StateData) ->
+    % TODO: Respect FSM state here (running, suspended).
+    % TODO: Remove the `initializing` state.
+    % TODO: Split this to: load and start
+    % TODO: Use state `suspended` instead of `paused` and `faulty`.
     #state{
         inst_id = InstId,
         store = Store,
