@@ -149,7 +149,7 @@ register_inst(Registry, InstId) ->
 %%
 %%
 %%
-register_name(Registry, InstId, undefined) ->
+register_name(_Registry, _InstId, undefined) ->
     ok;
 
 register_name(Registry, InstId, Name) ->
@@ -160,7 +160,7 @@ register_name(Registry, InstId, Name) ->
 %%
 %%
 %%
-register_keys(Registry, InstId, []) ->
+register_keys(_Registry, _InstId, []) ->
     ok;
 
 register_keys(Registry, InstId, Keys) when is_list(Keys) ->
