@@ -338,7 +338,11 @@ create(Module, Args, Options) ->
 %%  :   Runtime-level options. The options listed bellow are used by this
 %%      FSM implementation and the rest are passed to the `gen_fsm:start_link/3`.
 %%
-%%  Options supprted by this function: TODO: None, for this time.
+%%  Options supprted by this function:
+%%
+%%  `{restart_delay, integer()}`    TODO: Implement it.
+%%  :   specified a delay, that is made on each process restart. The default is 1000 ms.
+%%      The delay is make on each crash, during an abnormal termination of a process.
 %%
 -spec start_link(
         InstId      :: inst_id(),
@@ -347,7 +351,7 @@ create(Module, Args, Options) ->
         {ok, pid()} | ignore | {error, term()}.
 
 start_link(InstId, Options) ->
-    {KnownOpts, UnknownOpts} = proplists:split(Options, []),
+    {KnownOpts, UnknownOpts} = proplists:split(Options, [restart_delay]),
     gen_fsm:start_link(?MODULE, {InstId, KnownOpts}, UnknownOpts).
 
 
