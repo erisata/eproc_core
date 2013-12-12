@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013 Karolis Petrauskas
+%| Copyright 2013 Robus, Ltd.
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -15,7 +15,8 @@
 %\--------------------------------------------------------------------
 
 %%
-%%  Main behaviour to be implemented by a user of the `eproc`.
+%%  Main behaviour to be implemented by a user of the `eproc`
+%%  =========================================================
 %%
 %%  This module designed by taking into account UML FSM definition
 %%  as well as the Erlang/OTP `gen_fsm`. The following is the list
@@ -40,6 +41,54 @@
 %%    * `{term, killed}`  - when the FSM was killed in the `running` or the `paused` state.
 %%    * `{term, failed}`  - when the FSM was terminated in the `faulty` state.
 %%
+%%
+%%  It is recomended to name version explicitly when defining state. It can be done as follows:
+%%
+%%      -record(state, {
+%%          version = 1,
+%%          ...
+%%      }).
+%%
+%%
+%%  How `eproc_fsm` callbacks are invoked in different scenarios
+%%  ------------------------------------------------------------
+%%
+%%  New FSM created
+%%  :
+%%        * `init(Args, InstRef)`
+%%        * `init(InitStateName, StateData, InstRef)`
+%%        * `handle_state(StateName, event, Event, StateData, InstRef)`
+%%        * `handle_state(NewStateName, entry, InitStateName, StateData, InstRef)`
+%%
+%%  FSM process terminated
+%%  :
+%%        * `terminate(Reason, StateName, StateData, InstRef)`
+%%
+%%  FSM is restarted
+%%  :
+%%        * `init(StateName, StateData, InstRef)`
+%%        * `code_change(state, StateName, StateData, undefined)`
+%%
+%%  FSM upgraded in run-time
+%%  :
+%%        * `code_change(OldVsn, StateName, StateData, Extra)`
+%%
+%%  Event initiated a transition (`next_state`)
+%%  :
+%%        * `handle_state(StateName, event, Event, StateData, InstRef)`
+%%        * `handle_state(StateName, exit, NewStateName, StateData, InstRef)`
+%%        * `handle_state(NewStateName, entry, StateName, StateData, InstRef)`
+%%
+%%  Event with no transition (`same_state`)
+%%  :
+%%        * `handle_state(StateName, event, Event, StateData, InstRef)`
+%%
+%%  Event initiated a termination (`final_state`)
+%%  :
+%%        * `handle_state(StateName, event, Event, StateData, InstRef)`
+%%        * `handle_state(StateName, exit, FinalStateName, StateData, InstRef)`
+%%
+%%
 -module(eproc_fsm).
 -behaviour(gen_fsm).
 -compile([{parse_transform, lager_transform}]).
@@ -55,7 +104,7 @@
 ]).
 
 %%
-%%  Process side functions.
+%%  Process-side functions.
 %%
 -export([
     reply/2, add_key_sync/3, add_key/3,
@@ -64,7 +113,7 @@
 ]).
 
 %%
-%%  Functions for `gen_fsm`.
+%%  Callbacks for `gen_fsm`.
 %%
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 -export([running/2, running/3, paused/2, paused/3, faulty/2, faulty/3]).
@@ -164,7 +213,8 @@
     props,
     timers,
     registry,
-    store
+    store,
+    msg         %% The currently processed message. TODO: Do we need it? For terminate/2?
 }).
 
 
@@ -172,7 +222,6 @@
 %% =============================================================================
 %%  Callback definitions.
 %% =============================================================================
-
 
 %%
 %%  Invoked when initializing the FSM. This fuction is invoked only on first
@@ -202,22 +251,49 @@
     {ok, StateName :: state_name(), StateData :: state_data()} |
     {ok, StateName :: state_name(), StateData :: state_data(), Actions :: [state_action()]}.
 
+%%
+%%  This function is invoked on each (re)start of the FSM. On the first start
+%%  this callback is invoked after the `init/2` callback.
+%%
+%%  In this function the FSM can initialize its run-time resources: start or link to
+%%  processes, etc.
+%%
+%%  Parameters:
+%%      `StateName`
+%%      :   is the state name loaded from the persistent store or returned
+%%          by the `init/2` callback, if initialization is performed for a new instance.
+%%      `StateData`
+%%      :   is the corresponding state data.
+%%      `InstRef`
+%%      :   has the same meaning, as in the `init/2` callback.
+%%
+%%  The function should return state data and state name. They both can be transformed
+%%  in this function. Nevertheless, the transformed state will only be persisted on the
+%%  next transition.
+%%
+-callback init(
+        StateName   :: state_name(),
+        StateData   :: state_data(),
+        InstRef     :: inst_ref()
+    ) ->
+    {ok, StateName :: state_name(), StateData :: state_data()}.
 
 %%
-%%
+%%  This function handles events coming to the FSM. It is also used
+%%  to handle state entries and exits.
 %%
 -callback handle_state(
-        state_name(),
-        state_phase(),
-        state_event() | state_name(),
-        state_data(),
-        inst_ref()
+        StateName   :: state_name(),
+        StatePhase  :: state_phase(),
+        StateNameOrEvent ::state_event() | state_name(),
+        StateData   :: state_data(),
+        InstRef     :: inst_ref()
     ) ->
-    {same_state, state_data()} |
-    {same_state, state_data(), [state_action()]} |
-    {next_state, state_name(), state_data()} |
-    {next_state, state_name(), state_data(), [state_action()]} |
-    {final_state, state_name(), state_data()}.
+    {same_state, StateData :: state_data()} |
+    {same_state, StateData :: state_data(), StateActions :: [state_action()]} |
+    {next_state, StateName :: state_name(), StateData :: state_data()} |
+    {next_state, StateName :: state_name(), StateData :: state_data(), StateActions :: [state_action()]} |
+    {final_state, StateName :: state_name(), StateData :: state_data()}.
 
 
 %%
@@ -234,13 +310,15 @@
 
 
 %%
-%%
+%%  This callback is invoked each time after a state was loaded from the
+%%  persistent store, modified by
 %%
 -callback state_change(
+        OldStateName    :: state_name(),
         OldStateData    :: state_data(),
         InstRef         :: inst_ref()
     ) ->
-    {ok, NewStateData :: state_data()}.
+    {ok, StateName :: state_name(), StateData :: state_data()}.
 
 
 
