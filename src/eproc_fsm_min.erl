@@ -32,7 +32,7 @@
 %%  New FSM created
 %%  :
 %%        * `init(Args, InstRef)`
-%%        * `handle_state(StateName, event, Event, StateData, InstRef)`
+%%        * `handle_state(InitStateName, event, Event, StateData, InstRef)`
 %%        * `handle_state(NewStateName, entry, InitStateName, StateData, InstRef)`
 %%
 %%  Event initiated a transition (`next_state`)

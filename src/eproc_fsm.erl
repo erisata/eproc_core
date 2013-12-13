@@ -57,7 +57,7 @@
 %%  :
 %%        * `init(Args, InstRef)`
 %%        * `init(InitStateName, StateData, InstRef)`
-%%        * `handle_state(StateName, event, Event, StateData, InstRef)`
+%%        * `handle_state(InitStateName, event, Event, StateData, InstRef)`
 %%        * `handle_state(NewStateName, entry, InitStateName, StateData, InstRef)`
 %%
 %%  FSM process terminated
@@ -282,10 +282,16 @@
 %%  This function handles events coming to the FSM. It is also used
 %%  to handle state entries and exits.
 %%
+%%  Parameters:
+%%
+%%  The function should return one of the following:
+%%
+%%  TODO: Handle sync responses.
+%%
 -callback handle_state(
         StateName   :: state_name(),
         StatePhase  :: state_phase(),
-        StateNameOrEvent ::state_event() | state_name(),
+        StateNameOrEvent :: state_event() | state_name(),
         StateData   :: state_data(),
         InstRef     :: inst_ref()
     ) ->
@@ -295,6 +301,13 @@
     {next_state, StateName :: state_name(), StateData :: state_data(), StateActions :: [state_action()]} |
     {final_state, StateName :: state_name(), StateData :: state_data()}.
 
+
+-callback terminate(
+        Reason      :: normal | shutdown | {shutdown,term()} | term()
+        StateName   :: state_name(),
+        StateData   :: state_data(),
+    ) ->
+    Term :: term().
 
 %%
 %%
