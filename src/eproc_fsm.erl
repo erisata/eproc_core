@@ -254,7 +254,7 @@
         InstRef :: inst_ref()
     ) ->
     {ok, StateData :: state_data()} |
-    {ok, InitStateName :: state_name(), StateData :: state_data()}.
+    {ok, InitStateName :: state_name(), StateData :: state_data()} |
     {ok, InitStateName :: state_name(), StateData :: state_data(), Effects :: [state_effect()]}.
 
 %%
@@ -431,7 +431,7 @@
 %%
 -callback format_status(
         Opt         :: normal | terminate | {external, ContentType :: term()},
-        State       :: list() | {state, StateName, StateData}
+        State       :: list() | {state, StateName :: state_name(), StateData :: state_data()}
     ) ->
     Status :: term.
 
