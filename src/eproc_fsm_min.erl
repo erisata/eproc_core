@@ -32,21 +32,22 @@
 %%  New FSM created
 %%  :
 %%        * `init(Args, InstRef)`
-%%        * `handle_state(InitStateName, event, Event, StateData, InstRef)`
-%%        * `handle_state(NewStateName, entry, InitStateName, StateData, InstRef)`
+%%        * `handle_state(InitStateName, {event, Message} | {sync, From, Message}, StateData, InstRef)`
+%%        * `handle_state(NewStateName, {entry, InitStateName}, StateData, InstRef)`
 %%
 %%  Event initiated a transition (`next_state`)
 %%  :
-%%        * `handle_state(StateName, event, Event, StateData, InstRef)`
-%%        * `handle_state(NewStateName, entry, StateName, StateData, InstRef)`
+%%        * `handle_state(StateName, {event, Message} | {sync, From, Message}, StateData, InstRef)`
+%%        * `handle_state(NextStateName, {entry, StateName}, StateData, InstRef)`
 %%
 %%  Event with no transition (`same_state`)
 %%  :
-%%        * `handle_state(StateName, event, Event, StateData, InstRef)`
+%%        * `handle_state(StateName, {event, Message} | {sync, From, Message}, StateData, InstRef)`
 %%
 %%  Event initiated a termination (`final_state`)
 %%  :
-%%        * `handle_state(StateName, event, Event, StateData, InstRef)`
+%%        * `handle_state(StateName, {event, Message} | {sync, From, Message}, StateData, InstRef)`
+%%
 %%
 -module(eproc_fsm_min).
 %-behaviour(eproc_fsm).

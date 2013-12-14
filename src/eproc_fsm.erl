@@ -101,7 +101,7 @@
 %%  Client-side functions.
 %%
 -export([
-    create/3, start_link/2, await/2,
+    create/3, start_link/2, await/2, id/0, group/0,
     send_create_event/5, sync_send_create_event/5,
     send_event/3, send_event/2, sync_send_event/4, sync_send_event/3,
     kill/2, suspend/2, resume/2, set_state/4
@@ -573,6 +573,34 @@ await(FsmRef, Timeout) ->
 
 
 %%
+%%  Returns instance id of the FSM, if invoked from its process.
+%%
+-spec id() -> {ok, id()} | {error, not_fsm}.
+
+id() ->
+    case erlang:get('eproc_fsm$id') of
+        undefined ->
+            {error, not_fsm};
+        Id ->
+            {ok, Id}
+    end.
+
+
+%%
+%%  Returns instance group of the FSM, if invoked from its process.
+%%
+-spec group() -> {ok, group()} | {error, not_fsm}.
+
+group() ->
+    case erlang:get('eproc_fsm$group') of
+        undefined ->
+            {error, not_fsm};
+        Group ->
+            {ok, Group}
+    end.
+
+
+%%
 %%  Use this function in the `eproc_fsm` callback module implementation to start
 %%  the FSM asynchronously.
 %%
@@ -866,6 +894,8 @@ handle_info({'eproc_fsm$init'}, initializing, StateData) ->
         module = Module,
         args = Args
     } = Instance,
+    undefined = erlang:put('eproc_fsm$id', InstId),
+    undefined = erlang:put('eproc_fsm$group', Group),
     case Transition of
         undefined ->
             %%
