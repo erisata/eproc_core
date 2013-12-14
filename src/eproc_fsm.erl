@@ -57,8 +57,8 @@
 %%  :
 %%        * `init(Args, InstRef)`
 %%        * `init(InitStateName, StateData, InstRef)`
-%%        * `handle_state(InitStateName, event, Event, StateData, InstRef)`
-%%        * `handle_state(NewStateName, entry, InitStateName, StateData, InstRef)`
+%%        * `handle_state(InitStateName, {event, Message} | {sync, From, Message}, StateData, InstRef)`
+%%        * `handle_state(NewStateName, {entry, InitStateName}, StateData, InstRef)`
 %%
 %%  FSM process terminated
 %%  :
@@ -66,27 +66,31 @@
 %%
 %%  FSM is restarted
 %%  :
-%%        * `init(StateName, StateData, InstRef)`
 %%        * `code_change(state, StateName, StateData, undefined)`
+%%        * `init(StateName, StateData, InstRef)`
 %%
 %%  FSM upgraded in run-time
 %%  :
 %%        * `code_change(OldVsn, StateName, StateData, Extra)`
 %%
+%%  FSM is resumed after being suspended
+%%  :
+%%        * `code_change(state, StateName, StateData, undefined)`
+%%
 %%  Event initiated a transition (`next_state`)
 %%  :
-%%        * `handle_state(StateName, event, Event, StateData, InstRef)`
-%%        * `handle_state(StateName, exit, NewStateName, StateData, InstRef)`
-%%        * `handle_state(NewStateName, entry, StateName, StateData, InstRef)`
+%%        * `handle_state(StateName, {event, Message} | {sync, From, Message}, StateData, InstRef)`
+%%        * `handle_state(StateName, {exit, NextStateName}, StateData, InstRef)`
+%%        * `handle_state(NextStateName, {entry, StateName}, StateData, InstRef)`
 %%
 %%  Event with no transition (`same_state`)
 %%  :
-%%        * `handle_state(StateName, event, Event, StateData, InstRef)`
+%%        * `handle_state(StateName, {event, Message} | {sync, From, Message}, StateData, InstRef)`
 %%
 %%  Event initiated a termination (`final_state`)
 %%  :
-%%        * `handle_state(StateName, event, Event, StateData, InstRef)`
-%%        * `handle_state(StateName, exit, FinalStateName, StateData, InstRef)`
+%%        * `handle_state(StateName, {event, Message} | {sync, From, Message}, StateData, InstRef)`
+%%        * `handle_state(StateName, {exit, FinalStateName}, StateData, InstRef)`
 %%
 %%
 -module(eproc_fsm).
@@ -161,6 +165,8 @@
 -type prop_elem() :: list() | binary() | integer().
 -type event_src() :: undefined | #inst_ref{} | term().
 
+-type timer_name() :: term().
+
 %%
 %%  An event, received by the FSM.
 %%
@@ -187,7 +193,7 @@
 %%
 %%  TODO: Describe.
 %%
--type state_action() ::
+-type state_effect() ::
     {name, Name :: term()} |
     {key, Key :: term(), Scope :: state_scope()} |  % Options are left as undocumented feature.
     {prop, PropName :: prop_elem(), PropValue :: prop_elem()} |
@@ -249,7 +255,7 @@
     ) ->
     {ok, StateData :: state_data()} |
     {ok, StateName :: state_name(), StateData :: state_data()} |
-    {ok, StateName :: state_name(), StateData :: state_data(), Actions :: [state_action()]}.
+    {ok, StateName :: state_name(), StateData :: state_data(), Actions :: [state_effect()]}.
 
 %%
 %%  This function is invoked on each (re)start of the FSM. On the first start
@@ -259,13 +265,14 @@
 %%  processes, etc.
 %%
 %%  Parameters:
-%%      `StateName`
-%%      :   is the state name loaded from the persistent store or returned
-%%          by the `init/2` callback, if initialization is performed for a new instance.
-%%      `StateData`
-%%      :   is the corresponding state data.
-%%      `InstRef`
-%%      :   has the same meaning, as in the `init/2` callback.
+%%
+%%  `StateName`
+%%  :   is the state name loaded from the persistent store or returned
+%%      by the `init/2` callback, if initialization is performed for a new instance.
+%%  `StateData`
+%%  :   is the corresponding state data.
+%%  `InstRef`
+%%  :   has the same meaning, as in the `init/2` callback.
 %%
 %%  The function should return state data and state name. They both can be transformed
 %%  in this function. Nevertheless, the transformed state will only be persisted on the
@@ -284,54 +291,119 @@
 %%
 %%  Parameters:
 %%
-%%  The function should return one of the following:
+%%  `StateName`
+%%  :   is the name of the state, at which an event occured.
+%%  `Trigger`
+%%  :   indicates, wether this callback is invoked to handle an event, synchronous
+%%      event, state entry or state exit:
 %%
-%%  TODO: Handle sync responses.
+%%      `{event, Message}`
+%%      :   indicates an event `Message` sent to the FSM asynchronously.
+%%      `{sync, From, Message}`
+%%      :   indicates an event `Message` sent by `From` to the FSM synchronously.
+%%      `{timer, Timer, Message}`
+%%      :   indicates a time event `Message`, that was fired by a `Timer`.
+%%      `{exit, NextStateName}`
+%%      :   indicates that a transition was made from the `StateName` to the
+%%          `NextStateName` and now we are exiting the `StateName`.
+%%      `{entry, PrevStateName}`
+%%      :   indicates that a transition was made from the `PrevStateName` to the
+%%          `StateName` and now we are entering the `StateName`. A handler for
+%%          state entry is a good place to set up timers that shouls be valid in
+%%          that state.
+%%
+%%  `StateData`
+%%  :   contains internal state of the FSM.
+%%  `InstRef`
+%%  :   has the same meaning, as in the init callbacks.
+%%
+%%  If the function was invoked with `{event, Message}` or `{timer, Timer, Message}`,
+%%  the function should return one of the following:
+%%
+%%  `{same_state, NewStateData, Effects}`
+%%  :   to indicate, that transition is to the the same state. In this case, corresponding
+%%      state exit and entry callbacks will not be invoked. The term Effects is optional (in all cases).
+%%  `{next_state, NextStateName, NewStateData, Effects}`
+%%  :   indicates a transition to the next state. Next state can also be the current state,
+%%      but in this case state exit/entry callbacks will be invoked anyway.
+%%  `{final_state, FinalStateName, NewStateData, Effects}`
+%%  :   indicates a transition to the final state of the FSM. I.e. FSM is terminated after
+%%      this transition. Not all effects are meaningfull in the case of final state, but
+%%      assignment of keys or properties can be useful.
+%%
+%%  In the case of synchronous events `{sync, From, Message}`, the callback can return all the
+%%  responses listed above, if reply to the caller was sent explicitly using functtion `reply/2`.
+%%  If reply was not sent explicitly, the terms tagged with `reply_same`, `reply_next` and `reply_final`
+%%  should be used to send a reply and do the transition. Meaning of these response terms are
+%%  the same as for the `same_state`, `next_state` and `final_state` correspondingly.
+%%
+%%  If the callback was invoked to handle state exit or entry, the response term should be
+%%  `{ok, NewStateData}` or `{ok, NewStateData, Effects}`.
 %%
 -callback handle_state(
         StateName   :: state_name(),
-        StatePhase  :: state_phase(),
-        StateNameOrEvent :: state_event() | state_name(),
+        Trigger     :: {event, Message} |
+                       {sync, From, Message} |
+                       {timer, Timer, Message} |
+                       {exit, NextStateName} |
+                       {entry, PrevStateName},
         StateData   :: state_data(),
         InstRef     :: inst_ref()
     ) ->
-    {same_state, StateData :: state_data()} |
-    {same_state, StateData :: state_data(), StateActions :: [state_action()]} |
-    {next_state, StateName :: state_name(), StateData :: state_data()} |
-    {next_state, StateName :: state_name(), StateData :: state_data(), StateActions :: [state_action()]} |
-    {final_state, StateName :: state_name(), StateData :: state_data()}.
+    {same_state, NewStateData} |
+    {same_state, NewStateData, Effects} |
+    {next_state, NextStateName, NewStateData} |
+    {next_state, NextStateName, NewStateData, Effects} |
+    {final_state, FinalStateName, NewStateData} |
+    {final_state, FinalStateName, NewStateData, Effects} |
+    {reply_same, Reply, NewStateData} |
+    {reply_same, Reply, NewStateData, Effects} |
+    {reply_next, Reply, NextStateName, NewStateData} |
+    {reply_next, Reply, NextStateName, NewStateData, Effects} |
+    {reply_final, Reply, FinalStateName, NewStateData} |
+    {reply_final, Reply, FinalStateName, NewStateData, Effects} |
+    {ok, NewStateData} |
+    {ok, NewStateData, Effects}
+    when
+    From :: term(),
+    Timer :: timer_name(),
+    Reply :: term(),
+    NewStateData :: state_data(),
+    NextStateName :: state_name(),
+    PrevStateName :: state_name(),
+    FinalStateName :: state_name(),
+    Effects :: [state_effect()].
 
 
+%%
+%%
+%%
 -callback terminate(
-        Reason      :: normal | shutdown | {shutdown,term()} | term()
+        Reason      :: normal | shutdown | {shutdown,term()} | term(),
         StateName   :: state_name(),
-        StateData   :: state_data(),
+        StateData   :: state_data()
     ) ->
     Term :: term().
 
 %%
 %%
 %%
--callback handle_status(
-        state_name(),
-        state_data(),
-        Query           :: atom(),
-        MediaType       :: atom()
+-callback code_change(
+        OldVsn      :: (Vsn :: term() | {down, Vsn :: term()} | state),
+        StateName   :: state_name(),
+        StateData   :: state_data(),
+        Extra       :: {advanced, Extra :: term()} | undefined
     ) ->
-    {ok, MediaType :: atom(), Status :: binary() | term()} |
-    {error, Reason :: term()}.
+    {ok, NextStateName :: state_name(), NewStateData :: state_data()}.
 
 
-%%
-%%  This callback is invoked each time after a state was loaded from the
-%%  persistent store, modified by
-%%
--callback state_change(
-        OldStateName    :: state_name(),
-        OldStateData    :: state_data(),
-        InstRef         :: inst_ref()
+-callback format_status(
+        Opt         :: normal | terminate | {external, ContentType :: term()},
+        PDict       :: [{Key :: term(), Value :: term()}],
+        StateName   :: state_name(),
+        StateData   :: state_data()
     ) ->
-    {ok, StateName :: state_name(), StateData :: state_data()}.
+    Status :: term.
 
 
 
@@ -506,7 +578,7 @@ await(FsmRef, Timeout) ->
 %%
 %%  Group is derived from the `From` parameter unless it was explicitly specified
 %%  in the `Options` parameter. In that case, the group will be ingerited from the
-%%  caller FSM or new group will be created if mesage is from an external source.
+%%  syncer FSM or new group will be created if mesage is from an external source.
 %%
 -spec send_create_event(
         Module  :: module(),
@@ -523,7 +595,7 @@ await(FsmRef, Timeout) ->
 send_create_event(Module, Args, Event, From, Options) ->
     Timeout = resolve_timeout(Options),
     {ok, InstId} = create_start_link(Module, Args, From, Options, Timeout),
-    % TODO: The following is the second remote call in the case of riak.
+    % TODO: The following is the second remote sync in the case of riak.
     %       Await - is probably the third. Move it somehow to the remote part.
     ok = send_event({inst, InstId}, Event, From),
     ok = await_for_created(Options, Timeout),
@@ -551,7 +623,7 @@ send_create_event(Module, Args, Event, From, Options) ->
 sync_send_create_event(Module, Args, Event, From, Options) ->
     Timeout = resolve_timeout(Options),
     {ok, InstId} = create_start_link(Module, Args, From, Options, Timeout),
-    % TODO: The following is the second remote call in the case of riak.
+    % TODO: The following is the second remote sync in the case of riak.
     %       Move it somehow to the remote part.
     {ok, Response} = case proplists:is_defined(timeout, Options) of
         false -> sync_send_event({inst, InstId}, Event, From);
