@@ -254,8 +254,8 @@
         InstRef :: inst_ref()
     ) ->
     {ok, StateData :: state_data()} |
-    {ok, StateName :: state_name(), StateData :: state_data()} |
-    {ok, StateName :: state_name(), StateData :: state_data(), Actions :: [state_effect()]}.
+    {ok, InitStateName :: state_name(), StateData :: state_data()}.
+    {ok, InitStateName :: state_name(), StateData :: state_data(), Effects :: [state_effect()]}.
 
 %%
 %%  This function is invoked on each (re)start of the FSM. On the first start
@@ -283,7 +283,7 @@
         StateData   :: state_data(),
         InstRef     :: inst_ref()
     ) ->
-    {ok, StateName :: state_name(), StateData :: state_data()}.
+    {ok, NextStateName :: state_name(), NewStateData :: state_data()}.
 
 %%
 %%  This function handles events coming to the FSM. It is also used
@@ -340,6 +340,11 @@
 %%  If the callback was invoked to handle state exit or entry, the response term should be
 %%  `{ok, NewStateData}` or `{ok, NewStateData, Effects}`.
 %%
+%%  The state exit action is not invoked for the initial transition. The initial transition
+%%  can be recognized by the state entry action, it will be invoked with `[]` as a PrevStateName
+%%  or the state name as returned by the `init/2` callback.
+%%  Similarly, the entry action is not invoked for the final state.
+%%
 -callback handle_state(
         StateName   :: state_name(),
         Trigger     :: {event, Message} |
@@ -376,7 +381,9 @@
 
 
 %%
-%%
+%%  Invoked when runtime process terminates. This is the case for both:
+%%  the normal FSM termination and crashes. Parameters and response
+%%  are defined in the same way, as it is done in the `gen_fsm`.
 %%
 -callback terminate(
         Reason      :: normal | shutdown | {shutdown,term()} | term(),
@@ -386,7 +393,19 @@
     Term :: term().
 
 %%
+%%  This callback is used to handle code upgrades. Its use is similar to one,
+%%  specified for the `gen_fsm`, except that its use is extended in this module.
+%%  This callback will be invoked not only on hot code upgrades, but also in the cases,
+%%  when the state can be changed to some new structure. In the case of state changes,
+%%  the callback will be invoked with `state` as a first argument (and `Extra = undefined`).
 %%
+%%  The state changes will be indicated in the following cases:
+%%
+%%    * On process startup (when a persistent FSM becomes online).
+%%    * On FSM resume (after being suspended).
+%%
+%%  This function will be invoked on hot code upgrade, as usual. In this case
+%%  the function will be invoked as described in `gen_fsm`.
 %%
 -callback code_change(
         OldVsn      :: (Vsn :: term() | {down, Vsn :: term()} | state),
@@ -396,12 +415,23 @@
     ) ->
     {ok, NextStateName :: state_name(), NewStateData :: state_data()}.
 
-
+%%
+%%  This function is used to format internal FSM state in some specific way.
+%%  This is extended version of the corresponding function of the `gen_fsm`.
+%%  This module extends that function by adding a case of `Opt = {external, ContentType}`.
+%%  The function with this argument will be invoked when some external process asks
+%%  for the external representation of the FSM state.
+%%
+%%  In the case of `Opt = {external, ContentType}`, the `State` parameter will contain
+%%  a tuple with the StateName and StateData. The `format_status` callback will not be
+%%  called from the FSM process in this case.
+%%
+%%  If the function will be called with `Opt = normal | terminate`, it will behave
+%%  as described in `gen_fsm`. The `State` parameter will contain `[PDict, StateData]`.
+%%
 -callback format_status(
         Opt         :: normal | terminate | {external, ContentType :: term()},
-        PDict       :: [{Key :: term(), Value :: term()}],
-        StateName   :: state_name(),
-        StateData   :: state_data()
+        State       :: list() | {state, StateName, StateData}
     ) ->
     Status :: term.
 
