@@ -125,22 +125,13 @@
 %%
 %%  Type exports.
 %%
--export_type([name/0, id/0, ref/0, group/0]).
+-export_type([name/0, id/0, group/0]).
 
 %%
 %%  Internal things...
 %%
 -include("eproc.hrl").
 -define(DEFAULT_TIMEOUT, 10000).
-
-
-%%
-%%  Structure, passed to all callbacks, to be used to indicate process.
-%%
--record(inst_ref, {
-    id      :: inst_id(),
-    group   :: inst_group()
-}).
 
 
 -record(inst_key, { % TODO
@@ -160,10 +151,9 @@
 
 -type name() :: {via, Registry :: module(), InstId :: inst_id()}.
 -opaque id()  :: integer().
--opaque ref() :: #inst_ref{}.
 -opaque group() :: integer().
 -type prop_elem() :: list() | binary() | integer().
--type event_src() :: undefined | #inst_ref{} | term().
+-type event_src() :: undefined | term(). %% TODO: Add an alternative to #inst_ref{} |
 
 -type timer_name() :: term().
 
@@ -200,94 +190,69 @@
     {timer, TimerName :: term(), After :: integer(), Event :: state_event(), Scope :: state_scope()} |
     {timer, TimerName :: term(), cancel}.
 
-%%
-%%  TODO: Describe.
-%%
--type state_phase() :: event | entry | exit.
-
-
-%%
-%%  Internal state of the `eproc_fsm`.
-%%
--record(state, {
-    inst_id,
-    module,
-    sname,
-    sdata,
-    trn_id,
-    keys,
-    props,
-    timers,
-    registry,
-    store,
-    msg         %% The currently processed message. TODO: Do we need it? For terminate/2?
-}).
-
-
 
 %% =============================================================================
 %%  Callback definitions.
 %% =============================================================================
 
 %%
-%%  Invoked when initializing the FSM. This fuction is invoked only on first
-%%  initialization. I.e. it is not invoked on restarts.
+%%  Invoked when creating (not starting) the persistent FSM. The callback
+%%  is invoked NOT in the process of the FSM.
 %%
 %%  Parameters:
 %%
 %%  `Args`
 %%  :   is the value passed as the `Args` parameter to the `create/3`,
 %%      `send_create_event/5` or `sync_send_create_event/5` function.
-%%  `InstRef`
-%%  :   Instance reference. It can be used to send messages via connectors
-%%      (channels) and to access other information. InstRef identifies
-%%      the FSM instance and its state.
 %%
-%%  The function needs to return `StateData` - state data of the process
-%%  and optionally state name and actions.
-%%
-%%  If `StateName` is not provided, the state name `initial` is assumed.
-%%  Actions can be used here to set FSM name, keys, properties and timers.
+%%  The function needs to return `StateData` - internal state of the process
+%%  and optionally effects and initial state name. If `InitStateName` is not
+%%  provided, the the initial state name `[]` is assumed. Effects can be used
+%%  here to set FSM name, keys, properties and timers.````
 %%
 -callback init(
-        Args    :: term(),
-        InstRef :: inst_ref()
+        Args :: term()
     ) ->
-    {ok, StateData :: state_data()} |
-    {ok, InitStateName :: state_name(), StateData :: state_data()} |
-    {ok, InitStateName :: state_name(), StateData :: state_data(), Effects :: [state_effect()]}.
+        {ok, StateData} |
+        {ok, StateData, Effects} |
+        {ok, InitStateName, StateData, Effects}
+    when
+        StateData :: state_data(),
+        InitStateName :: state_name(),
+        Effects :: [state_effect()].
 
 %%
 %%  This function is invoked on each (re)start of the FSM. On the first start
-%%  this callback is invoked after the `init/2` callback.
+%%  this callback is always invoked after the `init/1` callback.
 %%
-%%  In this function the FSM can initialize its run-time resources: start or link to
-%%  processes, etc.
+%%  In this function the FSM can initialize its run-time resources:
+%%  start or link to processes, etc. This callback is invoked in the
+%%  context of the FSM process.
 %%
 %%  Parameters:
 %%
 %%  `StateName`
 %%  :   is the state name loaded from the persistent store or returned
-%%      by the `init/2` callback, if initialization is performed for a new instance.
+%%      by the `init/1` callback, if initialization is performed for a new instance.
 %%  `StateData`
 %%  :   is the corresponding state data.
-%%  `InstRef`
-%%  :   has the same meaning, as in the `init/2` callback.
 %%
 %%  The function should return state data and state name. They both can be transformed
 %%  in this function. Nevertheless, the transformed state will only be persisted on the
 %%  next transition.
 %%
 -callback init(
-        StateName   :: state_name(),
-        StateData   :: state_data(),
-        InstRef     :: inst_ref()
+        StateName :: state_name(),
+        StateData :: state_data()
     ) ->
-    {ok, NextStateName :: state_name(), NewStateData :: state_data()}.
+        {ok, NextStateName, NewStateData}
+    when
+        NextStateName :: state_name(),
+        NewStateData  :: state_data().
 
 %%
 %%  This function handles events coming to the FSM. It is also used
-%%  to handle state entries and exits.
+%%  to handle state entry and exit actions.
 %%
 %%  Parameters:
 %%
@@ -295,7 +260,7 @@
 %%  :   is the name of the state, at which an event occured.
 %%  `Trigger`
 %%  :   indicates, wether this callback is invoked to handle an event, synchronous
-%%      event, state entry or state exit:
+%%      event, timer, state entry or state exit:
 %%
 %%      `{event, Message}`
 %%      :   indicates an event `Message` sent to the FSM asynchronously.
@@ -314,8 +279,6 @@
 %%
 %%  `StateData`
 %%  :   contains internal state of the FSM.
-%%  `InstRef`
-%%  :   has the same meaning, as in the init callbacks.
 %%
 %%  If the function was invoked with `{event, Message}` or `{timer, Timer, Message}`,
 %%  the function should return one of the following:
@@ -332,7 +295,7 @@
 %%      assignment of keys or properties can be useful.
 %%
 %%  In the case of synchronous events `{sync, From, Message}`, the callback can return all the
-%%  responses listed above, if reply to the caller was sent explicitly using functtion `reply/2`.
+%%  responses listed above, if reply to the caller was sent explicitly using function `reply/2`.
 %%  If reply was not sent explicitly, the terms tagged with `reply_same`, `reply_next` and `reply_final`
 %%  should be used to send a reply and do the transition. Meaning of these response terms are
 %%  the same as for the `same_state`, `next_state` and `final_state` correspondingly.
@@ -352,32 +315,31 @@
                        {timer, Timer, Message} |
                        {exit, NextStateName} |
                        {entry, PrevStateName},
-        StateData   :: state_data(),
-        InstRef     :: inst_ref()
+        StateData   :: state_data()
     ) ->
-    {same_state, NewStateData} |
-    {same_state, NewStateData, Effects} |
-    {next_state, NextStateName, NewStateData} |
-    {next_state, NextStateName, NewStateData, Effects} |
-    {final_state, FinalStateName, NewStateData} |
-    {final_state, FinalStateName, NewStateData, Effects} |
-    {reply_same, Reply, NewStateData} |
-    {reply_same, Reply, NewStateData, Effects} |
-    {reply_next, Reply, NextStateName, NewStateData} |
-    {reply_next, Reply, NextStateName, NewStateData, Effects} |
-    {reply_final, Reply, FinalStateName, NewStateData} |
-    {reply_final, Reply, FinalStateName, NewStateData, Effects} |
-    {ok, NewStateData} |
-    {ok, NewStateData, Effects}
+        {same_state, NewStateData} |
+        {same_state, NewStateData, Effects} |
+        {next_state, NextStateName, NewStateData} |
+        {next_state, NextStateName, NewStateData, Effects} |
+        {final_state, FinalStateName, NewStateData} |
+        {final_state, FinalStateName, NewStateData, Effects} |
+        {reply_same, Reply, NewStateData} |
+        {reply_same, Reply, NewStateData, Effects} |
+        {reply_next, Reply, NextStateName, NewStateData} |
+        {reply_next, Reply, NextStateName, NewStateData, Effects} |
+        {reply_final, Reply, FinalStateName, NewStateData} |
+        {reply_final, Reply, FinalStateName, NewStateData, Effects} |
+        {ok, NewStateData} |
+        {ok, NewStateData, Effects}
     when
-    From :: term(),
-    Timer :: timer_name(),
-    Reply :: term(),
-    NewStateData :: state_data(),
-    NextStateName :: state_name(),
-    PrevStateName :: state_name(),
-    FinalStateName :: state_name(),
-    Effects :: [state_effect()].
+        From    :: term(),
+        Timer   :: timer_name(),
+        Reply   :: term(),
+        NewStateData    :: state_data(),
+        NextStateName   :: state_name(),
+        PrevStateName   :: state_name(),
+        FinalStateName  :: state_name(),
+        Effects         :: [state_effect()].
 
 
 %%
@@ -390,7 +352,7 @@
         StateName   :: state_name(),
         StateData   :: state_data()
     ) ->
-    Term :: term().
+        Term :: term().
 
 %%
 %%  This callback is used to handle code upgrades. Its use is similar to one,
@@ -408,12 +370,17 @@
 %%  the function will be invoked as described in `gen_fsm`.
 %%
 -callback code_change(
-        OldVsn      :: (Vsn :: term() | {down, Vsn :: term()} | state),
+        OldVsn      :: (Vsn | {down, Vsn} | state),
         StateName   :: state_name(),
         StateData   :: state_data(),
-        Extra       :: {advanced, Extra :: term()} | undefined
+        Extra       :: {advanced, Extra} | undefined
     ) ->
-    {ok, NextStateName :: state_name(), NewStateData :: state_data()}.
+        {ok, NextStateName, NewStateData}
+    when
+        Vsn     :: term(),
+        Extra   :: term(),
+        NextStateName :: state_name(),
+        NewStateData  :: state_data().
 
 %%
 %%  This function is used to format internal FSM state in some specific way.
@@ -430,10 +397,14 @@
 %%  as described in `gen_fsm`. The `State` parameter will contain `[PDict, StateData]`.
 %%
 -callback format_status(
-        Opt         :: normal | terminate | {external, ContentType :: term()},
-        State       :: list() | {state, StateName :: state_name(), StateData :: state_data()}
+        Opt         :: normal | terminate | {external, ContentType},
+        State       :: list() | {state, StateName, StateData}
     ) ->
-    Status :: term.
+        Status :: term
+    when
+        ContentType :: term(),
+        StateName   :: state_name(),
+        StateData   :: state_data().
 
 
 
@@ -493,6 +464,16 @@
         {error, already_created}.
 
 create(Module, Args, Options) ->
+    case Module:init(Args) of
+        {ok, StateData} ->
+            StateName = [],
+            Effects = [];
+        {ok, StateData, Effects} ->
+            StateName = [];
+        {ok, StateName, StateData, Effects} ->
+            ok
+    end,
+
     {KnownOpts, UnknownOpts} = proplists:split(Options, [group, name, keys, props]),
     Instance = #instance{
         id = undefined,
@@ -507,6 +488,7 @@ create(Module, Args, Options) ->
         status = running,
         archived = undefined
     },
+
     eproc_store:add_instance(undefined, Instance). % TODO: Create a name and new group if needed.
 
 
@@ -745,15 +727,27 @@ set_state(Name, NewStateName, NewStateData, Reason) ->
 
 %%
 %%  To be used by the process implementation to sent response to a synchronous
-%%  request before the `handle_state/4` function completes.
+%%  request before the `handle_state/3` function completes.
+%%
+%%  Parameters:
+%%
+%%  `To`
+%%  :   A recipient, who should receive the reply. The parameter `From` from
+%%      the `handle_state` `{sync, From, Message}`should be passed here.
+%%  `Reply`
+%%  :   The reply message.
+%%
+%%  The function returns `ok` on success.
 %%
 -spec reply(
-        state_event(),
-        inst_ref()
-        ) -> ok.
+        To    :: term(),
+        Reply :: state_event()
+    ) ->
+        ok |
+        {error, Reason :: term()}.
 
-reply(_Response, _InstRef) ->
-    ok.
+reply(To, Reply) ->
+    gen_fsm:reply(To, Reply).
 
 
 %%
@@ -804,6 +798,29 @@ add_prop(Name, Value, Actions) ->
 %%
 set_name(Name, Actions) ->
     [ {name, Name} | Actions ].
+
+
+
+%% =============================================================================
+%%  Internal state of the module.
+%% =============================================================================
+
+%%
+%%  Internal state of the `eproc_fsm`.
+%%
+-record(state, {
+    inst_id,
+    module,
+    sname,
+    sdata,
+    trn_id,
+    keys,
+    props,
+    timers,
+    registry,
+    store,
+    msg         %% The currently processed message. TODO: Do we need it? For terminate/2?
+}).
 
 
 
@@ -902,8 +919,7 @@ handle_info({'eproc_fsm$init'}, initializing, StateData) ->
             %%  Initial startup.
             %%
             TrnId = undefined,
-            InstRef = #inst_ref{id = InstId, group = Group},
-            case Module:init(Args, InstRef) of
+            case Module:init(Args, undefined) of              %% TODO: Call different callback.
                 {ok, SData} ->
                     SName = initial,
                     StateDataAfterInit = StateData;

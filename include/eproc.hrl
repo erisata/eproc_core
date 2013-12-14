@@ -19,7 +19,6 @@
 -type timestamp()       :: erlang:timestamp().      % {Mega, Secs, Micro}
 -type duration()        :: integer().               % in ms.
 -type inst_id()         :: eproc_fsm:id().
--type inst_ref()        :: eproc_fsm:ref().
 -type fsm_ref()         :: {inst, inst_id()} | {name, term()} | {key, term()}.   % TODO: Rename, differentiate from inst_ref().
 -type inst_name()       :: term().
 -type inst_group()      :: eproc_fsm:group().
