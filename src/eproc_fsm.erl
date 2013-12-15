@@ -23,9 +23,11 @@
 %%  of differences comparing it to `gen_fsm`:
 %%
 %%    * State name supports substates and orthogonal states.
-%%    * Callback `Module:handle_state/4` is used instead of `Module:StateName/2-3`.
+%%    * Callback `Module:handle_state/3` is used instead of `Module:StateName/2-3`.
+%%      This allows to have substates and orthogonal states.
 %%    * Process configuration is passed as a separate argument to the fsm. TODO: WTF?
 %%    * Has support for state entry and exit actions.
+%%      State entry action is convenient for setting up timers and keys.
 %%    * Has support for scopes. The scopes can be used to manage timers and keys.
 %%    * Supports automatic state persistence.
 %%
@@ -55,19 +57,19 @@
 %%
 %%  New FSM created
 %%  :
-%%        * `init(Args, InstRef)`
-%%        * `init(InitStateName, StateData, InstRef)`
-%%        * `handle_state(InitStateName, {event, Message} | {sync, From, Message}, StateData, InstRef)`
-%%        * `handle_state(NewStateName, {entry, InitStateName}, StateData, InstRef)`
+%%        * `init(Args)`
+%%        * `init(InitStateName, StateData)`
+%%        * `handle_state(InitStateName, {event, Message} | {sync, From, Message}, StateData)`
+%%        * `handle_state(NewStateName, {entry, InitStateName}, StateData)`
 %%
 %%  FSM process terminated
 %%  :
-%%        * `terminate(Reason, StateName, StateData, InstRef)`
+%%        * `terminate(Reason, StateName, StateData)`
 %%
 %%  FSM is restarted
 %%  :
 %%        * `code_change(state, StateName, StateData, undefined)`
-%%        * `init(StateName, StateData, InstRef)`
+%%        * `init(StateName, StateData)`
 %%
 %%  FSM upgraded in run-time
 %%  :
@@ -79,18 +81,18 @@
 %%
 %%  Event initiated a transition (`next_state`)
 %%  :
-%%        * `handle_state(StateName, {event, Message} | {sync, From, Message}, StateData, InstRef)`
-%%        * `handle_state(StateName, {exit, NextStateName}, StateData, InstRef)`
-%%        * `handle_state(NextStateName, {entry, StateName}, StateData, InstRef)`
+%%        * `handle_state(StateName, {event, Message} | {sync, From, Message}, StateData)`
+%%        * `handle_state(StateName, {exit, NextStateName}, StateData)`
+%%        * `handle_state(NextStateName, {entry, StateName}, StateData)`
 %%
 %%  Event with no transition (`same_state`)
 %%  :
-%%        * `handle_state(StateName, {event, Message} | {sync, From, Message}, StateData, InstRef)`
+%%        * `handle_state(StateName, {event, Message} | {sync, From, Message}, StateData)`
 %%
 %%  Event initiated a termination (`final_state`)
 %%  :
-%%        * `handle_state(StateName, {event, Message} | {sync, From, Message}, StateData, InstRef)`
-%%        * `handle_state(StateName, {exit, FinalStateName}, StateData, InstRef)`
+%%        * `handle_state(StateName, {event, Message} | {sync, From, Message}, StateData)`
+%%        * `handle_state(StateName, {exit, FinalStateName}, StateData)`
 %%
 %%
 -module(eproc_fsm).
