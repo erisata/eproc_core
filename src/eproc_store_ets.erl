@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013 Karolis Petrauskas
+%| Copyright 2013 Robus, Ltd.
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@
 -behaviour(gen_server).
 -compile([{parse_transform, lager_transform}]).
 -export([start_link/0]).
--export([add_instance/4]).
+-export([add_instance/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -include("eproc.hrl").
 
@@ -48,7 +48,9 @@ start_link() ->
 %%  Creates ETS tables.
 %%
 init(undefined) ->
-    ets:new(eproc_store_ets_inst, [set, public, named_table, {keypos, #instance.id}]),
+    ets:new('eproc_store_ets$inst', [set, public, named_table, {keypos, #instance.id}]),
+    ets:new('eproc_store_ets$cntr', [set, public, named_table, {keypos, 1}]),
+    ets:insert('eproc_store_ets$cntr', {inst, 0}),
     State = undefined,
     {ok, State}.
 
@@ -96,9 +98,22 @@ code_change(_OldVsn, State, _Extra) ->
 %%
 %%
 %%
-add_instance(_StoreArgs, _FsmModule, _FsmArgs, _FsmGroup) ->
-    % TODO: Implement.
-    {ok, undefined}.
+add_instance(_StoreArgs, Instance = #instance{name = Name, group = Group}) ->
+    InstId = ets:update_counter('eproc_store_ets$cntr', inst, 1),
+    ResolvedGroup = if
+        Group =:= new     -> InstId;
+        is_integer(Group) -> Group
+    end,
+    ResolvedName = case Name of
+        undefined -> InstId;
+        _         -> Name
+    end,
+    true = ets:insert('eproc_store_ets$inst', Instance#instance{
+        id = InstId,
+        name = ResolvedName,
+        group = ResolvedGroup
+    }),
+    {ok, InstId}.
 
 
 

@@ -14,31 +14,4 @@
 %| limitations under the License.
 %\--------------------------------------------------------------------
 
-%%
-%%  Mnesia-based EProc store implementation.
-%%
--module(eproc_store_mnesia).
--behaviour(eproc_store).
--compile([{parse_transform, lager_transform}]).
--export([add_instance/2]).
--include("eproc.hrl").
-
-
-%% =============================================================================
-%%  Callbacks for `gen_fsm`.
-%% =============================================================================
-
-%%
-%%
-%%
-add_instance(_StoreArgs, _Instance) ->
-    % TODO: Implement.
-    {ok, undefined}.
-
-
-
-%% =============================================================================
-%%  Internal functions.
-%% =============================================================================
-
-
+-define(APP, eproc_core).

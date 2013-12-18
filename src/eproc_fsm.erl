@@ -835,8 +835,8 @@ set_name(Name, Actions) ->
 %%  restarting the engine with a lot of running fsm's.
 %%
 init({InstId, _Options}) ->
-    Registry = eproc:registry(),
-    Store = eproc:store(),
+    {ok, Registry} = eproc_registry:ref(),
+    {ok, Store}    = eproc_store:ref(),
     State = #state{
         inst_id     = InstId,
         registry    = Registry,
@@ -987,8 +987,8 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 %%  Create and start FSM.
 %%
 create_start_link(Module, Args, From, Options, Timeout) ->
-    GroupOpts = resolve_group_opts(From, Options),
-    {ok, InstId} = create(Module, Args, Options ++ GroupOpts),
+    OptsWithGroup = resolve_create_opts(group, Options),
+    {ok, InstId} = create(Module, Args, OptsWithGroup),
     ok = eproc_registry:start_instance(undefined, InstId, [{timeout, Timeout}]),
     {ok, InstId}.
 
@@ -1001,13 +1001,20 @@ resolve_timeout(Options) ->
 
 
 %%
-%%  Creates `group` option if needed.
+%%  Resolves FSM create options.
 %%
-resolve_group_opts(From, Options) ->
-    case {proplists:is_defined(group, Options), From} of
-        {false, #inst_ref{group = Group}} -> [{group, Group}];
-        {false, _} -> [];
-        {true, _} -> []
+%%    * Group is taken from the context of the calling process
+%%      if not provided in the options explicitly. If the calling
+%%      process is not FSM, new group will be created.
+%%
+resolve_create_opts(group, Options) ->
+    case proplists:is_defined(group, Options) of
+        true -> [];
+        false ->
+            case group() of
+                {ok, Group} -> [{group, Group}];
+                {error, not_fsm} -> [{group, new}]
+            end
     end.
 
 

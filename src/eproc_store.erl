@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013 Karolis Petrauskas
+%| Copyright 2013 Robus, Ltd.
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -15,13 +15,18 @@
 %\--------------------------------------------------------------------
 
 %%
-%%  TODO: Desc.
+%%  Main interface for a store implementation. The core engine is always using
+%%  this module to access the database. Several implementations of this interface
+%%  are provided. The `eproc_core` provides ETS and Mnesia based implementations.
+%%  Riak based implementation is provided by the `eproc_riak` component.
 %%
 -module(eproc_store).
 -compile([{parse_transform, lager_transform}]).
--export([ref/2, add_instance/4]).
+-export([ref/0, ref/2]).
+-export([add_instance/2]).
 -export_type([ref/0]).
 -include("eproc.hrl").
+-include("eproc_internal.hrl").
 
 -opaque ref() :: {Callback :: module(), Args :: term()}.
 
@@ -32,33 +37,58 @@
 
 -callback add_instance(
         StoreArgs   :: term(),
-        FsmModule   :: module(),
-        FsmArgs     :: term(),
-        FsmGroup    :: inst_group()
+        Instance    :: #instance{}
     ) ->
         {ok, inst_id()}.
+
 
 
 %% =============================================================================
 %%  Public API.
 %% =============================================================================
 
+
 %%
-%%  Create store reference.
+%%  Returns the default store reference.
 %%
--spec ref(
-        module(),
-        term()
-        ) ->
-        {ok, store_ref()}.
+-spec ref() -> {ok, store_ref()}.
+
+ref() ->
+    {ok, {StoreMod, StoreArgs}} = application:get_env(?APP, store),
+    ref(StoreMod, StoreArgs).
+
+
+
+%%
+%%  Create a store reference.
+%%
+-spec ref(module(), term()) -> {ok, store_ref()}.
 
 ref(Module, Args) ->
     {ok, {Module, Args}}.
 
 
 %%
+%%  Stores new persistent instance, generates id for it,
+%%  assigns a group and a name if not provided.
 %%
+add_instance(StoreRef, Instance) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(StoreRef),
+    StoreMod:add_instance(StoreArgs, Instance).
+
+
+
+%% =============================================================================
+%%  Internal functions.
+%% =============================================================================
+
 %%
-add_instance({StoreMod, StoreArgs}, FsmModule, FsmArgs, FsmGroup) ->
-    StoreMod:add_instance(StoreArgs, FsmModule, FsmArgs, FsmGroup).
+%%  Resolve the provided (optional) store reference.
+%%
+resolve_ref({StoreMod, StoreArgs}) ->
+    {ok, {StoreMod, StoreArgs}};
+
+resolve_ref(undefined) ->
+    ref().
+
 

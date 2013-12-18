@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013 Karolis Petrauskas
+%| Copyright 2013 Robus, Ltd.
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -24,13 +24,15 @@
 %%
 -module(eproc_registry).
 -compile([{parse_transform, lager_transform}]).
+-export([ref/0, ref/2]).
 -export([
-    ref/2, start_instance/3, await/3,
+    start_instance/3, await/3,
     register_inst/2, register_name/3, register_keys/3,
     send_event/3
 ]).
 -export_type([ref/0]).
 -include("eproc.hrl").
+-include("eproc_internal.hrl").
 
 -opaque ref() :: {Callback :: module(), Args :: term()}.
 
@@ -109,14 +111,22 @@
 %%  Public API.
 %% =============================================================================
 
+
+%%
+%%  Returns the default registry reference.
+%%
+-spec ref() -> {ok, registry_ref()}.
+
+ref() ->
+    {ok, {RegistryMod, RegistryArgs}} = application:get_env(?APP, registry),
+    ref(RegistryMod, RegistryArgs).
+
+
+
 %%
 %%  Create a registry reference.
 %%
--spec ref(
-        module(),
-        term()
-        ) ->
-        {ok, registry_ref()}.
+-spec ref(module(), term()) -> {ok, registry_ref()}.
 
 ref(Module, Args) ->
     {ok, {Module, Args}}.
@@ -181,12 +191,14 @@ send_event(Registry, FsmRef, Message) ->
 %%  Internal functions.
 %% =============================================================================
 
-%%
-%%  Resolves a registry.
-%%
-resolve_ref(undefined) ->
-    eproc:registry();
 
-resolve_ref(Registry) ->
-    Registry.
+%%
+%%  Resolve the provided (optional) registry reference.
+%%
+resolve_ref({RegistryMod, RegistryArgs}) ->
+    {ok, {RegistryMod, RegistryArgs}};
+
+resolve_ref(undefined) ->
+    ref().
+
 
