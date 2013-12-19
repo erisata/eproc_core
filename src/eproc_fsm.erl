@@ -466,16 +466,6 @@
         {error, already_created}.
 
 create(Module, Args, Options) ->
-    case Module:init(Args) of
-        {ok, StateData} ->
-            StateName = [],
-            Effects = [];
-        {ok, StateData, Effects} ->
-            StateName = [];
-        {ok, StateName, StateData, Effects} ->
-            ok
-    end,
-
     {KnownOpts, UnknownOpts} = proplists:split(Options, [group, name, keys, props]),
     Instance = #instance{
         id = undefined,
@@ -490,8 +480,7 @@ create(Module, Args, Options) ->
         status = running,
         archived = undefined
     },
-
-    eproc_store:add_instance(undefined, Instance). % TODO: Create a name and new group if needed.
+    eproc_store:add_instance(undefined, Instance). % TODO: Try to get store from the options.
 
 
 %%

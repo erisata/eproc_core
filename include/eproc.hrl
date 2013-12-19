@@ -14,6 +14,10 @@
 %| limitations under the License.
 %\--------------------------------------------------------------------
 
+%%
+%%  Common data types for the `eproc_fsm`.
+%%
+
 -type proplist()        :: [{term(), term()}].
 -type datetime()        :: calendar:datetime().     % {Date, Time} in UTC
 -type timestamp()       :: erlang:timestamp().      % {Mega, Secs, Micro}
@@ -27,21 +31,6 @@
 -type registry_ref()    :: eproc_registry:ref().
 -type trns_id()         :: integer().
 
-
-%%
-%%
-%%
--record(definition, {
-    application         :: atom(),
-    process             :: atom(),
-    version = [0, 0, 0] :: list(),
-    module              :: module(),
-    args                :: term(),
-    description         :: binary(),
-    valid_from          :: timestamp(), % Inclusive
-    valid_till          :: timestamp(), % Exclusive
-    options = []        :: list()
-}).
 
 -type trigger() ::
     {message, term()} |
@@ -57,7 +46,7 @@
     name        :: inst_name(),
     keys        :: proplist(),
     props       :: proplist(),
-    module      :: module(),        %% TODO: Change it to definition?
+    module      :: module(),
     args        :: term(),
     opts        :: proplist(),
     start_time  :: datetime(),

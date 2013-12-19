@@ -23,7 +23,7 @@
 -module(eproc_store).
 -compile([{parse_transform, lager_transform}]).
 -export([ref/0, ref/2]).
--export([add_instance/2]).
+-export([add_instance/2, load_instance/2]).
 -export_type([ref/0]).
 -include("eproc.hrl").
 -include("eproc_internal.hrl").
@@ -40,6 +40,14 @@
         Instance    :: #instance{}
     ) ->
         {ok, inst_id()}.
+
+
+-callback load_instance(
+        StoreArgs   :: term(),
+        InstId      :: inst_id()
+    ) ->
+        {ok, #instance{}, #transition{}} |
+        {error, not_found}.
 
 
 
@@ -75,6 +83,14 @@ ref(Module, Args) ->
 add_instance(StoreRef, Instance) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(StoreRef),
     StoreMod:add_instance(StoreArgs, Instance).
+
+
+%%
+%%  Loads an instance and its current state.
+%%
+load_instance(StoreRef, InstId) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(StoreRef),
+    StoreMod:load_instance(StoreArgs, InstId).
 
 
 
