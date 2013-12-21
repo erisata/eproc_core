@@ -22,52 +22,105 @@
 -type datetime()        :: calendar:datetime().     % {Date, Time} in UTC
 -type timestamp()       :: erlang:timestamp().      % {Mega, Secs, Micro}
 -type duration()        :: integer().               % in ms.
+
 -type inst_id()         :: eproc_fsm:id().
--type fsm_ref()         :: {inst, inst_id()} | {name, term()} | {key, term()}.   % TODO: Rename, differentiate from inst_ref().
+-type fsm_ref()         :: {inst, inst_id()} | {name, term()} | {key, term()}.
 -type inst_name()       :: term().
 -type inst_group()      :: eproc_fsm:group().
 -type inst_status()     :: running | suspended | done | failed | killed.
 -type store_ref()       :: eproc_store:ref().
 -type registry_ref()    :: eproc_registry:ref().
--type trns_id()         :: integer().
+-type trn_nr()          :: integer().
+-type party()           :: {inst, inst_id()} | {ext, term()}.
+-type scope()           :: list().
 
+
+
+%%
+%%  See `eproc_fsm.erl` for more details.
+%%
+
+-record(inst_prop, {
+    inst_id :: inst_id(),   %% Id of an instance the property belongs to.
+    name    :: binary(),    %% Name of the property.
+    value   :: binary(),    %% Value of the property.
+    from    :: trn_nr()     %% Transition at which the property was set.
+}).
+
+-record(inst_key, {
+    inst_id :: inst_id(),   %% Id of an instance the key belongs to.
+    value   :: term(),      %% Value of the key.
+    scope   :: scope(),     %% Scope, in which the key is valid.
+    from    :: trn_nr(),                %% Transition at which the key was set.
+    till    :: trn_nr() | undefined,    %% Transition at which the key was removed.
+    reason  :: (scope | cancel | admin) %% Reason for the key removal.
+}).
+
+-record(inst_timer, {
+    inst_id     :: inst_id(),   %% Id of an instance the timer belongs to.
+    name        :: term(),      %% Name of the timer.
+    start       :: timestamp(), %% Time at which the timer was set.
+    duration    :: integer(),   %% Duration of the timer in miliseconds.
+    message     :: term(),      %% Message to be sent to the FSM when the timer fires.
+    scope       :: scope(),     %% Scope in which the key is valid.
+    from        :: trn_nr(),                        %% Transition at which the timer was set.
+    till        :: trn_nr() | undefined,            %% Transition at which the timer was removed.
+    reason      :: (fired | scope | cancel | admin) %% Reason for the timer removal.
+}).
+
+-type inst_attr() ::
+    #inst_prop{} |
+    #inst_key{} |
+    #inst_timer{}.
 
 -type trigger() ::
-    {message, term()} |
+    {event, Src :: party(), Message :: term()} |
+    {sync,  Src :: party(), Request :: term(), Response :: term()} |
     {timer, Name :: term(), Message :: term()} |
     {admin, Reason :: term()}.
 
-%%
-%%
-%%
--record(instance, {
-    id          :: inst_id(),
-    group       :: inst_group(),
-    name        :: inst_name(),
-    keys        :: proplist(),
-    props       :: proplist(),
-    module      :: module(),
-    args        :: term(),
-    opts        :: proplist(),
-    start_time  :: datetime(),
-    status      :: inst_status(),
-    archived    :: datetime()
-}).
-
+-type effect() ::
+    {event, Dst :: party(), Message :: term()} |                        %% Async message sent.
+    {sync,  Dst :: party(), Request :: term(), Response :: term()} |    %% Synchronous message sent.
+    {name,  Name :: term()} |                                           %% New name set.
+    {prop,  PropName :: term(), PropValue :: term()} |                  %% New property set / existing replaced.
+    {key,   KeyValue :: term(), Scope :: term()} |                      %% New key added.
+    {key,   KeyValue :: term(), Reason :: (scope | cancel | admin)} |   %% Key removed.
+    {timer, TimerName :: term(), After :: integer(), Message :: term(), Scope :: term()} |  %% Timer added.
+    {timer, TimerName :: term(), Reason :: (fired | scope | cancel | admin)}.               %% Timer removed.
 
 %%
-%%
+%%  Describes single transition of a particular instance.
+%%  This structure describes transition and the target state.
 %%
 -record(transition, {
-    id          :: trns_id(),
-    prev        :: trns_id(),
-    inst_id     :: inst_id(),
-    sname       :: term(),
-    sdata       :: term(),
-    timestamp   :: timestamp(),
-    duration    :: duration(),
-    trigger     :: trigger(),
-    actions     :: list()
+    inst_id     :: inst_id(),   %% Id of an instance the transition belongs to.
+    number      :: trn_nr(),    %% Transition number in the FSM (starts at 0).
+    sname       :: term(),      %% FSM state name at the end of this transition.
+    sdata       :: term(),      %% FSM state data at the end of this transition.
+    timestamp   :: timestamp(), %% Start of the transition.
+    duration    :: duration(),  %% Duration of the transition (in microseconds).
+    trigger     :: trigger(),   %% Event, initiated the transition.
+    effects     :: [effect()],                  %% Effects made in this transition.
+    active      :: [inst_attr()] | undefined    %% Active props, keys and timers at the target state, Calculated field.
 }).
+
+%%
+%%  Describes single instance of the `eproc_fsm`.
+%%
+-record(instance, {
+    id          :: inst_id(),           %% Unique auto-generated instance identifier.
+    group       :: inst_group(),        %% Group the instance belongs to.
+    name        :: inst_name(),         %% Initial name - unique user-specified identifier.
+    module      :: module(),            %% Callback module implementing the FSM.
+    args        :: term(),              %% Arguments, passed when creating the FSM.
+    opts        :: proplist(),          %% Options, used by the `eproc_fsm` behaviour (limits, etc).
+    status      :: inst_status(),       %% Current status if the FSM instance.
+    created     :: datetime(),              %% Time, when the instance was created.
+    terminated  :: datetime() | undefined,  %% Time, when the instance was terminated.
+    archived    :: datetime() | undefined,  %% Time, when the instance was archived.
+    transitions :: [#transition{}] | undefined  %% Instance transitions. Calculated field.
+}).
+
 
 

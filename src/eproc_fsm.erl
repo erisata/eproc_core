@@ -31,19 +31,6 @@
 %%    * Has support for scopes. The scopes can be used to manage timers and keys.
 %%    * Supports automatic state persistence.
 %%
-%%  Several states are maintained during lifeycle of the process:
-%%    * `initializing` - while FSM initializes itself asynchronously.
-%%    * `running`   - when the FSM is running.
-%%    * `paused`    - when the FSM is suspended (paused) by an administrator.
-%%    * `faulty'    - when the FSM is suspended because of errors.
-%%
-%%  FSM can reach the following terminal states:    TODO: Map it with the UML diagram.
-%%    * `{done, success}` - when the FSM was completed successfully.
-%%    * `{done, failure}` - when the FSM was completed by the callback module returning special response TODO.
-%%    * `{term, killed}`  - when the FSM was killed in the `running` or the `paused` state.
-%%    * `{term, failed}`  - when the FSM was terminated in the `faulty` state.
-%%
-%%
 %%  It is recomended to name version explicitly when defining state. It can be done as follows:
 %%
 %%      -record(state, {
@@ -95,6 +82,21 @@
 %%        * `handle_state(StateName, {exit, FinalStateName}, StateData)`
 %%
 %%
+%%  Implementation details
+%%  ----------------------
+%%
+%%  Several states are maintained during lifeycle of the process:
+%%    * `starting`  - while FSM initializes itself asynchronously.
+%%    * `running`   - when the FSM is running.
+%%    * `suspended` - when the FSM is suspended paused by an administrator of marked automatically as faulty.
+%%
+%%  FSM can reach the following terminal states:    TODO: Map it with the UML diagram.
+%%    * `{done, success}` - when the FSM was completed successfully.
+%%    * `{done, failure}` - when the FSM was completed by the callback module returning special response TODO.
+%%    * `{term, killed}`  - when the FSM was killed in the `running` or the `paused` state.
+%%    * `{term, failed}`  - when the FSM was terminated in the `faulty` state.
+%%
+%%
 -module(eproc_fsm).
 -behaviour(gen_fsm).
 -compile([{parse_transform, lager_transform}]).
@@ -122,7 +124,7 @@
 %%  Callbacks for `gen_fsm`.
 %%
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
--export([running/2, running/3, paused/2, paused/3, faulty/2, faulty/3]).
+-export([running/2, running/3, suspended/2, suspended/3]).
 
 %%
 %%  Type exports.
@@ -136,19 +138,19 @@
 -define(DEFAULT_TIMEOUT, 10000).
 
 
--record(inst_key, { % TODO
-    key,
-    scope
-}).
--record(inst_timer, { % TODO
-    from,
-    duration,
-    event
-}).
--record(inst_prop, { % TODO
-    name,
-    value
-}).
+%-record(inst_key, { % TODO
+%    key,
+%    scope
+%}).
+%-record(inst_timer, { % TODO
+%    from,
+%    duration,
+%    event
+%}).
+%-record(inst_prop, { % TODO
+%    name,
+%    value
+%}).
 
 
 -type name() :: {via, Registry :: module(), InstId :: inst_id()}.
@@ -210,7 +212,7 @@
 %%  The function needs to return `StateData` - internal state of the process
 %%  and optionally effects and initial state name. If `InitStateName` is not
 %%  provided, the the initial state name `[]` is assumed. Effects can be used
-%%  here to set FSM name, keys, properties and timers.````
+%%  here to set FSM name, keys, properties and timers.  %% TODO: Revise response of this function.
 %%
 -callback init(
         Args :: term()
@@ -437,7 +439,7 @@
 %%  On success, this function returns instance id of the newly created FSM.
 %%  It can be used then to start the instance and to reference it.
 %%
-%%  Options known by this module:
+%%  Options known by this function:
 %%
 %%  `{group, group() | new}`
 %%  :   Its a group ID to which the FSM should be assigned or atom `new`
@@ -446,14 +448,9 @@
 %%  :   Name of the FSM. It uniquelly identifies the FSM.
 %%      Name is valid for the entire FSM lifecycle, including
 %%      the `completed` state.
-%%  `{keys, [Key]}`
-%%  :   List of keys, that can be used to locate the FSM. Keys are
-%%      not required to identify the FSM uniquelly. The keys passed to this
-%%      function will be valid for all the lifetime of the FSM (i.e. scope = []).
-%%  `{props, proplist()}`
-%%  :   List of properties that are later converted to the normalized form
-%%      `{Name :: binary(), Value :: binary()}`. The properties are similar
-%%      to labels, and are to help organize the FSMs by humans.
+%%  `{store, store_ref()}`
+%%  :   Reference of a store, in which the instance should be created.
+%%      If not provided, default store is used.
 %%
 %%  TODO: Add various runtime limits here.
 %%
@@ -461,26 +458,27 @@
         Module  :: module(),
         Args    :: term(),
         Options :: proplist()
-        ) ->
+    ) ->
         {ok, inst_id()} |
         {error, already_created}.
 
 create(Module, Args, Options) ->
-    {KnownOpts, UnknownOpts} = proplists:split(Options, [group, name, keys, props]),
+    {KnownOpts, UnknownOpts} = proplists:split(Options, [group, name, store]),
     Instance = #instance{
-        id = undefined,
-        group = proplists:get_value(group, KnownOpts, new),
-        name = proplists:get_value(name, KnownOpts, undefined), % TODO: Is it good to set it from options. Maybe init/2 is better?
-        keys = proplists:get_value(keys, KnownOpts, []),        % TODO: Is it good to set it from options. Maybe init/2 is better?
-        props = proplists:get_value(props, KnownOpts, []),      % TODO: Is it good to set it from options. Maybe init/2 is better?
-        module = Module,
-        args = Args,
-        opts = UnknownOpts,
-        start_time = eproc:now(),
-        status = running,
-        archived = undefined
+        id          = undefined,
+        group       = proplists:get_value(group, KnownOpts, new),
+        name        = proplists:get_value(name, KnownOpts, undefined),
+        module      = Module,
+        args        = Args,
+        opts        = UnknownOpts,
+        status      = running,
+        created     = eproc:now(),
+        terminated  = undefined,
+        archived    = undefined,
+        transitions = undefined
     },
-    eproc_store:add_instance(undefined, Instance). % TODO: Try to get store from the options.
+    Store = proplists:get_value(store, KnownOpts, undefined),
+    eproc_store:add_instance(Store, Instance).
 
 
 %%
@@ -513,7 +511,7 @@ create(Module, Args, Options) ->
 -spec start_link(
         InstId      :: inst_id(),
         Options     :: proplist()
-        ) ->
+    ) ->
         {ok, pid()} | ignore | {error, term()}.
 
 start_link(InstId, Options) ->
@@ -800,16 +798,16 @@ set_name(Name, Actions) ->
 %%  Internal state of the `eproc_fsm`.
 %%
 -record(state, {
-    inst_id,
-    module,
-    sname,
-    sdata,
-    trn_id,
-    keys,
-    props,
-    timers,
-    registry,
-    store,
+    inst_id     :: inst_id(),       %% Id of the current instance.
+    module      :: module(),        %% Implementation of the user FSM.
+    sname       :: state_name(),    %% User FSM state name.
+    sdata       :: state_data(),    %% User FSM state data.
+    trn_nr      :: trn_nr(),        %% Number of the last processed transition.
+    props       :: [#inst_prop{}],  %% Currently active properties.
+    keys        :: [#inst_key{}],   %% Currently active keys.
+    timers      :: [#inst_timer{}], %% Currently active timers.
+    registry    :: registry_ref(),  %% A registry reference.
+    store       :: store_ref(),     %% A store reference.
     msg         %% The currently processed message. TODO: Do we need it? For terminate/2?
 }).
 
@@ -832,8 +830,8 @@ init({InstId, _Options}) ->
         store       = Store
     },
     ok = eproc_registry:register_inst(Registry, InstId),
-    self() ! {'eproc_fsm$init'},
-    {ok, initializing, State}.
+    self() ! {'eproc_fsm$start'},
+    {ok, starting, State}.
 
 
 %%
@@ -847,22 +845,12 @@ running(_Event, _From, State) ->
 
 
 %%
-%%  Handles the `paused` state.
+%%  Handles the `suspended` state.
 %%
-paused(_Event, State) ->
+suspended(_Event, State) ->
     {noreply, State}.
 
-paused(_Event, _From, State) ->
-    {reply, ok, State}.
-
-
-%%
-%%  Handles the `faulty` state.
-%%
-faulty(_Event, State) ->
-    {noreply, State}.
-
-faulty(_Event, _From, State) ->
+suspended(_Event, _From, State) ->
     {reply, ok, State}.
 
 
@@ -883,68 +871,8 @@ handle_sync_event(_Event, _From, StateName, StateData) ->
 %%
 %%  Asynchronous FSM initialization.
 %%
-handle_info({'eproc_fsm$init'}, initializing, StateData) ->
-    % TODO: Respect FSM state here (running, suspended).
-    % TODO: Remove the `initializing` state.
-    % TODO: Split this to: load and start
-    % TODO: Use state `suspended` instead of `paused` and `faulty`.
-    #state{
-        inst_id = InstId,
-        store = Store,
-        registry = Registry
-    } = StateData,
-    {ok, Instance, Transition} = eproc_store:load_instance(Store, InstId),
-    #instance{
-        group = Group,
-        name = InitialName,
-        keys = InitialKeys,
-        props = InitialProps,
-        module = Module,
-        args = Args
-    } = Instance,
-    undefined = erlang:put('eproc_fsm$id', InstId),
-    undefined = erlang:put('eproc_fsm$group', Group),
-    case Transition of
-        undefined ->
-            %%
-            %%  Initial startup.
-            %%
-            TrnId = undefined,
-            case Module:init(Args, undefined) of              %% TODO: Call different callback.
-                {ok, SData} ->
-                    SName = initial,
-                    StateDataAfterInit = StateData;
-                {ok, SName, SData} ->
-                    StateDataAfterInit = StateData;
-                {ok, SName, SData, Actions} ->
-                    {ok, StateDataAfterInit} = handle_actions(Actions, StateData)
-            end;
-        #transition{id = TrnId, sname = SName, sdata = SData} ->
-            %%
-            %%  Instance was restarted.
-            %%
-            StateDataAfterInit = StateData
-    end,
-    % TODO: Load them properly
-    Keys = undefined,
-    Name = undefined,
-    Props = undefined,
-    Timers = undefined,
-
-    {ok, CleanedKeys} = cleanup_keys(Keys, SName),
-    ok = eproc_registry:register_keys(Registry, InstId, Keys),
-    ok = eproc_registry:register_name(Registry, InstId, Name),
-    {ok, CleanedTimers} = cleanup_timers(Timers, SName),
-    {ok, SetupedTimers} = setup_timers(CleanedTimers),
-    NewStateData = StateDataAfterInit#state{
-        trn_id = TrnId,
-        sname = SName,
-        sdata = SData,
-        keys = CleanedKeys,
-        props = Props,
-        timers = SetupedTimers
-    },
-    {noreply, running, NewStateData};
+handle_info({'eproc_fsm$start'}, starting, StateData) ->
+    handle_start(StateData);
 
 %%
 %%  Handles FSM timers.
@@ -1017,6 +945,84 @@ await_for_created(Options, Timeout) ->
         {undefined, []}         -> ok;
         {undefined, [Key | _]}  -> await({key, Key}, Timeout);
         {Name, _}               -> await({name, Name}, Timeout)
+    end.
+
+
+handle_start(StateData = #state{inst_id = InstId, store = Store, registry = Registry}) ->
+    % TODO: Split this to: load and start
+    {ok, Instance} = eproc_store:load_instance(Store, InstId),
+    #instance{
+        group = Group,
+        name = InitialName,
+        module = Module,
+        args = Args,
+        status = Status,
+        transitions = Transitions
+    } = Instance,
+    undefined = erlang:put('eproc_fsm$id', InstId),
+    undefined = erlang:put('eproc_fsm$group', Group),
+
+    %%
+    %%  Create / restore a state.
+    %%
+    case Transitions of
+        [] ->
+            TrnNr = 0,
+            case Module:init(Args) of
+                {ok, SData} ->
+                    SName = [],
+                    Effects = [];
+                {ok, SData, Effects} ->
+                    SName = [];
+                {ok, SName, SData, Effects} ->
+                    ok
+            end,
+            StateDataAfterInit = StateData; % TODO
+        [#transition{number = TrnNr, sname = SName, sdata = SData}] ->
+            StateDataAfterInit = StateData % TODO
+    end,
+
+    %% TODO: Restart on suspend.
+
+    Name    = undefined,   % TODO
+    Props   = undefined,   % TODO
+    Keys    = undefined,   % TODO
+    Timers  = undefined,   % TODO
+    ok = eproc_registry:register_keys(Registry, InstId, Keys),
+    ok = eproc_registry:register_name(Registry, InstId, Name),
+
+    NewStateData = StateDataAfterInit#state{
+        module  = Module,
+        sname   = SName,
+        sdata   = SData,
+        trn_nr  = TrnNr,
+        props   = Props,
+        keys    = Keys,
+        timers  = Timers
+    },
+
+    case Status of
+        suspended ->
+            lager:notice("FSM started in suspended mode, inst_id=~p.", [InstId]),
+            {noreply, Status, StateData};
+        running ->
+            % TODO: Load them properly
+            {ok, CleanedKeys} = cleanup_keys(Keys, SName),
+            {ok, CleanedTimers} = cleanup_timers(Timers, SName),
+
+            %% TODO: Call init/2
+
+            {ok, SetupedTimers} = setup_timers(CleanedTimers),
+            NewStateData = StateDataAfterInit#state{
+                trn_nr = TrnNr,
+                sname = SName,
+                sdata = SData,
+                props = Props,
+                keys = CleanedKeys,
+                timers = SetupedTimers
+            },
+            lager:notice("FSM started, inst_id=~p.", [InstId]),
+            {noreply, Status, NewStateData}
     end.
 
 

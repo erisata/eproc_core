@@ -46,7 +46,7 @@
         StoreArgs   :: term(),
         InstId      :: inst_id()
     ) ->
-        {ok, #instance{}, #transition{}} |
+        {ok, #instance{}} |
         {error, not_found}.
 
 
@@ -87,6 +87,9 @@ add_instance(StoreRef, Instance) ->
 
 %%
 %%  Loads an instance and its current state.
+%%  This function returns an instance with single (or zero) transitions.
+%%  The transition, if returned, stands for the current state of the FSM.
+%%  The transition is also filled with the active props, keys and timers.
 %%
 load_instance(StoreRef, InstId) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(StoreRef),
