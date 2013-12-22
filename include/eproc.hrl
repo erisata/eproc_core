@@ -108,15 +108,28 @@
 %%  An administrator can update the process state and its
 %%  atributes while the FSM is in the suspended mode.
 %%
+%%  The suspension record is only needed on startup, if it has
+%%  `Updated =/= undefined` for the current transition. When starting
+%%  the FSM with such a record present, new transition will be created
+%%  with the `sname` and `sdata` copied from it. This way the suspension
+%%  record will became not active (not referring the last transition).
+%%
+%%  If resume is failing due to updated data or effects, the process
+%%  is marked as suspended again, but no new suspension record is created.
+%%  The failure will be appended to the list of resume failures ('res_faults').
+%%
 -record(inst_suspension, {
+    id          :: integer(),       %% Suspension ID, must not be used for record sorting.
     inst_id     :: inst_id(),       %% FSM instance, that was suspended.
     trn_nr      :: trn_nr(),        %% Transition at which the instance was suspended.
+    suspended   :: timestamp(),     %% When the FSM was suspended.
     reason      :: #user_action{} | {fault, Reason :: term()} | {impl, Reason :: binary()},
-    updated     :: #user_action{},  %% Who, when, wky updated the state
-    upd_sname   :: term(),          %% FSM state name set by an administrator.
-    upd_sdata   :: term(),          %% FSM state data set by an administrator.
-    upd_effects :: [effect()],      %% Effects made in this transition.
-    resumed     :: #user_action{}   %% Who, when, why resumed the FSM.
+    updated     :: #user_action{} | undefined,  %% Who, when, why updated the state.
+    upd_sname   :: term() | undefined,          %% FSM state name set by an administrator.
+    upd_sdata   :: term() | undefined,          %% FSM state data set by an administrator.
+    upd_effects :: [effect()] | undefined,      %% Effects made in this transition.
+    resumed     :: #user_action{} | undefined,  %% Who, when, why resumed the FSM.
+    res_faults  :: [{timestamp(), term()}]      %% A list of faults occured during the resume.
 }).
 
 %%
