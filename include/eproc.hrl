@@ -34,7 +34,21 @@
 -type party()           :: {inst, inst_id()} | {ext, term()}.
 -type scope()           :: list().
 
+%%
+%%  This record is modelled after the LDAP `inetOrgPersor` object class,
+%%  using subset of the attributes and uses LDAP syntaxt to represent them.
+%%
+-record(user, {
+    dn  :: binary(),    %% Distinguashed name in the LDAP format.
+    cn  :: binary(),    %% Common name.
+    uid :: binary()     %% Username.
+}).
 
+-record(user_action, {
+    user    :: #user{},
+    time    :: timestamp(),
+    comment :: binary()
+}).
 
 %%
 %%  See `eproc_fsm.erl` for more details.
@@ -88,6 +102,22 @@
     {key,   KeyValue :: term(), Reason :: (scope | cancel | admin)} |   %% Key removed.
     {timer, TimerName :: term(), After :: integer(), Message :: term(), Scope :: term()} |  %% Timer added.
     {timer, TimerName :: term(), Reason :: (fired | scope | cancel | admin)}.               %% Timer removed.
+
+%%
+%%  Describes a manual state update.
+%%  An administrator can update the process state and its
+%%  atributes while the FSM is in the suspended mode.
+%%
+-record(inst_suspension, {
+    inst_id     :: inst_id(),       %% FSM instance, that was suspended.
+    trn_nr      :: trn_nr(),        %% Transition at which the instance was suspended.
+    reason      :: #user_action{} | {fault, Reason :: term()} | {impl, Reason :: binary()},
+    updated     :: #user_action{},  %% Who, when, wky updated the state
+    upd_sname   :: term(),          %% FSM state name set by an administrator.
+    upd_sdata   :: term(),          %% FSM state data set by an administrator.
+    upd_effects :: [effect()],      %% Effects made in this transition.
+    resumed     :: #user_action{}   %% Who, when, why resumed the FSM.
+}).
 
 %%
 %%  Describes single transition of a particular instance.
