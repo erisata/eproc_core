@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013 Robus, Ltd.
+%| Copyright 2013-2014 Robus, Ltd.
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -137,6 +137,14 @@
 -include("eproc.hrl").
 -define(DEFAULT_TIMEOUT, 10000).
 
+%%
+%%  Unit tests.
+%%
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
+
 
 %-record(inst_key, { % TODO
 %    key,
@@ -167,15 +175,65 @@
 -type state_event() :: term().
 
 %%
-%%  State name
-%%  TODO: Describe its structure.
+%%  State name describes current state of the FSM. The `eproc_fsm` supports
+%%  nested and orthogonal states and state name is sued to describe them.
+%%
+%%  State name is always a list, where first element denotes a state and
+%%  all the rest elements stand for substate. I.e. if we have a state
+%%  `active` its substate `running` with substates `online` and `offline`,
+%%  the state `online` is expresses as `[active, running, online]` and the
+%%  offline state is expressed as `[active, running, offline]`.
+%%
+%%  The root state is `[]`. This state is entered when new FSM is created
+%%  and it is never exited till termination of the FSM. Nevertheless, the
+%%  entry and exit actions are not invoked for the root state.
+%%
+%%  Elements of the state name should be atoms or records (tagged tuples).
+%%  The atom (or the name of the record) stands for the unqualified (local)
+%%  name of the state. While atoms are used to describe nested states, records
+%%  are used to describe orthogonal states. Each field of the record has the
+%%  same structure as the entire state name. I.e. it can have nested and orthogonal
+%%  states. For example, lets assume we have state `completed` with two orthogonal
+%%  regions, where first region have substates `done`, `failed` and `killed`,
+%%  and the second region - `available` and `archived`.
+%%  The state "`done` and `archived`" can be expresses as `[{completed, [done], [archived]}]`.
 %%
 -type state_name() :: list().
 
 %%
-%%  TODO: Describe.
+%%  State scope is used to specify validity of some FSM attributes. Currently the
+%%  scope needs to be specified for timers and keys. I.e. when the FSM exits the
+%%  specified state (scope), the corresponding timers and keys will be terminated.
 %%
--type state_scope() :: state_name().
+%%  The state scope has a structure similar to state name, except that it supports
+%%  wildcarding. Main use case for wildcarding is orthogonal states, but it can
+%%  be used with nested states also.
+%%
+%%  In general, scope is a state, which is not necessary the leaf state in the
+%%  tree of possible states. For nested states, the scope can be seen as a state
+%%  prefix, for which the specified timer or key is valid. I.e. looking at the
+%%  example provided in the description of `state_name`, all of `[]`, `[active]`,
+%%  `[active, running]` and `[active, running, online]` can be scopes and the
+%%  state `[active, running, online]` will be in all of these scopes.
+%%  Similarly, the state `[active, running, offline]` will be in scopes `[]`, `[active]`
+%%  and `[active, running]` but not in `[active, running, online]` (from the scopes listed above).
+%%
+%%  When used with orthogonal states, scopes can be used to specify in one
+%%  of its regions. E.g. if the state 'done' should be specified as a scope,
+%%  the following term can be used: `[{completed, [done], []}]`. I.e. the second
+%%  region can be in any substate.
+%%
+%%  The atom `_` can be used for wildcarding instead of `[]`. It was introduced to
+%%  maintain some similarity with mnesia queries. Additionally, the `_` atom can be
+%%  used to wildcard a state element, that is not at the end of the path.
+%%
+%%  Scope for a state, that has orthogonal regions can be expressed in several ways.
+%%  Wildcards can be specified for all of its regions, e.g. `[{completed, '_', '_'}]`
+%%  or `[{completed, [], []}]`. Additionally, a shortcut notation can be used for
+%%  it: only name can be specified in the scope, if all the regions are going to be ignored.
+%%  I.e. the above mentioned scope can be expressed as `[completed]`.
+%%
+-type state_scope() :: list().
 
 %%
 %%  Internal state of the callback module. The state is considered
@@ -241,6 +299,7 @@
 %%  `StateData`
 %%  :   is the corresponding state data.
 %%
+%%  TODO: Change this, if RuntimeData will be used.
 %%  The function should return state data and state name. They both can be transformed
 %%  in this function. Nevertheless, the transformed state will only be persisted on the
 %%  next transition.
@@ -801,7 +860,8 @@ set_name(Name, Actions) ->
     inst_id     :: inst_id(),       %% Id of the current instance.
     module      :: module(),        %% Implementation of the user FSM.
     sname       :: state_name(),    %% User FSM state name.
-    sdata       :: state_data(),    %% User FSM state data.
+    sdata       :: state_data(),    %% User FSM persistent state data.
+    rdata       :: state_data(),    %% User FSM runtime data.
     trn_nr      :: trn_nr(),        %% Number of the last processed transition.
     props       :: [#inst_prop{}],  %% Currently active properties.
     keys        :: [#inst_key{}],   %% Currently active keys.
@@ -872,7 +932,12 @@ handle_sync_event(_Event, _From, StateName, StateData) ->
 %%  Asynchronous FSM initialization.
 %%
 handle_info({'eproc_fsm$start'}, starting, StateData) ->
-    handle_start(StateData);
+    case load_start(StateData) of
+        {online, NewState} ->
+            {noreply, NewState};
+        offline ->
+            {stop, normal, StateData}
+    end;
 
 %%
 %%  Handles FSM timers.
@@ -948,38 +1013,51 @@ await_for_created(Options, Timeout) ->
     end.
 
 
-handle_start(StateData = #state{inst_id = InstId, store = Store, registry = Registry}) ->
-    % TODO: Split this to: load and start
-    {ok, Instance} = eproc_store:load_instance(Store, InstId),
+%%
+%%  Loads the instance and starts it if needed.
+%%
+load_start(State = #state{inst_id = InstId, store = Store}) ->
+    case eproc_store:load_instance(Store, InstId) of
+        {ok, Instance = #instance{status = running}} ->
+            {ok, NewState} = start_loaded(Instance, State),
+            lager:debug("FSM started, inst_id=~p.", [InstId]),
+            {online, NewState};
+        {ok, #instance{status = Status}} ->
+            lager:notice("FSM going to offline during startup, inst_id=~p, status=~p.", [InstId, Status]),
+            offline
+    end.
+
+
+%%
+%%  Starts already loaded instance.
+%%
+start_loaded(Instance, State) ->
     #instance{
+        id = InstId,
         group = Group,
-        name = InitialName,
         module = Module,
         args = Args,
         status = Status,
         transitions = Transitions
     } = Instance,
+    #state{
+        store = Store,
+        registry = Registry
+    } = State,
+
     undefined = erlang:put('eproc_fsm$id', InstId),
     undefined = erlang:put('eproc_fsm$group', Group),
 
     %%
-    %%  Create / restore a state.
+    %%  Initialize / update / restore persistent state.
     %%
-    case Transitions of
+    {ok, LastTrnNr, LastSName, LastSData, Attrs} = case Transitions of
         [] ->
-            TrnNr = 0,
-            case Module:init(Args) of
-                {ok, SData} ->
-                    SName = [],
-                    Effects = [];
-                {ok, SData, Effects} ->
-                    SName = [];
-                {ok, SName, SData, Effects} ->
-                    ok
-            end,
-            StateDataAfterInit = StateData; % TODO
-        [#transition{number = TrnNr, sname = SName, sdata = SData}] ->
-            StateDataAfterInit = StateData % TODO
+            persistent_init(Instance);
+        [Transition = #transition{update = undefined}] ->
+            reload_state(Instance, Transition);
+        [Transition = #transition{update = Update}] ->
+            update_state(Instance, Transition, Update)
     end,
 
     %% TODO: Restart on suspend.
@@ -991,45 +1069,76 @@ handle_start(StateData = #state{inst_id = InstId, store = Store, registry = Regi
     ok = eproc_registry:register_keys(Registry, InstId, Keys),
     ok = eproc_registry:register_name(Registry, InstId, Name),
 
-    NewStateData = StateDataAfterInit#state{
+    %%
+    %%  Initialize the runtime state.
+    %%
+    {ok, RuntimeData} = runtime_init(LastSName, LastSName, Module),
+
+    % TODO: Load them properly
+    {ok, CleanedKeys} = cleanup_keys(Keys, LastSName),
+    {ok, CleanedTimers} = cleanup_timers(Timers, LastSName),
+
+    {ok, SetupedTimers} = setup_timers(CleanedTimers),
+
+    NewStateData = State#state{
         module  = Module,
-        sname   = SName,
-        sdata   = SData,
-        trn_nr  = TrnNr,
+        sname   = LastSName,
+        sdata   = LastSData,
+        rdata   = RuntimeData,
+        trn_nr  = LastTrnNr,
         props   = Props,
         keys    = Keys,
         timers  = Timers
     },
+    {ok, NewStateData}.
 
-    case Status of
-        suspended ->
-            lager:notice("FSM started in suspended mode, inst_id=~p.", [InstId]),
-            {noreply, Status, StateData};
-        running ->
-            % TODO: Load them properly
-            {ok, CleanedKeys} = cleanup_keys(Keys, SName),
-            {ok, CleanedTimers} = cleanup_timers(Timers, SName),
 
-            %% TODO: Call init/2
+%%
+%%  Initialize the persistent state of the FSM.
+%%
+persistent_init(#instance{module = Module, args = Args}) ->
+    case Module:init(Args) of
+        {ok, SData} ->
+            SName = [],
+            Effects = [];
+        {ok, SData, Effects} ->
+            SName = [];
+        {ok, SName, SData, Effects} ->
+            ok
+    end,
+    {ok, 0, SName, SData}.
 
-            {ok, SetupedTimers} = setup_timers(CleanedTimers),
-            NewStateData = StateDataAfterInit#state{
-                trn_nr = TrnNr,
-                sname = SName,
-                sdata = SData,
-                props = Props,
-                keys = CleanedKeys,
-                timers = SetupedTimers
-            },
-            lager:notice("FSM started, inst_id=~p.", [InstId]),
-            {noreply, Status, NewStateData}
+
+%%
+%%  Initialize the runtime state of the FSM.
+%%
+runtime_init(SName, SData, Module) ->
+    case Module:init(SName, SData) of
+        {ok, RuntimeData} ->
+            {ok, RuntimeData}
     end.
 
 
 %%
+%%  Prepare a state after normal restart.
+%%
+reload_state(_Instance, Transition) ->
+    %% Just use it as it is.
+    {ok, Transition}. % TODO {ok, LastTrnNr, LastSName, LastSData, Attrs}
+
+
+%%
+%%  Prepare a state after resume wuth state updated externally.
+%%
+update_state(Instance, Transition, Update) ->
+    % TODO
+    {ok, Transition}. % TODO {ok, LastTrnNr, LastSName, LastSData, Attrs}
+
+
 %%
 %%
-handle_actions(_Actions, StateData) ->
+%%
+handle_effects(_Actions, StateData) ->
     % TODO: Implement.
     {ok, StateData}.
 
@@ -1059,4 +1168,62 @@ setup_timers(Timers) ->
 
 
 
+%%
+%%  Checks, if a state is in specified scope.
+%%
+state_in_scope(State, Scope) when State =:= Scope; Scope =:= []; Scope =:= '_' ->
+    true;
 
+state_in_scope([BaseState | SubStates], [BaseScope | SubScopes]) when BaseState =:= BaseScope; BaseScope =:= '_' ->
+    state_in_scope(SubStates, SubScopes);
+
+state_in_scope([BaseState | SubStates], [BaseScope | SubScopes]) when element(1, BaseState) =:= BaseScope ->
+    state_in_scope(SubStates, SubScopes);
+
+state_in_scope([BaseState | SubStates], [BaseScope | SubScopes]) when is_tuple(BaseState), is_tuple(BaseScope) ->
+    [StateName | StateRegions] = tuple_to_list(BaseState),
+    [ScopeName | ScopeRegions] = tuple_to_list(BaseScope),
+    RegionCheck = fun
+        ({St, Sc}, false) -> false;
+        ({St, Sc}, true)  -> state_in_scope(St, Sc)
+    end,
+    NamesEqual = StateName =:= ScopeName,
+    SizesEqual = tuple_size(BaseState) =:= tuple_size(BaseScope),
+    case NamesEqual and SizesEqual of
+        true -> lists:foldl(RegionCheck, true, lists:zip(StateRegions, ScopeRegions));
+        false -> false
+    end;
+
+state_in_scope(_State, _Scope) ->
+    false.
+
+
+
+%% =============================================================================
+%%  Unit tests for internal functions.
+%% =============================================================================
+
+-ifdef(TEST).
+
+state_in_scope_test_() ->
+    [
+        ?_assert(true =:= state_in_scope([], [])),
+        ?_assert(true =:= state_in_scope([a], [])),
+        ?_assert(true =:= state_in_scope([a], [a])),
+        ?_assert(true =:= state_in_scope([a, b], [a])),
+        ?_assert(true =:= state_in_scope([a, b], [a, b])),
+        ?_assert(true =:= state_in_scope([a, b], ['_', b])),
+        ?_assert(true =:= state_in_scope([{a, [b], [c]}], [a])),
+        ?_assert(true =:= state_in_scope([{a, [b], [c]}], [{a, [], []}])),
+        ?_assert(true =:= state_in_scope([{a, [b], [c]}], [{a, '_', '_'}])),
+        ?_assert(true =:= state_in_scope([{a, [b], [c]}], [{a, [b], '_'}])),
+        ?_assert(false =:= state_in_scope([], [a])),
+        ?_assert(false =:= state_in_scope([a], [b])),
+        ?_assert(false =:= state_in_scope([{a, [b], [c]}], [b])),
+        ?_assert(false =:= state_in_scope([{a, [b], [c]}], [{b}])),
+        ?_assert(false =:= state_in_scope([{a, [b], [c]}], [{b, []}])),
+        ?_assert(false =:= state_in_scope([{a, [b], [c]}], [{b, [], []}])),
+        ?_assert(false =:= state_in_scope([{a, [b], [c]}], [{a, [c], []}]))
+    ].
+
+-endif.

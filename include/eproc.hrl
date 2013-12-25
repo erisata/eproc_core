@@ -128,8 +128,11 @@
     upd_sname   :: term() | undefined,          %% FSM state name set by an administrator.
     upd_sdata   :: term() | undefined,          %% FSM state data set by an administrator.
     upd_effects :: [effect()] | undefined,      %% Effects made in this transition.
-    resumed     :: #user_action{} | undefined,  %% Who, when, why resumed the FSM.
-    res_faults  :: [{timestamp(), term()}]      %% A list of faults occured during the resume.
+    resumed     :: [{                           %% Multiple attempts to resume prcess can exist.
+        #user_action{},                         %% Who, when, why resumed the FSM.
+        FailTime :: timestamp() | undefined,    %% Failure timestamp, if any.
+        FailReason :: term()                    %% Failure description.
+    }]
 }).
 
 %%
@@ -145,7 +148,8 @@
     duration    :: duration(),  %% Duration of the transition (in microseconds).
     trigger     :: trigger(),   %% Event, initiated the transition.
     effects     :: [effect()],                  %% Effects made in this transition.
-    active      :: [inst_attr()] | undefined    %% Active props, keys and timers at the target state, Calculated field.
+    active      :: [inst_attr()] | undefined,   %% Active props, keys and timers at the target state, Calculated field.
+    update      :: #inst_suspension{} | undefined   %% Filled, if the instance was suspended and its state updated.
 }).
 
 %%
