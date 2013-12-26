@@ -1056,8 +1056,10 @@ start_loaded(Instance, State) ->
             persistent_init(Instance);
         [Transition = #transition{update = undefined}] ->
             reload_state(Instance, Transition);
+            % TODO: code_change : start after offline upgrade will be handled here.
         [Transition = #transition{update = Update}] ->
             update_state(Instance, Transition, Update)
+            % TODO: code_change : to validate user input.
     end,
 
     %% TODO: Restart on suspend.
