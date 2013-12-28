@@ -297,21 +297,23 @@
 %%  :   is the state name loaded from the persistent store or returned
 %%      by the `init/1` callback, if initialization is performed for a new instance.
 %%  `StateData`
-%%  :   is the corresponding state data.
+%%  :   is the corresponding persistent state data.
 %%
-%%  TODO: Change this, if RuntimeData will be used.
-%%  The function should return state data and state name. They both can be transformed
-%%  in this function. Nevertheless, the transformed state will only be persisted on the
-%%  next transition.
+%%  The callback should `{ok, RuntimeData}` to initialize runtime data and `ok` if no
+%%  runtime data is needed. The returned RuntimeData is assigned to a field specified
+%%  with the option `{runtime_data, Index}` during FSM startup. If the option was provided
+%%  and this function returns `ok`, the default value will be left for that field. If
+%%  the option was not provided and this function returns `{ok, RuntimeData}` an error
+%%  will be raised and the FSM will be restarted.
 %%
 -callback init(
         StateName :: state_name(),
         StateData :: state_data()
     ) ->
-        {ok, NextStateName, NewStateData}
+        ok |
+        {ok, RuntimeData}
     when
-        NextStateName :: state_name(),
-        NewStateData  :: state_data().
+        RuntimeData :: state_data().
 
 %%
 %%  This function handles events coming to the FSM. It is also used
