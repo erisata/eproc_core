@@ -299,20 +299,23 @@
 %%  `StateData`
 %%  :   is the corresponding persistent state data.
 %%
-%%  The callback should `{ok, RuntimeData}` to initialize runtime data and `ok` if no
-%%  runtime data is needed. The returned RuntimeData is assigned to a field specified
-%%  with the option `{runtime_data, Index}` during FSM startup. If the option was provided
-%%  and this function returns `ok`, the default value will be left for that field. If
-%%  the option was not provided and this function returns `{ok, RuntimeData}` an error
-%%  will be raised and the FSM will be restarted.
+%%  The callback should `{ok, RuntimeField, RuntimeData}` to initialize runtime data
+%%  and `ok` if runtime data functionality is not used. The returned RuntimeData is assigned
+%%  to a field with index RuntimeField. This functionality assumes StateData to be a tuple.
+%%
+%%  The RuntimeField is also used later for rewriting the runtime data field to the default
+%%  value when writing it to a database. The default value is assumed to be a value, that
+%%  was assigned to the corresponding field before `init/2`. Usually it is specified in the
+%%  record definition or the `init/1` function.
 %%
 -callback init(
         StateName :: state_name(),
         StateData :: state_data()
     ) ->
         ok |
-        {ok, RuntimeData}
+        {ok, RuntimeField, RuntimeData}
     when
+        RuntimeField :: integer(),
         RuntimeData :: state_data().
 
 %%
@@ -862,8 +865,9 @@ set_name(Name, Actions) ->
     inst_id     :: inst_id(),       %% Id of the current instance.
     module      :: module(),        %% Implementation of the user FSM.
     sname       :: state_name(),    %% User FSM state name.
-    sdata       :: state_data(),    %% User FSM persistent state data.
-    rdata       :: state_data(),    %% User FSM runtime data.
+    sdata       :: state_data(),    %% User FSM state data.
+    rt_field    :: integer(),       %% Runtime data field in the sdata.
+    rt_default  :: term(),          %% Default value for the runtime field.
     trn_nr      :: trn_nr(),        %% Number of the last processed transition.
     props       :: [#inst_prop{}],  %% Currently active properties.
     keys        :: [#inst_key{}],   %% Currently active keys.
@@ -1076,7 +1080,7 @@ start_loaded(Instance, State) ->
     %%
     %%  Initialize the runtime state.
     %%
-    {ok, RuntimeData} = runtime_init(LastSName, LastSName, Module),
+    {ok, LastSDataWithRT, RTField, RTDefault} = runtime_init(LastSName, LastSData, Module),
 
     % TODO: Load them properly
     {ok, CleanedKeys} = cleanup_keys(Keys, LastSName),
@@ -1087,8 +1091,9 @@ start_loaded(Instance, State) ->
     NewStateData = State#state{
         module  = Module,
         sname   = LastSName,
-        sdata   = LastSData,
-        rdata   = RuntimeData,
+        sdata   = LastSDataWithRT,
+        rt_field    = RTField,
+        rt_default  = RTDefault,
         trn_nr  = LastTrnNr,
         props   = Props,
         keys    = Keys,
@@ -1118,8 +1123,12 @@ persistent_init(#instance{module = Module, args = Args}) ->
 %%
 runtime_init(SName, SData, Module) ->
     case Module:init(SName, SData) of
-        {ok, RuntimeData} ->
-            {ok, RuntimeData}
+        ok ->
+            {ok, SData, undefined, undefined};
+        {ok, RuntimeField, RuntimeData} ->
+            RuntimeDefault = erlang:element(RuntimeField, SData),
+            SDataWithRT = erlang:setelement(RuntimeField, SData, RuntimeData),
+            {ok, SDataWithRT, RuntimeField, RuntimeDefault}
     end.
 
 
