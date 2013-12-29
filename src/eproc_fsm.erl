@@ -306,7 +306,8 @@
 %%  The RuntimeField is also used later for rewriting the runtime data field to the default
 %%  value when writing it to a database. The default value is assumed to be a value, that
 %%  was assigned to the corresponding field before `init/2`. Usually it is specified in the
-%%  record definition or the `init/1` function.
+%%  record definition or the `init/1` function. The RuntimeField can be changed in the
+%%  `code_change` function.
 %%
 -callback init(
         StateName :: state_name(),
