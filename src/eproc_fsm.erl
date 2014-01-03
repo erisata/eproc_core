@@ -467,7 +467,7 @@
         Opt         :: normal | terminate | {external, ContentType},
         State       :: list() | {state, StateName, StateData}
     ) ->
-        Status :: term
+        Status :: term()
     when
         ContentType :: term(),
         StateName   :: state_name(),

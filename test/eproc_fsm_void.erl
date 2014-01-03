@@ -24,8 +24,8 @@
 -module(eproc_fsm_void).
 -behaviour(eproc_fsm).
 -compile([{parse_transform, lager_transform}]).
--export([start_link/3]).
--export([init/3, handle_state/5, handle_status/4, state_change/2]).
+-export([create/0, start_link/1, poke/1]).
+-export([init/1, init/2, handle_state/3, terminate/3, code_change/4, format_status/2]).
 -include("eproc.hrl").
 
 
@@ -36,10 +36,22 @@
 %%
 %%
 %%
-start_link(Event, Store, Registry) ->
-    InstanceId = erlang:make_ref(),
-    {ok, ProcessId} = eproc_fsm:start_link({via, Registry, InstanceId}, ?MODULE, {}, Event, Store, []),
-    {ok, InstanceId, ProcessId}.
+create() ->
+    eproc_fsm:create(?MODULE, {}, []).
+
+
+%%
+%%
+%%
+start_link(InstId) ->
+    eproc_fsm:start_link(InstId, []).
+
+
+%%
+%%
+%%
+poke(InstId) ->
+    eproc_fsm:send_event(InstId, poke).
 
 
 
@@ -56,30 +68,49 @@ start_link(Event, Store, Registry) ->
 %% =============================================================================
 
 %%
+%%  FSM init.
 %%
+init({}) ->
+    {ok, #state{}}.
+
+
 %%
-init(_Definition, _Event, _InstRef) ->
-    {ok, [ready], #state{}}.
+%%  Runtime init.
+%%
+init(_StateName, _StateData) ->
+    ok.
 
 
 %%
 %%
 %%
-handle_state([ready], entry, initial, StateData, _InstRef) ->
+handle_state([], {event, poke}, StateData) ->
     {final_state, [done], StateData}.
 
 
 %%
 %%
 %%
-handle_status(_StateName, _StateData, _Query, _MediaType) ->
-    {error, undefined}.
+terminate(_Reason, _StateName, _StateData) ->
+    ok.
 
 
 %%
 %%
 %%
-state_change(StateData = #state{}, _InstRef) ->
-    {ok, StateData}.
+code_change(_OldVsn, StateName, StateData, _Extra) ->
+    {ok, StateName, StateData}.
 
+
+%%
+%%
+%%
+format_status(_Opt, State) ->
+    State.
+
+
+
+%% =============================================================================
+%%  Internal functions.
+%% =============================================================================
 

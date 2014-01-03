@@ -113,3 +113,24 @@ are used to define relations between the entities.
 
 
 
+Using standalone `eproc_fsm`
+========================================
+
+Start Erlang with apropriate code path
+
+    erl -pa deps/*/ebin ebin .
+
+Compile the test FSM and prepare the environment:
+
+    c("test/eproc_fsm_void.erl", [{i, "include"}]).
+    application:load(eproc_core).
+    application:set_env(eproc_core, store, {eproc_store_ets, []}).
+    eproc_store_ets:start_link().
+
+Run it:
+
+    {ok, InstId} = eproc_fsm_void:create().
+    {ok, _, PID} = eproc_fsm_void:start_link(InstId).
+    ok = eproc_fsm_void:poke(InstId).
+
+
