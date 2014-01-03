@@ -23,7 +23,7 @@
 -behaviour(gen_server).
 -compile([{parse_transform, lager_transform}]).
 -export([start_link/1]).
--export([add_instance/2]).
+-export([add_instance/2, load_instance/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -include("eproc.hrl").
 
@@ -111,9 +111,26 @@ add_instance(_StoreArgs, Instance = #instance{name = Name, group = Group}) ->
     true = ets:insert('eproc_store_ets$inst', Instance#instance{
         id = InstId,
         name = ResolvedName,
-        group = ResolvedGroup
+        group = ResolvedGroup,
+        transitions = undefined
     }),
     {ok, InstId}.
+
+
+%%
+%%
+%%
+load_instance(_StoreArgs, InstId) ->
+    case ets:lookup('eproc_store_ets$inst', InstId) of
+        [] ->
+            {error, not_found};
+        [Instance] ->
+            Transitions = [],   % TODO
+            LoadedInstance = Instance#instance{
+                transitions = Transitions
+            },
+            {ok, LoadedInstance}
+    end.
 
 
 
