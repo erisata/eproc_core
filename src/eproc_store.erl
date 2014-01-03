@@ -23,7 +23,7 @@
 -module(eproc_store).
 -compile([{parse_transform, lager_transform}]).
 -export([ref/0, ref/2]).
--export([add_instance/2, add_transition/2, load_instance/2]).
+-export([add_instance/2, add_transition/2, load_instance/2, get_instance/3]).
 -export_type([ref/0]).
 -include("eproc.hrl").
 -include("eproc_internal.hrl").
@@ -120,6 +120,14 @@ load_instance(StoreRef, InstId) ->
     StoreMod:load_instance(StoreArgs, InstId).
 
 
+%%
+%%  This function returns an instance with single (or zero) transitions.
+%%  If instance not found or other error returns {error, Reason}.
+%%
+get_instance(StoreRef, InstId, Query) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(StoreRef),
+    StoreMod:get_instance(StoreArgs, InstId, Query).    
+    
 
 %% =============================================================================
 %%  Internal functions.
