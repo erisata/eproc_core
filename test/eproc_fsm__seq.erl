@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013 Robus, Ltd.
+%| Copyright 2013-2014 Robus, Ltd.
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -15,16 +15,16 @@
 %\--------------------------------------------------------------------
 
 %%
-%%  Void process for testing `eproc_fsm`. Terminates immediatelly after
-%%  creation. The states are the following:
+%%  Sequence-generating process for testing `eproc_fsm`. Terminates never.
+%%  The states are the following:
 %%
-%%      initial --- Event ---> [ready] --- on_entry ---> final([done]).
+%%      [] --- next ---> [].
 %%
 
--module(eproc_fsm_void).
+-module(eproc_fsm__seq).
 -behaviour(eproc_fsm).
 -compile([{parse_transform, lager_transform}]).
--export([create/0, start_link/1, poke/1]).
+-export([create/0, start_link/1, next/1]).
 -export([init/1, init/2, handle_state/3, terminate/3, code_change/4, format_status/2]).
 -include("eproc.hrl").
 
@@ -50,8 +50,8 @@ start_link(InstId) ->
 %%
 %%
 %%
-poke(InstId) ->
-    eproc_fsm:send_event(InstId, poke).
+next(InstId) ->
+    eproc_fsm:sync_send_event(InstId, next).
 
 
 
@@ -59,7 +59,9 @@ poke(InstId) ->
 %%  Internal data structures.
 %% =============================================================================
 
--record(state, {}).
+-record(state, {
+    seq :: integer()
+}).
 
 
 
@@ -71,7 +73,7 @@ poke(InstId) ->
 %%  FSM init.
 %%
 init({}) ->
-    {ok, #state{}}.
+    {ok, #state{seq = 0}}.
 
 
 %%
@@ -84,8 +86,8 @@ init(_StateName, _StateData) ->
 %%
 %%
 %%
-handle_state([], {event, poke}, StateData) ->
-    {final_state, [done], StateData}.
+handle_state(_, {sync, _From, next}, StateData = #state{seq = Seq}) ->
+    {reply_same, {ok, Seq}, StateData#state{seq = Seq + 1}}.
 
 
 %%

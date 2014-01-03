@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013 Robus, Ltd.
+%| Copyright 2013-2014 Robus, Ltd.
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@
 %%
 %%
 %%
-void_fsm_test() ->
+fsm_test() ->
     %Event = a,
     %Store = undefined,
     %Registry = undefined,
@@ -31,19 +31,19 @@ void_fsm_test() ->
 %%
 %% test for eproc_fsm:create(Module, Args, Options)
 %% todo: description
-void_fsm_create_test() ->
-    % initialization 
+create_void_test() ->
+    % initialization
     application:load(eproc_core),
     application:set_env(eproc_core, store, {eproc_store_ets, []}),
     application:set_env(eproc_core, registry, {eproc_registry_gproc, []}),
     application:ensure_all_started(eproc_core),
     %
-    % startup 
-    Module = eproc_fsm_void,
-    {ok, InstId} = eproc_fsm:create(Module, {}, []),
+    % startup
+    {ok, VoidIID} = eproc_fsm:create(eproc_fsm__void, {}, []),
+    {ok, SeqIID}  = eproc_fsm:create(eproc_fsm__seq,  {}, []),
     %  todo assert
     %
     ok.
-    
-    
-    
+
+
+
