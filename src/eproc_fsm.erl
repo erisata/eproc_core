@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013-2014 Robus, Ltd.
+%| Copyright 2013-2014 Scalar Systems, Ltd.
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -94,7 +94,7 @@
 %%
 %%
 -module(eproc_fsm).
--behaviour(gen_fsm).
+-behaviour(gen_server).
 -compile([{parse_transform, lager_transform}]).
 
 %%
@@ -102,8 +102,8 @@
 %%
 -export([
     create/3, start_link/2, await/2, id/0, group/0,
-    send_create_event/5, sync_send_create_event/5,
-    send_event/3, send_event/2, sync_send_event/4, sync_send_event/3,
+    send_create_event/4, sync_send_create_event/4,
+    send_event/2, sync_send_event/3, sync_send_event/2,
     kill/2, suspend/2, resume/2, set_state/4
 ]).
 
@@ -117,10 +117,9 @@
 ]).
 
 %%
-%%  Callbacks for `gen_fsm`.
+%%  Callbacks for `gen_server`.
 %%
--export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
--export([running/2, running/3, suspended/2, suspended/3]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 %%
 %%  Type exports.
@@ -161,7 +160,6 @@
 -opaque id()  :: integer().
 -opaque group() :: integer().
 -type prop_elem() :: list() | binary() | integer().
--type event_src() :: undefined | term(). %% TODO: Add an alternative to #inst_ref{} |
 
 -type timer_name() :: term().
 
@@ -263,21 +261,15 @@
 %%  :   is the value passed as the `Args` parameter to the `create/3`,
 %%      `send_create_event/5` or `sync_send_create_event/5` function.
 %%
-%%  The function needs to return `StateData` - internal state of the process
-%%  and optionally effects and initial state name. If `InitStateName` is not
-%%  provided, the the initial state name `[]` is assumed. Effects can be used
-%%  here to set FSM name, keys, properties and timers.  %% TODO: Revise response of this function.
+%%  The function needs to return `StateData` - internal state of the process.
+%%  The created instance will be in state [].
 %%
 -callback init(
         Args :: term()
     ) ->
-        {ok, StateData} |
-        {ok, StateData, Effects} |
-        {ok, InitStateName, StateData, Effects}
+        {ok, StateData}
     when
-        StateData :: state_data(),
-        InitStateName :: state_name(),
-        Effects :: [state_effect()].
+        StateData :: state_data().
 
 %%
 %%  This function is invoked on each (re)start of the FSM. On the first start
@@ -528,21 +520,7 @@
 
 create(Module, Args, Options) ->
     {KnownOpts, UnknownOpts} = proplists:split(Options, [group, name, store]),
-    Instance = #instance{
-        id          = undefined,
-        group       = proplists:get_value(group, KnownOpts, new),
-        name        = proplists:get_value(name, KnownOpts, undefined),
-        module      = Module,
-        args        = Args,
-        opts        = UnknownOpts,
-        status      = running,
-        created     = eproc:now(),
-        terminated  = undefined,
-        archived    = undefined,
-        transitions = undefined
-    },
-    Store = proplists:get_value(store, KnownOpts, undefined),
-    eproc_store:add_instance(Store, Instance).
+    {ok, _InstId} = handle_create(Module, Args, KnownOpts, UnknownOpts).
 
 
 %%
@@ -564,7 +542,7 @@ create(Module, Args, Options) ->
 %%      `create/3` function.
 %%  `Options'
 %%  :   Runtime-level options. The options listed bellow are used by this
-%%      FSM implementation and the rest are passed to the `gen_fsm:start_link/3`.
+%%      FSM implementation and the rest are passed to the `gen_server:start_link/3`.
 %%
 %%  Options supprted by this function:
 %%
@@ -580,7 +558,7 @@ create(Module, Args, Options) ->
 
 start_link(InstId, Options) ->
     {KnownOpts, UnknownOpts} = proplists:split(Options, [restart_delay]),
-    gen_fsm:start_link(?MODULE, {InstId, KnownOpts}, UnknownOpts).
+    gen_server:start_link(?MODULE, {InstId, KnownOpts}, UnknownOpts).
 
 
 %%
@@ -654,7 +632,7 @@ group() ->
 %%      This event is used for invoking state transition callbacks for the transition
 %%      from the `initial` state.
 %%  `From`
-%%  :   is passed to the `send_event/3` function (see its description for more details).
+%%  :   is passed to the `send_event/2` function (see its description for more details).
 %%  `Options`
 %%  :   Options, that can be specified when starting the FSM. They are listed bellow.
 %%
@@ -677,7 +655,6 @@ group() ->
         Module  :: module(),
         Args    :: term(),
         Event   :: state_event(),
-        From    :: event_src(),
         Options :: proplist()
         ) ->
         {ok, inst_id()} |
@@ -685,12 +662,12 @@ group() ->
         {error, timeout} |
         {error, term()}.
 
-send_create_event(Module, Args, Event, From, Options) ->
+send_create_event(Module, Args, Event, Options) ->
     Timeout = resolve_timeout(Options),
-    {ok, InstId} = create_start_link(Module, Args, From, Options, Timeout),
+    {ok, InstId} = create_start_link(Module, Args, Options, Timeout),
     % TODO: The following is the second remote sync in the case of riak.
     %       Await - is probably the third. Move it somehow to the remote part.
-    ok = send_event({inst, InstId}, Event, From),
+    ok = send_event({inst, InstId}, Event),
     ok = await_for_created(Options, Timeout),
     {ok, InstId}.
 
@@ -705,22 +682,21 @@ send_create_event(Module, Args, Event, From, Options) ->
         Module  :: module(),
         Args    :: term(),
         Event   :: state_event(),
-        From    :: event_src(),
         Options :: proplist()
-        ) ->
+    ) ->
         {ok, inst_id(), Reply :: term()} |
         {error, already_created} |
         {error, timeout} |
         {error, term()}.
 
-sync_send_create_event(Module, Args, Event, From, Options) ->
+sync_send_create_event(Module, Args, Event, Options) ->
     Timeout = resolve_timeout(Options),
-    {ok, InstId} = create_start_link(Module, Args, From, Options, Timeout),
+    {ok, InstId} = create_start_link(Module, Args, Options, Timeout),
     % TODO: The following is the second remote sync in the case of riak.
     %       Move it somehow to the remote part.
     {ok, Response} = case proplists:is_defined(timeout, Options) of
-        false -> sync_send_event({inst, InstId}, Event, From);
-        true  -> sync_send_event({inst, InstId}, Event, From, Timeout)
+        false -> sync_send_event({inst, InstId}, Event);
+        true  -> sync_send_event({inst, InstId}, Event, Timeout)
     end,
     {ok, InstId, Response}.
 
@@ -728,54 +704,54 @@ sync_send_create_event(Module, Args, Event, From, Options) ->
 %%
 %%  Sends an event to the FSM asynchronously.
 %%
-send_event(Name, Event, From) ->
-    gen_fsm:send_event(Name, {'eproc_fsm$send_event', Event, From}).
-
-
 send_event(Name, Event) ->
-    send_event(Name, Event, undefined).
+    From = resolve_calling_fsm(),
+    gen_server:cast(Name, {'eproc_fsm$send_event', Event, From}).
 
 
 %%
 %%  Sends an event to the FSM synchronously.
 %%
-sync_send_event(Name, Event, From) ->
-    gen_fsm:sync_send_event(Name, {'eproc_fsm$sync_send_event', Event, From}).
+sync_send_event(Name, Event) ->
+    From = resolve_calling_fsm(),
+    gen_server:call(Name, {'eproc_fsm$sync_send_event', Event, From}).
 
 
 %%
 %%
 %%
-sync_send_event(Name, Event, From, Timeout) ->
-    gen_fsm:sync_send_event(Name, {'eproc_fsm$sync_send_event', Event, From}, Timeout).
+sync_send_event(Name, Event, Timeout) ->
+    From = resolve_calling_fsm(),
+    gen_server:call(Name, {'eproc_fsm$sync_send_event', Event, From}, Timeout).
 
 
 %%
 %%
 %%
 kill(Name, Reason) ->
-    gen_fsm:send_event(Name, {'eproc_fsm$kill', Reason}).
+    gen_server:cast(Name, {'eproc_fsm$kill', Reason}).
 
 
 %%
 %%
 %%
 suspend(Name, Reason) ->
-    gen_fsm:sync_send_event(Name, {'eproc_fsm$suspend', Reason}).
+    gen_server:call(Name, {'eproc_fsm$suspend', Reason}).
 
 
 %%
 %%
 %%
 resume(Name, Reason) ->
-    gen_fsm:sync_send_event(Name, {'eproc_fsm$resume', Reason}).
+    gen_server:call(Name, {'eproc_fsm$resume', Reason}).
 
 
 %%
 %%
 %%
 set_state(Name, NewStateName, NewStateData, Reason) ->
-    gen_fsm:sync_send_event(Name, {'eproc_fsm$set_state', NewStateName, NewStateData, Reason}).
+    % TODO: Make it offline.
+    gen_server:call(Name, {'eproc_fsm$set_state', NewStateName, NewStateData, Reason}).
 
 
 %%
@@ -800,7 +776,7 @@ set_state(Name, NewStateName, NewStateData, Reason) ->
         {error, Reason :: term()}.
 
 reply(To, Reply) ->
-    gen_fsm:reply(To, Reply).
+    gen_server:reply(To, Reply).
 
 
 %%
@@ -897,73 +873,53 @@ init({InstId, _Options}) ->
     },
     ok = eproc_registry:register_inst(Registry, InstId),
     self() ! {'eproc_fsm$start'},
-    {ok, starting, State}.
+    {ok, State}.
 
 
 %%
-%%  Handles the `running` state.
+%%  TODO:
 %%
-running(_Event, State) ->
+handle_call(_Event, _From, State) ->
+    {reply, not_implemented, State}.
+
+
+%%
+%%  TODO:
+%%
+handle_cast(_Event, State) ->
     {noreply, State}.
-
-running(_Event, _From, State) ->
-    {reply, ok, State}.
-
-
-%%
-%%  Handles the `suspended` state.
-%%
-suspended(_Event, State) ->
-    {noreply, State}.
-
-suspended(_Event, _From, State) ->
-    {reply, ok, State}.
-
-
-%%
-%%  Not used.
-%%
-handle_event(_Event, StateName, StateData) ->
-    {noreply, StateName, StateData}.
-
-
-%%
-%%  Not used.
-%%
-handle_sync_event(_Event, _From, StateName, StateData) ->
-    {reply, not_implemented, StateName, StateData}.
 
 
 %%
 %%  Asynchronous FSM initialization.
 %%
-handle_info({'eproc_fsm$start'}, starting, StateData) ->
-    case load_start(StateData) of
+handle_info({'eproc_fsm$start'}, State) ->
+    case handle_start(State) of
         {online, NewState} ->
             {noreply, NewState};
         offline ->
-            {stop, normal, StateData}
+            {stop, normal, State}
     end;
 
 %%
 %%  Handles FSM timers.
 %%
-handle_info({'eproc_fsm$timer', _TimerRef, _Event}, StateName, StateData) ->
-    {noreply, StateName, StateData}.
+handle_info({'eproc_fsm$timer', _TimerRef, _Event}, State) ->
+    {noreply, State}.
 
 
 %%
 %%  Invoked, when the FSM terminates.
 %%
-terminate(_Reason, _StateName, _StateData) ->
+terminate(_Reason, _State) ->
     ok.
 
 
 %%
 %%  Invoked in the case of code upgrade.
 %%
-code_change(_OldVsn, StateName, StateData, _Extra) ->
-    {ok, StateName, StateData}.
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
 
 
 
@@ -974,7 +930,7 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 %%
 %%  Create and start FSM.
 %%
-create_start_link(Module, Args, From, Options, Timeout) ->
+create_start_link(Module, Args, Options, Timeout) ->
     OptsWithGroup = resolve_create_opts(group, Options),
     {ok, InstId} = create(Module, Args, OptsWithGroup),
     ok = eproc_registry:start_instance(undefined, InstId, [{timeout, Timeout}]),
@@ -1007,6 +963,17 @@ resolve_create_opts(group, Options) ->
 
 
 %%
+%%  Returns either instance id or undefined, if the current process
+%%  is not `eproc_fsm` process.
+%%
+resolve_calling_fsm() ->
+    case id() of
+        {ok, InstId}     -> InstId;
+        {error, not_fsm} -> undefined
+    end.
+
+
+%%
 %%  Awaits for the newly created FSM.
 %%
 await_for_created(Options, Timeout) ->
@@ -1020,9 +987,34 @@ await_for_created(Options, Timeout) ->
 
 
 %%
+%%  Creates new instance, initializes its initial state.
+%%
+handle_create(Module, Args, CreateOpts, CustomOpts) ->
+    Group = proplists:get_value(group, CreateOpts, new),
+    Name  = proplists:get_value(name,  CreateOpts, undefined),
+    Store = proplists:get_value(store, CreateOpts, undefined),
+    {ok, InitSData} = call_init_persistent(Module, Args),
+    Instance = #instance{
+        id          = undefined,
+        group       = Group,
+        name        = Name,
+        module      = Module,
+        args        = Args,
+        opts        = CustomOpts,
+        init        = InitSData,
+        status      = running,
+        created     = eproc:now(),
+        terminated  = undefined,
+        archived    = undefined,
+        transitions = undefined
+    },
+    {ok, _InstId} = eproc_store:add_instance(Store, Instance).
+
+
+%%
 %%  Loads the instance and starts it if needed.
 %%
-load_start(State = #state{inst_id = InstId, store = Store}) ->
+handle_start(State = #state{inst_id = InstId, store = Store}) ->
     case eproc_store:load_instance(Store, InstId) of
         {ok, Instance = #instance{status = running}} ->
             {ok, NewState} = start_loaded(Instance, State),
@@ -1042,86 +1034,63 @@ start_loaded(Instance, State) ->
         id = InstId,
         group = Group,
         module = Module,
-        args = Args,
-        status = Status,
         transitions = Transitions
     } = Instance,
-    #state{
-        store = Store,
-        registry = Registry
-    } = State,
 
     undefined = erlang:put('eproc_fsm$id', InstId),
     undefined = erlang:put('eproc_fsm$group', Group),
 
-    %%
-    %%  Initialize / restore / update persistent state.
-    %%
     {ok, LastTrnNr, LastSName, LastSData, Attrs} = case Transitions of
-        [] ->
-            persistent_init(Instance);
-        [Transition = #transition{update = undefined}] ->
-            reload_state(Instance, Transition);
-        [Transition = #transition{update = Update}] ->
-            % TODO: Move this to the resume action.
-            % What were the reasons to implement it on startup?
-            update_state(Instance, Transition, Update, Store)
+        []           -> create_state(Instance);
+        [Transition] -> reload_state(Instance, Transition)
     end,
 
+    {ok, UpgradedSName, UpgradedSData} = upgrade_state(Instance, LastSName, LastSData),
+
     %% TODO: Restart on suspend.
+    %Name    = undefined,   % TODO
+    %Props   = undefined,   % TODO
+    %Keys    = undefined,   % TODO
+    %Timers  = undefined,   % TODO
+    %ok = eproc_registry:register_keys(Registry, InstId, Keys),
+    %ok = eproc_registry:register_name(Registry, InstId, Name),
 
-    Name    = undefined,   % TODO
-    Props   = undefined,   % TODO
-    Keys    = undefined,   % TODO
-    Timers  = undefined,   % TODO
-    ok = eproc_registry:register_keys(Registry, InstId, Keys),
-    ok = eproc_registry:register_name(Registry, InstId, Name),
-
-    %%
-    %%  Initialize the runtime state.
-    %%
-    {ok, LastSDataWithRT, RTField, RTDefault} = runtime_init(LastSName, LastSData, Module),
+    {ok, LastSDataWithRT, RTField, RTDefault} = call_init_runtime(UpgradedSName, UpgradedSData, Module),
 
     % TODO: Load them properly
-    {ok, CleanedKeys} = cleanup_keys(Keys, LastSName),
-    {ok, CleanedTimers} = cleanup_timers(Timers, LastSName),
+    %{ok, CleanedKeys} = cleanup_keys(Keys, UpgradedSName),
+    %{ok, CleanedTimers} = cleanup_timers(Timers, UpgradedSName),
 
-    {ok, SetupedTimers} = setup_timers(CleanedTimers),
+    %{ok, SetupedTimers} = setup_timers(CleanedTimers),
 
-    NewStateData = State#state{
+    NewState = State#state{
         module  = Module,
-        sname   = LastSName,
+        sname   = UpgradedSName,
         sdata   = LastSDataWithRT,
         rt_field    = RTField,
         rt_default  = RTDefault,
-        trn_nr  = LastTrnNr,
-        props   = Props,
-        keys    = Keys,
-        timers  = Timers
+        trn_nr  = LastTrnNr%,
+        %props   = Props,   TODO
+        %keys    = Keys,
+        %timers  = Timers
     },
-    {ok, NewStateData}.
+    {ok, NewState}.
 
 
 %%
 %%  Initialize the persistent state of the FSM.
 %%
-persistent_init(#instance{module = Module, args = Args}) ->
+call_init_persistent(Module, Args) ->
     case Module:init(Args) of
         {ok, SData} ->
-            SName = [],
-            Effects = [];
-        {ok, SData, Effects} ->
-            SName = [];
-        {ok, SName, SData, Effects} ->
-            ok
-    end,
-    {ok, 0, SName, SData, []}.  %% TODO: What to do with effects and attrs?
+            {ok, SData}
+    end.
 
 
 %%
 %%  Initialize the runtime state of the FSM.
 %%
-runtime_init(SName, SData, Module) ->
+call_init_runtime(SName, SData, Module) ->
     case Module:init(SName, SData) of
         ok ->
             {ok, SData, undefined, undefined};
@@ -1130,6 +1099,16 @@ runtime_init(SName, SData, Module) ->
             SDataWithRT = erlang:setelement(RuntimeField, SData, RuntimeData),
             {ok, SDataWithRT, RuntimeField, RuntimeDefault}
     end.
+
+
+%%
+%%  Initialize current state for the first transition.
+%%
+create_state(Instance) ->
+    #instance{
+        init = InitSData
+    } = Instance,
+    {ok, 0, [], InitSData, []}.
 
 
 %%
@@ -1142,8 +1121,7 @@ reload_state(Instance, Transition) ->
         sdata  = LastSData,
         active = Attrs
     } = Transition,
-    {ok, UpgradedSName, UpgradedSData} = upgrade_state(Instance, LastSName, LastSData),
-    {ok, LastTrnNr, UpgradedSName, UpgradedSData, Attrs}.
+    {ok, LastTrnNr, LastSName, LastSData, Attrs}.
 
 
 %%
@@ -1195,9 +1173,9 @@ upgrade_state(#instance{module = Module}, SName, SData) ->
 %%
 %%
 %%
-handle_effects(_Actions, StateData) ->
+handle_effects(_Actions, State) ->
     % TODO: Implement, call code_change.
-    {ok, StateData}.
+    {ok, State}.
 
 
 %%
@@ -1237,12 +1215,12 @@ state_in_scope([BaseState | SubStates], [BaseScope | SubScopes]) when BaseState 
 state_in_scope([BaseState | SubStates], [BaseScope | SubScopes]) when element(1, BaseState) =:= BaseScope ->
     state_in_scope(SubStates, SubScopes);
 
-state_in_scope([BaseState | SubStates], [BaseScope | SubScopes]) when is_tuple(BaseState), is_tuple(BaseScope) ->
+state_in_scope([BaseState | _SubStates], [BaseScope | _SubScopes]) when is_tuple(BaseState), is_tuple(BaseScope) ->
     [StateName | StateRegions] = tuple_to_list(BaseState),
     [ScopeName | ScopeRegions] = tuple_to_list(BaseScope),
     RegionCheck = fun
-        ({St, Sc}, false) -> false;
-        ({St, Sc}, true)  -> state_in_scope(St, Sc)
+        (_, false) -> false;
+        ({St, Sc}, true) -> state_in_scope(St, Sc)
     end,
     NamesEqual = StateName =:= ScopeName,
     SizesEqual = tuple_size(BaseState) =:= tuple_size(BaseScope),

@@ -162,6 +162,7 @@
     module      :: module(),            %% Callback module implementing the FSM.
     args        :: term(),              %% Arguments, passed when creating the FSM.
     opts        :: proplist(),          %% Options, used by the `eproc_fsm` behaviour (limits, etc).
+    init        :: term(),              %% Initial state data, as returned by init/1.
     status      :: inst_status(),       %% Current status if the FSM instance.
     created     :: datetime(),              %% Time, when the instance was created.
     terminated  :: datetime() | undefined,  %% Time, when the instance was terminated.
