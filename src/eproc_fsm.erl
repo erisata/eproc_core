@@ -42,7 +42,7 @@
 %%  How `eproc_fsm` callbacks are invoked in different scenarios
 %%  ------------------------------------------------------------
 %%
-%%  New FSM created
+%%  New FSM created, started and an initial event received
 %%  :
 %%        * `init(Args)`
 %%        * `init(InitStateName, StateData)`
@@ -53,7 +53,7 @@
 %%  :
 %%        * `terminate(Reason, StateName, StateData)`
 %%
-%%  FSM is restarted
+%%  FSM is restarted or resumed after being suspended
 %%  :
 %%        * `code_change(state, StateName, StateData, undefined)`
 %%        * `init(StateName, StateData)`
@@ -61,10 +61,6 @@
 %%  FSM upgraded in run-time
 %%  :
 %%        * `code_change(OldVsn, StateName, StateData, Extra)`
-%%
-%%  FSM is resumed after being suspended
-%%  :
-%%        * `code_change(state, StateName, StateData, undefined)`
 %%
 %%  Event initiated a transition (`next_state`)
 %%  :
@@ -430,7 +426,7 @@
 %%  when the state can be changed to some new structure. In the case of state changes,
 %%  the callback will be invoked with `state` as a first argument (and `Extra = undefined`).
 %%
-%%  The state changes will be indicated in the following cases:
+%%  The state changes will be indicated in the following cases: TODO: Review, add RuntimeField.
 %%
 %%    * On process startup (when a persistent FSM becomes online).
 %%    * On FSM resume (after being suspended).
@@ -444,12 +440,14 @@
         StateData   :: state_data(),
         Extra       :: {advanced, Extra} | undefined
     ) ->
-        {ok, NextStateName, NewStateData}
+        {ok, NextStateName, NewStateData} |
+        {ok, NextStateName, NewStateData, RuntimeField}
     when
         Vsn     :: term(),
         Extra   :: term(),
         NextStateName :: state_name(),
-        NewStateData  :: state_data().
+        NewStateData  :: state_data(),
+        RuntimeField  :: integer().
 
 %%
 %%  This function is used to format internal FSM state in some specific way.
@@ -518,6 +516,7 @@
 %%      If not provided, default store is used.
 %%
 %%  TODO: Add various runtime limits here.
+%%  TODO: Add StartMFA.
 %%
 -spec create(
         Module  :: module(),
@@ -1056,17 +1055,17 @@ start_loaded(Instance, State) ->
     undefined = erlang:put('eproc_fsm$group', Group),
 
     %%
-    %%  Initialize / update / restore persistent state.
+    %%  Initialize / restore / update persistent state.
     %%
     {ok, LastTrnNr, LastSName, LastSData, Attrs} = case Transitions of
         [] ->
             persistent_init(Instance);
         [Transition = #transition{update = undefined}] ->
             reload_state(Instance, Transition);
-            % TODO: code_change : start after offline upgrade will be handled here.
         [Transition = #transition{update = Update}] ->
-            update_state(Instance, Transition, Update)
-            % TODO: code_change : to validate user input.
+            % TODO: Move this to the resume action.
+            % What were the reasons to implement it on startup?
+            update_state(Instance, Transition, Update, Store)
     end,
 
     %% TODO: Restart on suspend.
@@ -1116,7 +1115,7 @@ persistent_init(#instance{module = Module, args = Args}) ->
         {ok, SName, SData, Effects} ->
             ok
     end,
-    {ok, 0, SName, SData}.
+    {ok, 0, SName, SData, []}.  %% TODO: What to do with effects and attrs?
 
 
 %%
@@ -1134,26 +1133,70 @@ runtime_init(SName, SData, Module) ->
 
 
 %%
-%%  Prepare a state after normal restart.
+%%  Prepare a state after normal restart or resume with not updated state.
 %%
-reload_state(_Instance, Transition) ->
-    %% Just use it as it is.
-    {ok, Transition}. % TODO {ok, LastTrnNr, LastSName, LastSData, Attrs}
+reload_state(Instance, Transition) ->
+    #transition{
+        number = LastTrnNr,
+        sname  = LastSName,
+        sdata  = LastSData,
+        active = Attrs
+    } = Transition,
+    {ok, UpgradedSName, UpgradedSData} = upgrade_state(Instance, LastSName, LastSData),
+    {ok, LastTrnNr, UpgradedSName, UpgradedSData, Attrs}.
 
 
 %%
 %%  Prepare a state after resume wuth state updated externally.
+%%  TODO: Implement.
 %%
-update_state(Instance, Transition, Update) ->
-    % TODO
-    {ok, Transition}. % TODO {ok, LastTrnNr, LastSName, LastSData, Attrs}
+update_state(Instance, Transition, Update, Store) ->
+    #instance{
+        id = InstId
+    } = Instance,
+    #transition{
+        number = LastTrnNr,
+        active = Attrs
+    } = Transition,
+    #inst_suspension{
+        upd_sname = UpdSName,
+        upd_sdata = UpdSData,
+        upd_effects = UpdEffects
+    } = Update,
+    NewTrnNr = LastTrnNr + 1,
+    NewTransition = #transition{
+        inst_id = InstId,
+        number = NewTrnNr,
+        sname = UpdSName,
+        sdata = UpdSData,
+        timestamp = eproc:now(),
+        duration = 0,
+        trigger = todo, % TODO,
+        effects = todo  % TODO
+    },
+    {ok, NewTrnNr} = eproc_store:add_transition(Store, NewTransition),
+    {ok, UpgradedSName, UpgradedSData} = upgrade_state(Instance, UpdSName, UpdSData),
+    {ok, NewTrnNr, UpgradedSName, UpgradedSData, Attrs}.
+
+
+%%
+%%  Perform state upgrade on code change or state reload from db.
+%%
+upgrade_state(#instance{module = Module}, SName, SData) ->
+    case Module:code_change(state, SName, SData, undefined) of
+        {ok, NextSName, NewSData} ->
+            {ok, NextSName, NewSData};
+        {ok, NextSName, NewSData, _RTField} ->
+            lager:warning("Runtime field is returned from the code_change/4, but it will be overriden in init/2."),
+            {ok, NextSName, NewSData}
+    end.
 
 
 %%
 %%
 %%
 handle_effects(_Actions, StateData) ->
-    % TODO: Implement.
+    % TODO: Implement, call code_change.
     {ok, StateData}.
 
 
