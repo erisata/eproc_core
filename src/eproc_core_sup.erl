@@ -19,7 +19,7 @@
 %%
 -module(eproc_core_sup).
 -behaviour(supervisor).
--export([start_link/0]).
+-export([start_link/2]).
 -export([init/1]).
 
 
@@ -31,8 +31,8 @@
 %%
 %%  Create this supervisor.
 %%
-start_link() ->
-    supervisor:start_link(?MODULE, {}).
+start_link(Store, Registry) ->
+    supervisor:start_link(?MODULE, {Store, Registry}).
 
 
 
@@ -44,8 +44,14 @@ start_link() ->
 %%
 %%  Supervisor initialization.
 %%
-init({}) ->
-    Specs = [],
+init({Store, Registry}) ->
+    {StoMod, StoArgs} = Store,
+    {RegMod, RegArgs} = Registry,
+    Specs = [
+        {store,    {StoMod, start_link, [StoArgs]}, permanent, 10000, worker, [StoMod, eproc_store]},
+        {registry, {RegMod, start_link, [RegArgs]}, permanent, 10000, worker, [RegMod, eproc_registry]}
+        % ADD InstSup and InstMgr here?
+    ],
     {ok, {{one_for_all, 100, 10}, Specs}}.
 
 

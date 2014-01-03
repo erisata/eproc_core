@@ -21,6 +21,7 @@
 -module(eproc_registry_gproc).
 -behaviour(eproc_registry).
 -compile([{parse_transform, lager_transform}]).
+-export([start_link/1]).
 -export([
     start_instance/3, await/3,
     register_inst/2, register_name/3, register_keys/3,
@@ -37,6 +38,8 @@
 %%  Public API.
 %% =============================================================================
 
+start_link(_Args) ->
+    ignore.
 
 
 %% TODO: Load all active instances on startup?

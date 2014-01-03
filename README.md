@@ -125,7 +125,8 @@ Compile the test FSM and prepare the environment:
     c("test/eproc_fsm_void.erl", [{i, "include"}]).
     application:load(eproc_core).
     application:set_env(eproc_core, store, {eproc_store_ets, []}).
-    eproc_store_ets:start_link().
+    application:set_env(eproc_core, registry, {eproc_registry_gproc, []}).
+    application:ensure_all_started(eproc_core).
 
 Run it:
 

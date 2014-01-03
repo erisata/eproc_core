@@ -22,7 +22,7 @@
 -behaviour(eproc_store).
 -behaviour(gen_server).
 -compile([{parse_transform, lager_transform}]).
--export([start_link/0]).
+-export([start_link/1]).
 -export([add_instance/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -include("eproc.hrl").
@@ -35,7 +35,7 @@
 %%
 %%
 %%
-start_link() ->
+start_link(_Args) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, undefined, []).
 
 

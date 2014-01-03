@@ -41,6 +41,18 @@
 %%  Callback definitions.
 %% =============================================================================
 
+
+%%
+%%
+%%
+-callback start_link(
+        RegistryArgs    :: term()
+    ) ->
+        {ok, pid()} |
+        {error, term()} |
+        ignore.
+
+
 %%
 %%
 %%

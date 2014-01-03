@@ -35,6 +35,14 @@
 %%  Callback definitions.
 %% =============================================================================
 
+-callback start_link(
+        StoreArgs   :: term()
+    ) ->
+        {ok, pid()} |
+        {error, term()} |
+        ignore.
+
+
 -callback add_instance(
         StoreArgs   :: term(),
         Instance    :: #instance{}

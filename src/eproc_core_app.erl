@@ -33,6 +33,25 @@
 
 
 %% =============================================================================
+%%  Public API.
+%% =============================================================================
+
+%%
+%%  TODO: Use this function in eproc_store.
+%%
+store() ->
+    {ok, _Store} = application:get_env(?APP, store).
+
+
+%%
+%%  TODO: Use this function in eproc_registry.
+%%
+registry() ->
+    {ok, _Registry} = application:get_env(?APP, registry).
+
+
+
+%% =============================================================================
 %%  Application callbacks
 %% =============================================================================
 
@@ -42,7 +61,9 @@
 %%
 start(_StartType, _StartArgs) ->
     ok = validate_env(application:get_all_env()),
-    eproc_core_sup:start_link().
+    {ok, Store} = store(),
+    {ok, Registry} = registry(),
+    eproc_core_sup:start_link(Store, Registry).
 
 
 %%
@@ -69,7 +90,7 @@ validate_env(Env) ->
 %%  Checks if mandatory key is presented in the application env.
 %%
 validate_env_mandatory(Key, Env, Message) ->
-    case proplists:lookup(store, Env) of
+    case proplists:lookup(Key, Env) of
         none -> {error, Message};
         {Key, _} -> ok
     end.
