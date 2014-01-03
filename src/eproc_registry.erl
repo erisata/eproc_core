@@ -148,7 +148,7 @@ ref(Module, Args) ->
 %%
 %%
 start_instance(Registry, InstId, StartOpts) ->
-    {RegistryMod, RegistryArgs} = resolve_ref(Registry),
+    {ok, {RegistryMod, RegistryArgs}} = resolve_ref(Registry),
     RegistryMod:start_instance(RegistryArgs, InstId, StartOpts).
 
 
@@ -156,7 +156,7 @@ start_instance(Registry, InstId, StartOpts) ->
 %%
 %%
 await(Registry, FsmRef, Timeout) ->
-    {RegistryMod, RegistryArgs} = resolve_ref(Registry),
+    {ok, {RegistryMod, RegistryArgs}} = resolve_ref(Registry),
     RegistryMod:await(RegistryArgs, FsmRef, Timeout).
 
 
@@ -164,7 +164,7 @@ await(Registry, FsmRef, Timeout) ->
 %%
 %%
 register_inst(Registry, InstId) ->
-    {RegistryMod, RegistryArgs} = resolve_ref(Registry),
+    {ok, {RegistryMod, RegistryArgs}} = resolve_ref(Registry),
     RegistryMod:register_inst(RegistryArgs, InstId).
 
 
@@ -175,7 +175,7 @@ register_name(_Registry, _InstId, undefined) ->
     ok;
 
 register_name(Registry, InstId, Name) ->
-    {RegistryMod, RegistryArgs} = resolve_ref(Registry),
+    {ok, {RegistryMod, RegistryArgs}} = resolve_ref(Registry),
     RegistryMod:register_name(RegistryArgs, InstId, Name).
 
 
@@ -186,7 +186,7 @@ register_keys(_Registry, _InstId, []) ->
     ok;
 
 register_keys(Registry, InstId, Keys) when is_list(Keys) ->
-    {RegistryMod, RegistryArgs} = resolve_ref(Registry),
+    {ok, {RegistryMod, RegistryArgs}} = resolve_ref(Registry),
     RegistryMod:register_keys(RegistryArgs, InstId, Keys).
 
 
@@ -194,7 +194,7 @@ register_keys(Registry, InstId, Keys) when is_list(Keys) ->
 %%
 %%
 send_event(Registry, FsmRef, Message) ->
-    {RegistryMod, RegistryArgs} = resolve_ref(Registry),
+    {ok, {RegistryMod, RegistryArgs}} = resolve_ref(Registry),
     RegistryMod:send_event(RegistryArgs, FsmRef, Message).
 
 

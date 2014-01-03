@@ -130,8 +130,8 @@ Compile the test FSM and prepare the environment:
 
 Run it:
 
-    {ok, InstId} = eproc_fsm_void:create().
-    {ok, _, PID} = eproc_fsm_void:start_link(InstId).
-    ok = eproc_fsm_void:poke(InstId).
+    f(IID), {ok, IID} = eproc_fsm_void:create().
+    f(PID), {ok, PID} = eproc_fsm_void:start_link(IID).
+    ok = eproc_fsm_void:poke(IID).
 
 
