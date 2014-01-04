@@ -28,6 +28,7 @@
 -export([init/1, init/2, handle_state/3, terminate/3, code_change/4, format_status/2]).
 -include("eproc.hrl").
 
+-define(REF(FsmRef), {via, gproc, {n, l, FsmRef}}).
 
 %% =============================================================================
 %%  Public API.
@@ -43,15 +44,22 @@ create() ->
 %%
 %%
 %%
-start_link(InstId) ->
-    eproc_fsm:start_link(InstId, []).
+create(Name) ->
+    eproc_fsm:create(?MODULE, {}, [{name, Name}]).
 
 
 %%
 %%
 %%
-done(InstId) ->
-    eproc_fsm:send_event(InstId, done).
+start_link(FsmRef) ->
+    eproc_fsm:start_link(?REF(FsmRef), FsmRef, []).
+
+
+%%
+%%
+%%
+done(FsmRef) ->
+    eproc_fsm:send_event(?REF(FsmRef), done).
 
 
 

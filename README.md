@@ -13,6 +13,35 @@ and core principles.
 Design
 ========================================
 
+Components
+----------------------------------------
+
+The following are the components composing EProc Core. The EProcFSM and Store are mandatory
+components and all the other are optional. Most of the components are generic and supply
+behaviours, that should be implemented by the concrete components. Some basic implementations
+(ETS and Mnesia store, GProc registry) are provided in this module, while more advanced are
+in separate applications (Riak store, registry and router, Yaws and RabbitMQ connector).
+
+EProcFSM
+:   ...
+
+Store
+:   ...
+
+Registry
+:   ...
+
+Manager
+:   contains supervisor.
+
+Router
+:   ...
+
+Connector
+:   ...
+
+
+
 Message routing
 ----------------------------------------
 

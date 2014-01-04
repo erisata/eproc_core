@@ -538,6 +538,11 @@ create(Module, Args, Options) ->
 %%
 %%  Parameters:
 %%
+%%  `FsmName`
+%%  :   Name to register the runtime FSM process with. This argument is similar to
+%%      the FsmName in `gen_fsm`. Altrough this name is not related directly to the
+%%      id and name of an instance (as provided when creating it) therefore FsmName
+%%      can be different from them.
 %%  `FsmRef`
 %%  :   Reference of an previously created FSM. If instance id is going to be used
 %%      as a reference, it can be obtained from the `create/3` function. Name or
@@ -548,13 +553,16 @@ create(Module, Args, Options) ->
 %%
 %%  Options supprted by this function:
 %%
-%%  `{restart_delay, integer()}`    TODO: Implement it.
-%%  :   specified a delay, that is made on each process restart. The default is 1000 ms.
+%%  `{restart_delay, integer()}`        TODO: Implement it.
+%%  :   specifies a delay, that is made on each process restart. The default is 1000 ms.
 %%      The delay is make on each crash, during an abnormal termination of a process.
-%%
-%%
-%%  TODO: Process should be registered to the runtime registry with its name and id automatically???
-%%      Other runtime registrations can be done in the init/2.
+%%  `{register, (id | name | both)}`    TODO: Implement it.
+%%  :   specifies, what to register to the `eproc_registry` on startup.
+%%      The registration is performed asynchronously and the id or name are those
+%%      loaded from the store during startup. These registration options are independent
+%%      from the FsmName parameter. The FSM register nothing if this option is not
+%%      provided. The startup will fail if this option is provided but registry
+%%      is not configured for the `eproc_core` application (app environment).
 %%
 -spec start_link(
         FsmName     :: {local, atom()} | {global, term()} | {via, module(), term()},
@@ -607,7 +615,7 @@ await(FsmRef, Timeout) ->
 
 
 %%
-%%  Returns instance id of the FSM, if invoked from its process.
+%%  Returns instance id, if invoked from an FSM process.
 %%
 -spec id() -> {ok, id()} | {error, not_fsm}.
 
@@ -619,7 +627,7 @@ id() ->
 
 
 %%
-%%  Returns instance group of the FSM, if invoked from its process.
+%%  Returns instance group, if invoked from an FSM process.
 %%
 -spec group() -> {ok, group()} | {error, not_fsm}.
 
@@ -631,7 +639,7 @@ group() ->
 
 
 %%
-%%  Returns instance name of the FSM, if invoked from its process.
+%%  Returns instance name, if invoked from an FSM process.
 %%
 -spec name() -> {ok, name()} | {error, not_fsm}.
 
@@ -977,7 +985,7 @@ resolve_timeout(Options) ->
 %%
 %%
 resolve_start_link_opts(Options) ->
-    {ok, _KnownOpts, _UnknownOpts} = proplists:split(Options, [restart_delay]).
+    {ok, _KnownOpts, _UnknownOpts} = proplists:split(Options, [restart_delay, register]).
 
 
 %%
