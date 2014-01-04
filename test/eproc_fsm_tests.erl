@@ -41,7 +41,14 @@ create_void_test() ->
     % startup
     {ok, {inst, _} = VoidIID} = eproc_fsm:create(eproc_fsm__void, {}, []),
     {ok, {inst, _} = SeqIID}  = eproc_fsm:create(eproc_fsm__seq,  {}, []),
-    %  todo assert
+    %  TODO: Assert the following:
+    %   * Instance created.
+    %   * Instance is in running strate.
+    %   * Instance group assigned properly (new and existing group).
+    %   * Instance name assigned properly (with and without name).
+    %   * init/1 is invoked.
+    %   * Initial state is stored properly.
+    %   * Custom options are stored with the instance.
     %
     ok.
 
