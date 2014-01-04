@@ -39,8 +39,8 @@ create_void_test() ->
     application:ensure_all_started(eproc_core),
     %
     % startup
-    {ok, VoidIID} = eproc_fsm:create(eproc_fsm__void, {}, []),
-    {ok, SeqIID}  = eproc_fsm:create(eproc_fsm__seq,  {}, []),
+    {ok, {inst, _} = VoidIID} = eproc_fsm:create(eproc_fsm__void, {}, []),
+    {ok, {inst, _} = SeqIID}  = eproc_fsm:create(eproc_fsm__seq,  {}, []),
     %  todo assert
     %
     ok.

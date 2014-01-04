@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013-2014 Scalar Systems, Ltd.
+%| Copyright 2013-2014 Scalar Lab, Ltd.
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -101,9 +101,9 @@
 %%  Client-side functions.
 %%
 -export([
-    create/3, start_link/2, await/2, id/0, group/0,
-    send_create_event/4, sync_send_create_event/4,
-    send_event/2, sync_send_event/3, sync_send_event/2,
+    create/3, start_link/3, start_link/2, await/2, id/0, group/0, name/0,
+    send_create_event/4, sync_send_create_event/4, send_event/2,
+    sync_send_event/3, sync_send_event/2,
     kill/2, suspend/2, resume/2, set_state/4
 ]).
 
@@ -515,12 +515,13 @@
         Args    :: term(),
         Options :: proplist()
     ) ->
-        {ok, inst_id()} |
+        {ok, fsm_ref()} |
         {error, already_created}.
 
 create(Module, Args, Options) ->
     {KnownOpts, UnknownOpts} = proplists:split(Options, [group, name, store]),
-    {ok, _InstId} = handle_create(Module, Args, KnownOpts, UnknownOpts).
+    {ok, InstId} = handle_create(Module, Args, KnownOpts, UnknownOpts),
+    {ok, {inst, InstId}}.
 
 
 %%
@@ -537,9 +538,10 @@ create(Module, Args, Options) ->
 %%
 %%  Parameters:
 %%
-%%  `InstId`
-%%  :   InstanceId of the previously created FSM. This Id is returned by the
-%%      `create/3` function.
+%%  `FsmRef`
+%%  :   Reference of an previously created FSM. If instance id is going to be used
+%%      as a reference, it can be obtained from the `create/3` function. Name or
+%%      other types of references can also be used here.
 %%  `Options'
 %%  :   Runtime-level options. The options listed bellow are used by this
 %%      FSM implementation and the rest are passed to the `gen_server:start_link/3`.
@@ -550,15 +552,34 @@ create(Module, Args, Options) ->
 %%  :   specified a delay, that is made on each process restart. The default is 1000 ms.
 %%      The delay is make on each crash, during an abnormal termination of a process.
 %%
+%%
+%%  TODO: Process should be registered to the runtime registry with its name and id automatically???
+%%      Other runtime registrations can be done in the init/2.
+%%
 -spec start_link(
-        InstId      :: inst_id(),
+        FsmName     :: {local, atom()} | {global, term()} | {via, module(), term()},
+        FsmRef      :: fsm_ref(),
         Options     :: proplist()
     ) ->
         {ok, pid()} | ignore | {error, term()}.
 
-start_link(InstId, Options) ->
-    {KnownOpts, UnknownOpts} = proplists:split(Options, [restart_delay]),
-    gen_server:start_link(?MODULE, {InstId, KnownOpts}, UnknownOpts).
+start_link(FsmName, FsmRef, Options) ->
+    {ok, KnownOpts, UnknownOpts} = resolve_start_link_opts(Options),
+    gen_server:start_link(FsmName, ?MODULE, {FsmRef, KnownOpts}, UnknownOpts).
+
+
+%%
+%%  Same as `start_link/3`, just without FsmName parameter.
+%%
+-spec start_link(
+        FsmRef      :: fsm_ref(),
+        Options     :: proplist()
+    ) ->
+        {ok, pid()} | ignore | {error, term()}.
+
+start_link(FsmRef, Options) ->
+    {ok, KnownOpts, UnknownOpts} = resolve_start_link_opts(Options),
+    gen_server:start_link(?MODULE, {FsmRef, KnownOpts}, UnknownOpts).
 
 
 %%
@@ -592,10 +613,8 @@ await(FsmRef, Timeout) ->
 
 id() ->
     case erlang:get('eproc_fsm$id') of
-        undefined ->
-            {error, not_fsm};
-        Id ->
-            {ok, Id}
+        undefined -> {error, not_fsm};
+        Id        -> {ok, Id}
     end.
 
 
@@ -606,10 +625,20 @@ id() ->
 
 group() ->
     case erlang:get('eproc_fsm$group') of
-        undefined ->
-            {error, not_fsm};
-        Group ->
-            {ok, Group}
+        undefined -> {error, not_fsm};
+        Group     -> {ok, Group}
+    end.
+
+
+%%
+%%  Returns instance name of the FSM, if invoked from its process.
+%%
+-spec name() -> {ok, name()} | {error, not_fsm}.
+
+name() ->
+    case erlang:get('eproc_fsm$name') of
+        undefined -> {error, not_fsm};
+        Name      -> {ok, Name}
     end.
 
 
@@ -945,6 +974,13 @@ resolve_timeout(Options) ->
 
 
 %%
+%%
+%%
+resolve_start_link_opts(Options) ->
+    {ok, _KnownOpts, _UnknownOpts} = proplists:split(Options, [restart_delay]).
+
+
+%%
 %%  Resolves FSM create options.
 %%
 %%    * Group is taken from the context of the calling process
@@ -1033,12 +1069,14 @@ start_loaded(Instance, State) ->
     #instance{
         id = InstId,
         group = Group,
+        name = Name,
         module = Module,
         transitions = Transitions
     } = Instance,
 
     undefined = erlang:put('eproc_fsm$id', InstId),
     undefined = erlang:put('eproc_fsm$group', Group),
+    undefined = erlang:put('eproc_fsm$name', Name),
 
     {ok, LastTrnNr, LastSName, LastSData, Attrs} = case Transitions of
         []           -> create_state(Instance);

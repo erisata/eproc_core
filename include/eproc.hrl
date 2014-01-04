@@ -24,7 +24,7 @@
 -type duration()        :: integer().               % in ms.
 
 -type inst_id()         :: eproc_fsm:id().
--type fsm_ref()         :: {inst, inst_id()} | {name, term()} | {key, term()}.
+-type fsm_ref()         :: {inst, inst_id()} | {name, term()}.  % TODO: Key should not be used in runtime registration: {key, term()}.
 -type inst_name()       :: term().
 -type inst_group()      :: eproc_fsm:group().
 -type inst_status()     :: running | suspended | done | failed | killed.
