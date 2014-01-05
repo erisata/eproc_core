@@ -15,7 +15,7 @@
 %\--------------------------------------------------------------------
 
 %%
-%%  OTP Application module for eproc.
+%%  OTP Application module for eproc_core.
 %%
 %%  The following options can/should be provided for the
 %%  `eproc_core` application:
@@ -23,10 +23,11 @@
 %%  `store`
 %%  :   [mandatory] specifies store implementation to be used.
 %%  `registry`
-%%  :   [mandatory] specifies registry implementation to be used.
+%%  :   [optional] specifies registry implementation to be used.
 %%
 -module(eproc_core_app).
 -behaviour(application).
+-export([store_cfg/0, registry_cfg/0]).
 -export([start/2, stop/1]).
 
 -define(APP, eproc_core).
@@ -37,17 +38,23 @@
 %% =============================================================================
 
 %%
-%%  TODO: Use this function in eproc_store.
+%%  Get store, as configured in the eproc_core environment.
+%%  NOTE: The returned term is not store reference.
 %%
-store() ->
+-spec store_cfg() -> {ok, term()}.
+
+store_cfg() ->
     {ok, _Store} = application:get_env(?APP, store).
 
 
 %%
-%%  TODO: Use this function in eproc_registry.
+%%  Get registry, as configured in the eproc_core environment.
+%%  NOTE: The returned term is not registry reference.
 %%
-registry() ->
-    {ok, _Registry} = application:get_env(?APP, registry).
+-spec registry_cfg() -> {ok, term()} | undefined.
+
+registry_cfg() ->
+    application:get_env(?APP, registry).
 
 
 
@@ -61,9 +68,7 @@ registry() ->
 %%
 start(_StartType, _StartArgs) ->
     ok = validate_env(application:get_all_env()),
-    {ok, Store} = store(),
-    {ok, Registry} = registry(),
-    eproc_core_sup:start_link(Store, Registry).
+    eproc_core_sup:start_link().
 
 
 %%
@@ -82,8 +87,7 @@ stop(_State) ->
 %%  Checks if application environment is valid.
 %%
 validate_env(Env) ->
-    ok = validate_env_mandatory(store, Env, "The 'store' parameter is mandatory"),
-    ok = validate_env_mandatory(registry, Env, "The 'registry' parameter is mandatory").
+    ok = validate_env_mandatory(store, Env, "The 'store' parameter is mandatory").
 
 
 %%

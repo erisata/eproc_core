@@ -556,13 +556,20 @@ create(Module, Args, Options) ->
 %%  `{restart_delay, integer()}`        TODO: Implement it.
 %%  :   specifies a delay, that is made on each process restart. The default is 1000 ms.
 %%      The delay is make on each crash, during an abnormal termination of a process.
-%%  `{register, (id | name | both)}`    TODO: Implement it.
+%%  `{register, (id | name | both)}`
 %%  :   specifies, what to register to the `eproc_registry` on startup.
 %%      The registration is performed asynchronously and the id or name are those
 %%      loaded from the store during startup. These registration options are independent
 %%      from the FsmName parameter. The FSM register nothing if this option is not
 %%      provided. The startup will fail if this option is provided but registry
 %%      is not configured for the `eproc_core` application (app environment).
+%%  `{store, StoreRef}`
+%%  :   a store to be used by the instance. If this option not provided, a store specified
+%%      in the `eproc_core` application environment is used.
+%%  `{registry, StoreRef}`
+%%  :   a registry to be used by the instance. If this option not provided, a registry
+%%      specified in the `eproc_core` application environment is used. `eproc_core` can
+%%      cave no registry specified. In that case the registry will not be used.
 %%
 -spec start_link(
         FsmName     :: {local, atom()} | {global, term()} | {via, module(), term()},
@@ -572,8 +579,8 @@ create(Module, Args, Options) ->
         {ok, pid()} | ignore | {error, term()}.
 
 start_link(FsmName, FsmRef, Options) ->
-    {ok, KnownOpts, UnknownOpts} = resolve_start_link_opts(Options),
-    gen_server:start_link(FsmName, ?MODULE, {FsmRef, KnownOpts}, UnknownOpts).
+    {ok, StartOptions, ProcessOptions} = resolve_start_link_opts(Options),
+    gen_server:start_link(FsmName, ?MODULE, {FsmRef, StartOptions}, ProcessOptions).
 
 
 %%
@@ -586,8 +593,8 @@ start_link(FsmName, FsmRef, Options) ->
         {ok, pid()} | ignore | {error, term()}.
 
 start_link(FsmRef, Options) ->
-    {ok, KnownOpts, UnknownOpts} = resolve_start_link_opts(Options),
-    gen_server:start_link(?MODULE, {FsmRef, KnownOpts}, UnknownOpts).
+    {ok, StartOptions, ProcessOptions} = resolve_start_link_opts(Options),
+    gen_server:start_link(?MODULE, {FsmRef, StartOptions}, ProcessOptions).
 
 
 %%
@@ -900,16 +907,12 @@ set_name(Name, Actions) ->
 %%  The initialization is implemented asynchronously to avoid timeouts when
 %%  restarting the engine with a lot of running fsm's.
 %%
-init({InstId, _Options}) ->
-    {ok, Registry} = eproc_registry:ref(),
-    {ok, Store}    = eproc_store:ref(),
+init({FsmRef, StartOptions}) ->
     State = #state{
-        inst_id     = InstId,
-        registry    = Registry,
-        store       = Store
+        store    = resolve_store(StartOptions),
+        registry = resolve_registry(StartOptions)
     },
-    ok = eproc_registry:register_inst(Registry, InstId),
-    self() ! {'eproc_fsm$start'},
+    self() ! {'eproc_fsm$start', FsmRef, StartOptions},
     {ok, State}.
 
 
@@ -930,8 +933,8 @@ handle_cast(_Event, State) ->
 %%
 %%  Asynchronous FSM initialization.
 %%
-handle_info({'eproc_fsm$start'}, State) ->
-    case handle_start(State) of
+handle_info({'eproc_fsm$start', FsmRef, StartOptions}, State) ->
+    case handle_start(FsmRef, StartOptions, State) of
         {online, NewState} ->
             {noreply, NewState};
         offline ->
@@ -985,8 +988,8 @@ resolve_timeout(Options) ->
 %%
 %%
 resolve_start_link_opts(Options) ->
-    {KnownOpts, UnknownOpts} = proplists:split(Options, [restart_delay, register]),
-    {ok, KnownOpts, UnknownOpts}.
+    {StartOptions, ProcessOptions} = proplists:split(Options, [restart_delay, register]),
+    {ok, StartOptions, ProcessOptions}.
 
 
 %%
@@ -996,8 +999,8 @@ resolve_start_link_opts(Options) ->
 %%      if not provided in the options explicitly. If the calling
 %%      process is not FSM, new group will be created.
 %%
-resolve_create_opts(group, Options) ->
-    case proplists:is_defined(group, Options) of
+resolve_create_opts(group, CreateOptions) ->
+    case proplists:is_defined(group, CreateOptions) of
         true -> [];
         false ->
             case group() of
@@ -1015,6 +1018,36 @@ resolve_calling_fsm() ->
     case id() of
         {ok, InstId}     -> InstId;
         {error, not_fsm} -> undefined
+    end.
+
+
+%%
+%%
+%%
+resolve_store(StartOptions) ->
+    case proplists:get_value(store, StartOptions) of
+        undefined ->
+            {ok, Store} = eproc_store:ref(),
+            Store;
+        Store ->
+            Store
+    end.
+
+
+%%
+%%
+%%
+resolve_registry(StartOptions) ->
+    case proplists:get_value(store, StartOptions) of
+        undefined ->
+            case eproc_registry:ref() of
+                {ok, Registry} ->
+                    Registry;
+                undefined ->
+                    undefined
+            end;
+        Registry ->
+            Registry
     end.
 
 
@@ -1059,14 +1092,14 @@ handle_create(Module, Args, CreateOpts, CustomOpts) ->
 %%
 %%  Loads the instance and starts it if needed.
 %%
-handle_start(State = #state{inst_id = InstId, store = Store}) ->
-    case eproc_store:load_instance(Store, InstId) of
+handle_start(FsmRef, StartOptions, State = #state{store = Store}) ->
+    case eproc_store:load_instance(Store, FsmRef) of
         {ok, Instance = #instance{status = running}} ->
-            {ok, NewState} = start_loaded(Instance, State),
-            lager:debug("FSM started, inst_id=~p.", [InstId]),
+            {ok, NewState} = start_loaded(Instance, StartOptions, State),
+            lager:debug("FSM started, ref=~p.", [FsmRef]),
             {online, NewState};
         {ok, #instance{status = Status}} ->
-            lager:notice("FSM going to offline during startup, inst_id=~p, status=~p.", [InstId, Status]),
+            lager:notice("FSM going to offline during startup, ref=~p, status=~p.", [FsmRef, Status]),
             offline
     end.
 
@@ -1074,7 +1107,7 @@ handle_start(State = #state{inst_id = InstId, store = Store}) ->
 %%
 %%  Starts already loaded instance.
 %%
-start_loaded(Instance, State) ->
+start_loaded(Instance, _StartOptions, State) ->
     #instance{
         id = InstId,
         group = Group,
@@ -1082,12 +1115,15 @@ start_loaded(Instance, State) ->
         module = Module,
         transitions = Transitions
     } = Instance,
+    #state{
+        registry = Registry
+    } = State,
 
     undefined = erlang:put('eproc_fsm$id', InstId),
     undefined = erlang:put('eproc_fsm$group', Group),
     undefined = erlang:put('eproc_fsm$name', Name),
 
-    % TODO: Register id and name, according to options.
+    ok = register_online(Instance, Registry),
 
     {ok, LastTrnNr, LastSName, LastSData, Attrs} = case Transitions of
         []           -> create_state(Instance);
@@ -1113,6 +1149,7 @@ start_loaded(Instance, State) ->
     %{ok, SetupedTimers} = setup_timers(CleanedTimers),
 
     NewState = State#state{
+        inst_id = InstId,
         module  = Module,
         sname   = UpgradedSName,
         sdata   = LastSDataWithRT,
@@ -1147,6 +1184,23 @@ call_init_runtime(SName, SData, Module) ->
             RuntimeDefault = erlang:element(RuntimeField, SData),
             SDataWithRT = erlang:setelement(RuntimeField, SData, RuntimeData),
             {ok, SDataWithRT, RuntimeField, RuntimeDefault}
+    end.
+
+
+%%
+%%  Register instance id and name to a registry if needed.
+%%
+register_online(#instance{id = InstId, name = Name, opts = Options}, Registry) ->
+    case proplists:get_value(register, Options) of
+        undefined ->
+            ok;
+        id ->
+            eproc_registry:register_inst(Registry, InstId);
+        name ->
+            eproc_registry:register_name(Registry, InstId, Name);
+        both ->
+            eproc_registry:register_inst(Registry, InstId),
+            eproc_registry:register_name(Registry, InstId, Name)
     end.
 
 
