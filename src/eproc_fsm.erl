@@ -1086,6 +1086,8 @@ start_loaded(Instance, State) ->
     undefined = erlang:put('eproc_fsm$group', Group),
     undefined = erlang:put('eproc_fsm$name', Name),
 
+    % TODO: Register id and name, according to options.
+
     {ok, LastTrnNr, LastSName, LastSData, Attrs} = case Transitions of
         []           -> create_state(Instance);
         [Transition] -> reload_state(Instance, Transition)

@@ -31,7 +31,7 @@ fsm_test() ->
 %%
 %% test for eproc_fsm:create(Module, Args, Options)
 %% todo: description
-create_void_test() ->
+create_test() ->
     % initialization
     application:load(eproc_core),
     application:set_env(eproc_core, store, {eproc_store_ets, []}),
@@ -52,5 +52,29 @@ create_void_test() ->
     %
     ok.
 
-
+%%
+%%  Check if start_link/2-3 works.
+%%
+start_link_test() ->
+    application:load(eproc_core),
+    application:set_env(eproc_core, store, {eproc_store_ets, []}),
+    application:set_env(eproc_core, registry, {eproc_registry_gproc, []}),
+    application:ensure_all_started(eproc_core),
+    {ok, IID} = eproc_fsm:create(eproc_fsm__void, {}, []),
+    {ok, PID} = eproc_fsm:start_link(IID, []),
+    % TODO: Assert the following
+    %   * Start by IID,
+    %   * Start by Name
+    %   * Start new instance.
+    %       - Check StateData and StateName.
+    %   * Restart existing instance.
+    %       - Check StateData and StateName.
+    %   * Start with FsmName specified.
+    %   * Start with restart_delay option.
+    %   * Start with all cases of register option.
+    %   * Check if callback init/2 is invoked.
+    %   * Check initialization of runtime state in init/2.
+    %   * Check if callback code_change/3 is invoked with `state`.
+    %   * Check if functions id/0, group/0, name/0 work.
+    ok.
 
