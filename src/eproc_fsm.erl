@@ -1107,7 +1107,7 @@ handle_start(FsmRef, StartOptions, State = #state{store = Store}) ->
 %%
 %%  Starts already loaded instance.
 %%
-start_loaded(Instance, _StartOptions, State) ->
+start_loaded(Instance, StartOptions, State) ->
     #instance{
         id = InstId,
         group = Group,
@@ -1123,7 +1123,7 @@ start_loaded(Instance, _StartOptions, State) ->
     undefined = erlang:put('eproc_fsm$group', Group),
     undefined = erlang:put('eproc_fsm$name', Name),
 
-    ok = register_online(Instance, Registry),
+    ok = register_online(Instance, Registry, StartOptions),
 
     {ok, LastTrnNr, LastSName, LastSData, Attrs} = case Transitions of
         []           -> create_state(Instance);
@@ -1190,8 +1190,8 @@ call_init_runtime(SName, SData, Module) ->
 %%
 %%  Register instance id and name to a registry if needed.
 %%
-register_online(#instance{id = InstId, name = Name, opts = Options}, Registry) ->
-    case proplists:get_value(register, Options) of
+register_online(#instance{id = InstId, name = Name}, Registry, StartOptions) ->
+    case proplists:get_value(register, StartOptions) of
         undefined ->
             ok;
         id ->
