@@ -120,7 +120,7 @@ add_instance(_StoreArgs, Instance = #instance{name = Name, group = Group}) ->
 %%
 %%
 %%
-load_instance(_StoreArgs, InstId) ->
+load_instance(_StoreArgs, {inst, InstId}) ->
     case ets:lookup('eproc_store_ets$inst', InstId) of
         [] ->
             {error, not_found};
@@ -130,7 +130,10 @@ load_instance(_StoreArgs, InstId) ->
                 transitions = Transitions
             },
             {ok, LoadedInstance}
-    end.
+    end;
+
+load_instance(_StoreArgs, {name, _Name}) ->
+    {error, not_implemented}.   % TODO
 
 
 

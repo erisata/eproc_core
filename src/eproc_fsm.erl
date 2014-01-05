@@ -985,7 +985,8 @@ resolve_timeout(Options) ->
 %%
 %%
 resolve_start_link_opts(Options) ->
-    {ok, _KnownOpts, _UnknownOpts} = proplists:split(Options, [restart_delay, register]).
+    {KnownOpts, UnknownOpts} = proplists:split(Options, [restart_delay, register]),
+    {ok, KnownOpts, UnknownOpts}.
 
 
 %%
