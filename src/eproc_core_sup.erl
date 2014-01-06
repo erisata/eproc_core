@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013 Robus, Ltd.
+%| Copyright 2013-2014 Robus, Ltd.
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -15,11 +15,11 @@
 %\--------------------------------------------------------------------
 
 %%
-%%
+%%  Main supervisor.
 %%
 -module(eproc_core_sup).
 -behaviour(supervisor).
--export([start_link/2]).
+-export([start_link/0]).
 -export([init/1]).
 
 
@@ -31,8 +31,8 @@
 %%
 %%  Create this supervisor.
 %%
-start_link(Store, Registry) ->
-    supervisor:start_link(?MODULE, {Store, Registry}).
+start_link() ->
+    supervisor:start_link(?MODULE, {}).
 
 
 
@@ -44,14 +44,25 @@ start_link(Store, Registry) ->
 %%
 %%  Supervisor initialization.
 %%
-init({Store, Registry}) ->
-    {StoMod, StoArgs} = Store,
-    {RegMod, RegArgs} = Registry,
-    Specs = [
-        {store,    {StoMod, start_link, [StoArgs]}, permanent, 10000, worker, [StoMod, eproc_store]},
-        {registry, {RegMod, start_link, [RegArgs]}, permanent, 10000, worker, [RegMod, eproc_registry]}
-        % ADD InstSup and InstMgr here?
-    ],
-    {ok, {{one_for_all, 100, 10}, Specs}}.
+init({}) ->
+    {ok, {StoreMod, StoreArgs}} = eproc_core_app:store_cfg(),
+    StoreSpec = {store,
+        {StoreMod, start_link, [StoreArgs]},
+        permanent, 10000, worker, [StoreMod, eproc_store]
+    },
+
+    RegistrySpec = case eproc_core_app:registry_cfg() of
+        {ok, {RegistryMod, RegistryArgs}} ->
+            [{registry,
+                {RegistryMod, start_link, [RegistryArgs]},
+                permanent, 10000, worker, [RegistryMod, eproc_registry]
+            }];
+        undefined ->
+            []
+    end,
+
+    {ok, {{one_for_all, 100, 10},
+        [StoreSpec] ++ RegistrySpec
+    }}.
 
 

@@ -26,7 +26,6 @@
 -export([add_instance/2, add_transition/2, load_instance/2, get_instance/3]).
 -export_type([ref/0]).
 -include("eproc.hrl").
--include("eproc_internal.hrl").
 
 -opaque ref() :: {Callback :: module(), Args :: term()}.
 
@@ -86,7 +85,7 @@
 -spec ref() -> {ok, store_ref()}.
 
 ref() ->
-    {ok, {StoreMod, StoreArgs}} = application:get_env(?APP, store),
+    {ok, {StoreMod, StoreArgs}} = eproc_core_app:store_cfg(),
     ref(StoreMod, StoreArgs).
 
 
@@ -135,8 +134,8 @@ load_instance(StoreRef, InstId) ->
 %%
 get_instance(StoreRef, InstId, Query) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(StoreRef),
-    StoreMod:get_instance(StoreArgs, InstId, Query).    
-    
+    StoreMod:get_instance(StoreArgs, InstId, Query).
+
 
 %% =============================================================================
 %%  Internal functions.

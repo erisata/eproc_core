@@ -14,4 +14,4 @@
 %| limitations under the License.
 %\--------------------------------------------------------------------
 
--define(APP, eproc_core).
+

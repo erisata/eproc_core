@@ -32,7 +32,6 @@
 ]).
 -export_type([ref/0]).
 -include("eproc.hrl").
--include("eproc_internal.hrl").
 
 -opaque ref() :: {Callback :: module(), Args :: term()}.
 
@@ -127,12 +126,15 @@
 %%
 %%  Returns the default registry reference.
 %%
--spec ref() -> {ok, registry_ref()}.
+-spec ref() -> {ok, registry_ref()} | undefined.
 
 ref() ->
-    {ok, {RegistryMod, RegistryArgs}} = application:get_env(?APP, registry),
-    ref(RegistryMod, RegistryArgs).
-
+    case eproc_core_app:registry_cfg() of
+        {ok, {RegistryMod, RegistryArgs}} ->
+            ref(RegistryMod, RegistryArgs);
+        undefined ->
+            undefined
+    end.
 
 
 %%
