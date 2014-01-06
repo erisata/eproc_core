@@ -65,6 +65,15 @@
         {error, not_found}.
 
 
+-callback get_instance(
+        StoreArgs   :: term(),
+        InstId      :: inst_id(),
+        Query       :: term()
+    ) ->
+        {ok, #instance{}} |
+        {error, Reason :: term() }.
+
+
 
 %% =============================================================================
 %%  Public API.

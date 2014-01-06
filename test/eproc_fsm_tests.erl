@@ -15,7 +15,9 @@
 %\--------------------------------------------------------------------
 -module(eproc_fsm_tests).
 -compile([{parse_transform, lager_transform}]).
+-define(DEBUG, true).
 -include_lib("eunit/include/eunit.hrl").
+-include("eproc.hrl").
 
 %%
 %%
@@ -32,18 +34,26 @@ fsm_test() ->
 %% test for eproc_fsm:create(Module, Args, Options)
 %% todo: description
 create_test() ->
+    ?debugFmt("~n [debug] create_test START. ~n", []),
     % initialization
     application:load(eproc_core),
     application:set_env(eproc_core, store, {eproc_store_ets, []}),
     application:set_env(eproc_core, registry, {eproc_registry_gproc, []}),
     application:ensure_all_started(eproc_core),
+    StoreRef = {eproc_store_ets, []},
     %
-    % startup
+    % create test proceses
     {ok, {inst, _} = VoidIID} = eproc_fsm:create(eproc_fsm__void, {}, []),
     {ok, {inst, _} = SeqIID}  = eproc_fsm:create(eproc_fsm__seq,  {}, []),
-    %  TODO: Assert the following:
+    %  
+    % asserts
     %   * Instance created.
-    %   * Instance is in running strate.
+    {ok, Instance} = eproc_store:get_instance(StoreRef, VoidIID, []),
+    ?debugFmt("~n [debug] Instance: ~p ~n", [Instance]),
+    %   * Instance is in running state.
+    running = Instance#instance.status,
+    %
+    % TODO
     %   * Instance group assigned properly (new and existing group).
     %   * Instance name assigned properly (with and without name).
     %   * init/1 is invoked.

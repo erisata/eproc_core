@@ -23,7 +23,7 @@
 -behaviour(gen_server).
 -compile([{parse_transform, lager_transform}]).
 -export([start_link/1]).
--export([add_instance/2, load_instance/2]).
+-export([add_instance/2, load_instance/2, get_instance/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -include("eproc.hrl").
 
@@ -136,6 +136,26 @@ load_instance(_StoreArgs, {name, _Name}) ->
     {error, not_implemented}.   % TODO
 
 
+%%
+%%
+%%
+get_instance(_StoreArgs, {inst, InstId}, _Query) ->
+    case ets:lookup('eproc_store_ets$inst', InstId) of
+        [] ->
+            {error, not_found};
+        [Instance] ->
+            % TODO: how about transitions ?
+            % Transitions = [],   
+            % LoadedInstance = Instance#instance{
+                % transitions = Transitions
+            % },
+            {ok, Instance}
+    end;
+
+get_instance(_StoreArgs, {name, _Name}, _Query) ->
+    {error, not_implemented}.   % TODO
+    
+    
 
 %% =============================================================================
 %%  Internal functions.
