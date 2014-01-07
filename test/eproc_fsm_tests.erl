@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013-2014 Robus, Ltd.
+%| Copyright 2013-2014 Erisata, Ltd.
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -45,7 +45,7 @@ create_test() ->
     % create test proceses
     {ok, {inst, _} = VoidIID} = eproc_fsm:create(eproc_fsm__void, {}, []),
     {ok, {inst, _} = SeqIID}  = eproc_fsm:create(eproc_fsm__seq,  {}, []),
-    %  
+    %
     % asserts
     %   * Instance created.
     {ok, Instance} = eproc_store:get_instance(StoreRef, VoidIID, []),

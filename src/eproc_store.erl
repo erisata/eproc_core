@@ -70,7 +70,7 @@
         Query       :: term()
     ) ->
         {ok, #instance{}} |
-        {error, Reason :: term() }.
+        {error, Reason :: term()}.
 
 
 

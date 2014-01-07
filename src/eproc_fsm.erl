@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013-2014 Scalar Lab, Ltd.
+%| Copyright 2013-2014 Erisata, Ltd.
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -900,7 +900,7 @@ set_name(Name, Actions) ->
 
 
 %% =============================================================================
-%%  Callbacks for `gen_fsm`.
+%%  Callbacks for `gen_server`.
 %% =============================================================================
 
 %%
