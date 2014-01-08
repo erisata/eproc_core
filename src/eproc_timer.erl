@@ -15,7 +15,104 @@
 %\--------------------------------------------------------------------
 
 %%
-%%  TODO: Description.
+%%  This module can be used in callback modules for the `eproc_fsm`
+%%  to manage timers associated with the FSM.
 %%
 -module(eproc_timer).
+-behaviour(eproc_attribute).
+-export([set/4, set/3, set/2, cancel/1]).
+-export([started/1, created/3, updated/2, removed/1, store/3]).
+
+
+-record(timer, {
+    delay,
+    event
+}).
+
+%% =============================================================================
+%%  Public API.
+%% =============================================================================
+
+%%
+%%
+%%
+set(Name, After, Event, Scope) ->
+    %% TODO: Register sent message.
+    eproc_attribute:action(?MODULE, Name, {timer, After, Event}, Scope).
+
+
+%%
+%%
+%%
+set(After, Event, Scope) ->
+    %% TODO: Register sent message.
+    eproc_attribute:action(?MODULE, undefined, {timer, After, Event}, Scope).
+
+
+%%
+%%
+%%
+set(After, Event) ->
+    %% TODO: Register sent message.
+    eproc_attribute:action(?MODULE, undefined, {timer, After, Event}, next).
+
+
+%%
+%%
+%%
+cancel(Name) ->
+    eproc_attribute:set(?MODULE, Name, {timer, remove}).
+
+
+
+%% =============================================================================
+%%  Callbacks for `eproc_attribute`.
+%% =============================================================================
+
+%%
+%%  FSM started.
+%%
+started(ActiveAttrs) ->
+    {error, undefined}.
+
+
+%%
+%%  Attribute created.
+%%
+created(Name, {timer, After, Event}, _Scope) ->
+    {error, undefined}; % TODO
+
+created(Name, {timer, remove}, _Scope) ->
+    {error, {unknown_timer, Name}}.
+
+
+%%
+%%  Attribute updated by user.
+%%
+updated(Attribute, {timer, After, Event}) ->
+    {error, undefined};
+
+updated(Attribute, {timer, remove}) ->
+    {error, undefined}.
+
+
+%%
+%%  Attribute removed by `eproc_fsm`.
+%%
+removed(Attribute) ->
+    {error, undefined}.
+
+
+%%
+%%  Store attribute information in the store.
+%%  This callback is invoked in the context of `eproc_store`.
+%%
+store(Store, Attribute, Args) ->
+    ok. % TODO
+
+
+
+%% =============================================================================
+%%  Internal functions.
+%% =============================================================================
 

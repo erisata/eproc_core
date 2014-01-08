@@ -17,5 +17,130 @@
 %%
 %%  TODO: Description.
 %%
+%%  API for the eproc_fsm.
+%%  API for an attribute manager (for attaching attrs to FSM).
+%%  SPI for the attribute manager (for handling attached attrs).
+%%
+%%  Differentiate between:
+%%    * Attributes.
+%%    * Attribute actions.
+%%
+%%  TODO: Define this while implementing `eproc_timer` module!!!
+%%
 -module(eproc_attribute).
+-export([action/4, action/3]).
+-export([started/1, created/0, updated/0, removed/0]).
+-include("eproc.hrl").
 
+
+
+%% =============================================================================
+%%  Callback definitions.
+%% =============================================================================
+
+%%
+%%  FSM started.
+%%
+-callback started(
+        ActiveAttrs :: [#attribute{}]
+    ) ->
+        ok |
+        {error, Reason :: term()}.
+
+%%
+%%  Attribute created.
+%%
+-callback created(
+        Name    :: term(),
+        Action  :: #attr_action{},
+        Scope   :: term()
+    ) ->
+        {ok, Data :: term()} |
+        {error, Reason :: term()}.
+
+%%
+%%  Attribute updated by user.
+%%
+-callback updated(
+        Attribute   :: #attribute{},
+        Action      :: #attr_action{}
+    ) ->
+        {ok, Data :: term()} |
+        {error, Reason :: term()}.
+
+%%
+%%  Attribute removed by `eproc_fsm`.
+%%
+-callback removed(
+        Attribute :: #attribute{}
+    ) ->
+        {ok, Data :: term()} |
+        {error, Reason :: term()}.
+
+%%
+%%  Store attribute information in the store.
+%%  This callback is invoked in the context of `eproc_store`.
+%%
+-callback store(
+        Store       :: store_ref(),
+        Attribute   :: #attribute{},
+        Args        :: term()
+    ) ->
+        ok |
+        {error, Reason :: term()}.
+
+
+
+%% =============================================================================
+%%  Public API.
+%% =============================================================================
+
+
+%%
+%%
+%%
+action(Module, Name, Action, Scope) ->
+    ok. % TODO.
+
+
+%%
+%%
+%%
+action(Module, Name, Action) ->
+    action(Module, Name, Action, undefined).
+
+
+
+%%
+%%  Invoked, when the corresponding FSM is started (become online).
+%%
+started(ActiveAttrs) ->
+    ok.
+
+
+%%
+%%  Invoked, when an attribute is added or updated in the FSM.
+%%  TODO: use created and updated instead? Look at eproc_fsm!!!
+created() ->
+    ok.
+
+
+%%
+%%
+%%
+updated() ->
+    ok.
+
+
+%%
+%%  Invoked, when an attribute is removed. There can be several reasons for this:
+%%    * User asked to remove the attribute.
+%%    * The FSM exited the scope, specified for the attribute.
+%%
+removed() ->
+    ok.
+
+
+%% =============================================================================
+%%  Internal functions.
+%% =============================================================================

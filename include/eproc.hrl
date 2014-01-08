@@ -103,6 +103,33 @@
     {timer, TimerName :: term(), After :: integer(), Message :: term(), Scope :: term()} |  %% Timer added.
     {timer, TimerName :: term(), Reason :: (fired | scope | cancel | admin)}.               %% Timer removed.
 
+
+
+%%
+%%  TODO
+%%
+-record(attribute, {
+    inst_id,
+    module,
+    name,
+    scope,
+    from,       %% Transition at which the attribute was set.
+    upds = [],  %% Transitions at which the attribute was updated.
+    till,
+    reason      %%  Reason for the attribute removal.
+}).
+
+%%
+%%  TODO
+%%
+-record(attr_action, {
+    module,
+    name,
+    action  :: {create, Scope :: term()} | {update} | remove   %% TODO
+}).
+
+
+
 %%
 %%  Describes a manual state update.
 %%  An administrator can update the process state and its
