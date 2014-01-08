@@ -19,6 +19,13 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("eproc.hrl").
 
+
+
+application_setup() ->
+    % See config in "test/sys.config" and its use in Makefile.
+    application:ensure_all_started(eproc_core).
+
+
 %%
 %%
 %%
@@ -36,10 +43,7 @@ fsm_test() ->
 create_test() ->
     ?debugFmt("~n [debug] create_test START. ~n", []),
     % initialization
-    application:load(eproc_core),
-    application:set_env(eproc_core, store, {eproc_store_ets, []}),
-    application:set_env(eproc_core, registry, {eproc_registry_gproc, []}),
-    application:ensure_all_started(eproc_core),
+    application_setup(),
     StoreRef = {eproc_store_ets, []},
     %
     % create test proceses
@@ -66,10 +70,7 @@ create_test() ->
 %%  Check if start_link/2-3 works.
 %%
 start_link_test() ->
-    application:load(eproc_core),
-    application:set_env(eproc_core, store, {eproc_store_ets, []}),
-    application:set_env(eproc_core, registry, {eproc_registry_gproc, []}),
-    application:ensure_all_started(eproc_core),
+    application_setup(),
     {ok, IID} = eproc_fsm:create(eproc_fsm__void, {}, []),
     {ok, PID} = eproc_fsm:start_link(IID, []),
     % TODO: Assert the following
