@@ -70,6 +70,8 @@ removed(_Attribute) ->
 %%
 %%  Store attribute information in the store.
 %%  This callback is invoked in the context of `eproc_store`.
+%%  TODO: Remove this, make this module a behaviour, that should
+%%  be implemented by the store.
 %%
 store(Store, Attribute, Args) ->
     ok. % TODO

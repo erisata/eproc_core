@@ -80,6 +80,8 @@
 %%
 %%  Store attribute information in the store.
 %%  This callback is invoked in the context of `eproc_store`.
+%%  TODO: Remove this, make this module a behaviour, that should
+%%  be implemented by the store.
 %%
 -callback store(
         Store       :: store_ref(),
@@ -100,7 +102,7 @@
 %%
 %%
 action(Module, Name, Action, Scope) ->
-    ok. % TODO.
+    eproc_fsm:register_attr_action(Module, Name, Action, Scope).
 
 
 %%
@@ -115,21 +117,21 @@ action(Module, Name, Action) ->
 %%  Invoked, when the corresponding FSM is started (become online).
 %%
 started(ActiveAttrs) ->
-    ok.
+    ok. % TODO
 
 
 %%
 %%  Invoked, when an attribute is added or updated in the FSM.
-%%  TODO: use created and updated instead? Look at eproc_fsm!!!
+%%
 created() ->
-    ok.
+    ok. % TODO
 
 
 %%
 %%
 %%
 updated() ->
-    ok.
+    ok. % TODO
 
 
 %%
@@ -138,7 +140,7 @@ updated() ->
 %%    * The FSM exited the scope, specified for the attribute.
 %%
 removed() ->
-    ok.
+    ok. % TODO
 
 
 %% =============================================================================

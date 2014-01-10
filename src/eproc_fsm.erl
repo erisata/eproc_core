@@ -116,6 +116,16 @@
     add_prop/3, set_name/2
 ]).
 
+
+%%
+%%  APIs for related eproc modules.
+%%
+-export([
+    register_message/2,
+    register_attr_action/4
+]).
+
+
 %%
 %%  Callbacks for `gen_server`.
 %%
@@ -871,6 +881,22 @@ add_prop(Name, Value, Actions) ->
 %%
 set_name(Name, Actions) ->
     [ {name, Name} | Actions ].
+
+
+%%
+%%  TODO: Implement.
+%%  This function is used by modules sending outgoing messages from the FSM.
+%%
+register_message(Sender, Event) ->
+    ok.
+
+
+%%
+%%  TODO: Implement.
+%%  This function is used by modules managing FSM attributes.
+%%
+register_attr_action(Module, Name, Action, Scope) ->
+    ok.
 
 
 

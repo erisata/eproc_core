@@ -37,24 +37,26 @@
 %%
 %%
 set(Name, After, Event, Scope) ->
-    %% TODO: Register sent message.
-    eproc_attribute:action(?MODULE, Name, {timer, After, Event}, Scope).
+    ok = eproc_fsm:register_message({timer, Name}, Event),
+    ok = eproc_attribute:action(?MODULE, Name, {timer, After, Event}, Scope).
 
 
 %%
 %%
 %%
 set(After, Event, Scope) ->
-    %% TODO: Register sent message.
-    eproc_attribute:action(?MODULE, undefined, {timer, After, Event}, Scope).
+    Name = undefined,
+    ok = eproc_fsm:register_message({timer, Name}, Event),
+    ok = eproc_attribute:action(?MODULE, Name, {timer, After, Event}, Scope).
 
 
 %%
 %%
 %%
 set(After, Event) ->
-    %% TODO: Register sent message.
-    eproc_attribute:action(?MODULE, undefined, {timer, After, Event}, next).
+    Name = undefined,
+    ok = eproc_fsm:register_message({timer, Name}, Event),
+    ok = eproc_attribute:action(?MODULE, Name, {timer, After, Event}, next).
 
 
 %%
@@ -73,7 +75,7 @@ cancel(Name) ->
 %%  FSM started.
 %%
 started(ActiveAttrs) ->
-    {error, undefined}.
+    {error, undefined}. % TODO
 
 
 %%
@@ -90,22 +92,24 @@ created(Name, {timer, remove}, _Scope) ->
 %%  Attribute updated by user.
 %%
 updated(Attribute, {timer, After, Event}) ->
-    {error, undefined};
+    {error, undefined}; % TODO
 
 updated(Attribute, {timer, remove}) ->
-    {error, undefined}.
+    {error, undefined}. % TODO
 
 
 %%
 %%  Attribute removed by `eproc_fsm`.
 %%
 removed(Attribute) ->
-    {error, undefined}.
+    {error, undefined}. % TODO
 
 
 %%
 %%  Store attribute information in the store.
 %%  This callback is invoked in the context of `eproc_store`.
+%%  TODO: Remove this, make this module a behaviour, that should
+%%  be implemented by the store.
 %%
 store(Store, Attribute, Args) ->
     ok. % TODO
