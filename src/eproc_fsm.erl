@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013-2014 Erisata, Ltd.
+%| Copyright 2013-2014 Erisata, UAB (Ltd.)
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -915,12 +915,9 @@ register_attr_action(Module, Name, Action, Scope) ->
     rt_field    :: integer(),       %% Runtime data field in the sdata.
     rt_default  :: term(),          %% Default value for the runtime field.
     trn_nr      :: trn_nr(),        %% Number of the last processed transition.
-    props       :: [#inst_prop{}],  %% Currently active properties.
-    keys        :: [#inst_key{}],   %% Currently active keys.
-    timers      :: [#inst_timer{}], %% Currently active timers.
+    attrs       :: term(),          %% State for the `eproc_fsm_attr` module.
     registry    :: registry_ref(),  %% A registry reference.
-    store       :: store_ref(),     %% A store reference.
-    msg         %% The currently processed message. TODO: Do we need it? For terminate/2?
+    store       :: store_ref()      %% A store reference.
 }).
 
 
@@ -968,10 +965,16 @@ handle_info({'eproc_fsm$start', FsmRef, StartOptions}, State) ->
     end;
 
 %%
-%%  Handles FSM timers.
+%%  Handles FSM attribute events.
 %%
-handle_info({'eproc_fsm$timer', _TimerRef, _Event}, State) ->
-    {noreply, State}.
+handle_info(Event, State = #state{attrs = Attrs}) ->
+    case eproc_fsm_attr:event(Event, Attrs) of
+        {ok, NewAttrs} ->
+            {noreply, State#state{attrs = NewAttrs}};
+        unknown ->
+            lager:warning("Ignoring unknown event ~p", Event),
+            {noreply, State}
+    end.
 
 
 %%
@@ -1151,20 +1154,20 @@ start_loaded(Instance, StartOptions, State) ->
 
     ok = register_online(Instance, Registry, StartOptions),
 
-    {ok, LastTrnNr, LastSName, LastSData, Attrs} = case Transitions of
+    {ok, LastTrnNr, LastSName, LastSData, LastAttrId, ActiveAttrs} = case Transitions of
         []           -> create_state(Instance);
         [Transition] -> reload_state(Instance, Transition)
     end,
 
     {ok, UpgradedSName, UpgradedSData} = upgrade_state(Instance, LastSName, LastSData),
 
+    {ok, AttrState} = eproc_fsm_attr:init(UpgradedSName, LastAttrId, ActiveAttrs),
+
     %% TODO: Restart on suspend.
     %Name    = undefined,   % TODO
     %Props   = undefined,   % TODO
     %Keys    = undefined,   % TODO
     %Timers  = undefined,   % TODO
-    %ok = eproc_registry:register_keys(Registry, InstId, Keys),
-    %ok = eproc_registry:register_name(Registry, InstId, Name),
 
     {ok, LastSDataWithRT, RTField, RTDefault} = call_init_runtime(UpgradedSName, UpgradedSData, Module),
 
@@ -1181,10 +1184,8 @@ start_loaded(Instance, StartOptions, State) ->
         sdata   = LastSDataWithRT,
         rt_field    = RTField,
         rt_default  = RTDefault,
-        trn_nr  = LastTrnNr%,
-        %props   = Props,   TODO
-        %keys    = Keys,
-        %timers  = Timers
+        trn_nr  = LastTrnNr,
+        attrs   = AttrState
     },
     {ok, NewState}.
 
@@ -1237,7 +1238,7 @@ create_state(Instance) ->
     #instance{
         init = InitSData
     } = Instance,
-    {ok, 0, [], InitSData, []}.
+    {ok, 0, [], InitSData, 0, []}.
 
 
 %%
@@ -1248,42 +1249,43 @@ reload_state(Instance, Transition) ->
         number = LastTrnNr,
         sname  = LastSName,
         sdata  = LastSData,
-        active = Attrs
+        attr_id = LastAttrId,
+        attrs_active = AttrsActive
     } = Transition,
-    {ok, LastTrnNr, LastSName, LastSData, Attrs}.
+    {ok, LastTrnNr, LastSName, LastSData, LastAttrId, AttrsActive}.
 
 
 %%
 %%  Prepare a state after resume wuth state updated externally.
 %%  TODO: Implement.
 %%
-update_state(Instance, Transition, Update, Store) ->
-    #instance{
-        id = InstId
-    } = Instance,
-    #transition{
-        number = LastTrnNr,
-        active = Attrs
-    } = Transition,
-    #inst_suspension{
-        upd_sname = UpdSName,
-        upd_sdata = UpdSData,
-        upd_effects = UpdEffects
-    } = Update,
-    NewTrnNr = LastTrnNr + 1,
-    NewTransition = #transition{
-        inst_id = InstId,
-        number = NewTrnNr,
-        sname = UpdSName,
-        sdata = UpdSData,
-        timestamp = eproc:now(),
-        duration = 0,
-        trigger = todo, % TODO,
-        effects = todo  % TODO
-    },
-    {ok, NewTrnNr} = eproc_store:add_transition(Store, NewTransition),
-    {ok, UpgradedSName, UpgradedSData} = upgrade_state(Instance, UpdSName, UpdSData),
-    {ok, NewTrnNr, UpgradedSName, UpgradedSData, Attrs}.
+%update_state(Instance, Transition, Update, Store) ->
+%    #instance{
+%        id = InstId
+%    } = Instance,
+%    #transition{
+%        number = LastTrnNr,
+%        active = Attrs
+%    } = Transition,
+%    #inst_suspension{
+%        upd_sname = UpdSName,
+%        upd_sdata = UpdSData,
+%        upd_effects = UpdEffects
+%    } = Update,
+%    NewTrnNr = LastTrnNr + 1,
+%    NewTransition = #transition{
+%        inst_id = InstId,
+%        number = NewTrnNr,
+%        sname = UpdSName,
+%        sdata = UpdSData,
+%        timestamp = eproc:now(),
+%        duration = 0,
+%        trigger = todo, % TODO,
+%        effects = todo  % TODO
+%    },
+%    {ok, NewTrnNr} = eproc_store:add_transition(Store, NewTransition),
+%    {ok, UpgradedSName, UpgradedSData} = upgrade_state(Instance, UpdSName, UpdSData),
+%    {ok, NewTrnNr, UpgradedSName, UpgradedSData, Attrs}.
 
 
 %%

@@ -13,7 +13,7 @@
 %| See the License for the specific language governing permissions and
 %| limitations under the License.
 %\--------------------------------------------------------------------
--module(eproc_timer_tests).
+-module(eproc_fsm_attr_tests).
 -compile([{parse_transform, lager_transform}]).
 -include("eproc.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -21,23 +21,22 @@
 %%
 %%
 %%
-set_test() ->
-    ok = meck:new(eproc_fsm),
-    ok = meck:expect(eproc_fsm, register_message, fun(_Sender, msg) -> ok end),
-    ok = meck:expect(eproc_fsm, register_attr_action, fun(eproc_timer, undefined, {timer, 1000, msg}, next) -> ok end),
-    ok = eproc_timer:set(1000, msg),
-    ?assert(meck:validate(eproc_fsm)),
-    ok = meck:unload(eproc_fsm).
+init_empty_test() ->
+    {ok, _State} = eproc_fsm_attr:init([], 0, []).
 
 
-%%
-%%
-%%
-started_test() ->
-    Attr = #attribute{
-        inst_id = iid, module = eproc_timer, name = undefined, scope = [],
-        from = from_trn, upds = [], till = undefined, reason = undefined
-    },
-    {ok, [{Attr, {timer, Ref}}]} = eproc_fsm_attr:init(0, [Attr]).
+init_mock_test() ->
+    meck:new(eproc_fsm_attr_test1, [non_strict]),
+    meck:new(eproc_fsm_attr_test2, [non_strict]),
+    meck:expect(eproc_fsm_attr_test1, init, fun([A, B]) -> {ok, [{A, undefined}, {B, undefined}]} end),
+    meck:expect(eproc_fsm_attr_test2, init, fun([C]) -> {ok, [{C, undefined}]} end),
+    {ok, _State} = eproc_fsm_attr:init([], 0, [
+        #attribute{module = eproc_fsm_attr_test1},
+        #attribute{module = eproc_fsm_attr_test1},
+        #attribute{module = eproc_fsm_attr_test2}
+    ]),
+    meck:validate([eproc_fsm_attr_test1, eproc_fsm_attr_test2]),
+    meck:unload([eproc_fsm_attr_test1, eproc_fsm_attr_test2]).
+
 
 

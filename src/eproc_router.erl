@@ -18,7 +18,7 @@
 %%  TODO: Description.
 %%
 -module(eproc_router).
--behaviour(eproc_attribute).
+-behaviour(eproc_fsm_attr).
 -export([add_key/2]).
 -export([started/1, created/3, updated/2, removed/1, store/3]).
 
@@ -31,12 +31,12 @@
 %%
 %%
 add_key(Key, Scope) ->
-    eproc_attribute:action(?MODULE, undefined, {key, Key}, Scope).
+    eproc_fsm_attr:action(?MODULE, undefined, {key, Key}, Scope).
 
 
 
 %% =============================================================================
-%%  Callbacks for `eproc_attribute`.
+%%  Callbacks for `eproc_fsm_attr`.
 %% =============================================================================
 
 %%

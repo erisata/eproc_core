@@ -110,13 +110,15 @@
 %%
 -record(attribute, {
     inst_id,
+    attr_id,
     module,
     name,
     scope,
-    from,       %% Transition at which the attribute was set.
-    upds = [],  %% Transitions at which the attribute was updated.
-    till,
-    reason      %%  Reason for the attribute removal.
+    data        :: term(),                  %% Custom attribute data.
+    from        :: trn_nr(),                %% Transition at which the attribute was set.
+    upds = []   :: [trn_nr()],              %% Transitions at which the attribute was updated.
+    till        :: trn_nr() | undefined,    %% Transition at which the attribute was removed.
+    reason      :: term()                   %%  Reason for the attribute removal.
 }).
 
 %%
@@ -174,9 +176,11 @@
     timestamp   :: timestamp(), %% Start of the transition.
     duration    :: duration(),  %% Duration of the transition (in microseconds).
     trigger     :: trigger(),   %% Event, initiated the transition.
-    effects     :: [effect()],                  %% Effects made in this transition.
-    active      :: [inst_attr()] | undefined,   %% Active props, keys and timers at the target state, Calculated field.
-    update      :: #inst_suspension{} | undefined   %% Filled, if the instance was suspended and its state updated.
+    effects     :: [effect()],  %% Effects made in this transition. TODO: Remove?
+    attr_id     :: integer(),                           %% Last action id.
+    attr_actions    :: [#attr_action{}],                %% All attribute actions performed in this transition.
+    attrs_active    :: [inst_attr()] | undefined,       %% Active props, keys and timers at the target state, Calculated field.
+    suspensions     :: #inst_suspension{} | undefined   %% Filled, if the instance was suspended and its state updated.
 }).
 
 %%
