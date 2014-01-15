@@ -84,9 +84,9 @@
 %%
 -callback removed(
         Attribute :: #attribute{},
-        Data      :: term()
+        AttrState :: term()
     ) ->
-        {ok, Data :: term()} |
+        ok |
         {error, Reason :: term()}.
 
 %%
@@ -159,10 +159,21 @@ transition_start(SName, State) ->
 %%
 %%  Invoked at the end of each transition.
 %%
-transition_end(NewSName, OldSName, State) ->
-    Actions = erlang:erase('eproc_fsm_attr$actions'),
-    % TODO: handle actions.
-    {ok, State}.
+transition_end(NewSName, OldSName, State = #state{attrs = AttrStates}) ->
+    ActionSpecs = erlang:erase('eproc_fsm_attr$actions'),
+    {AttrStatesAfterActions, UserActions} = lists:foldl(
+        fun perform_action/2,
+        {AttrStates, []},
+        ActionSpecs
+    ),
+    {NewSName, AttrStatesAfterCleanup, CleanupActions} = lists:foldl(
+        fun perform_cleanup/2,
+        {NewSName, [], []},
+        AttrStatesAfterActions
+    ),
+    AllActions = UserActions ++ CleanupActions,
+    NewState = State#state{attrs = AttrStatesAfterCleanup},
+    {ok, AllActions, NewState}.
 
 
 %%
@@ -181,13 +192,53 @@ event(_Event, _State) ->
 %%  Internal functions.
 %% =============================================================================
 
+%%
+%%
+%%
 init_on_start([], Started) ->
     Started;
 
 init_on_start(ActiveAttrs = [#attribute{module = Module} | _], Started) ->
     {Similar, Other} = lists:partition(fun (#attribute{module = M}) -> M =:= Module end, ActiveAttrs),
-    {ok, SimilarStarted} = Module:init(Similar),
-    init_on_start(Other, SimilarStarted ++ Started).
+    case Module:init(Similar) of
+        {ok, SimilarStarted} ->
+            init_on_start(Other, SimilarStarted ++ Started);
+        {error, Reason} ->
+            erlang:throw({attr_init_failed, Reason})
+    end.
 
+
+%%
+%%  Perform user actions on attributes.
+%%  This function is designed to be used with `lists:folfl/3`.
+%%
+perform_action(Action, Attrs) ->
+    % TODO
+    Attrs.
+
+
+%%
+%%  Cleanup attributes, that became out-of-scope.
+%%  This function is designed to be used with `lists:folfl/3`.
+%%
+perform_cleanup(AttrState, {SName, Attrs, Actions}) ->
+    #attr_state{attr = Attr, state = State} = AttrState,
+    #attribute{attr_id = AttrId, module = Module, scope = Scope} = Attr,
+    case eproc_fsm:state_in_scope(SName, Scope) of
+        true ->
+            {SName, [Attr | Attrs], Actions};
+        false ->
+            case Module:removed(Attr, State) of
+                ok ->
+                    Action = #attr_action{
+                        module = Module,
+                        attr_id = AttrId,
+                        action = {remove, {scope, SName}}
+                    },
+                    {SName, Attrs, [Action | Actions]};
+                {error, Reason} ->
+                    erlang:throw({attr_cleanup_failed, Reason})
+            end
+    end.
 
 

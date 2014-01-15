@@ -121,8 +121,9 @@
 %%  APIs for related eproc modules.
 %%
 -export([
+    state_in_scope/2,
     register_message/2,
-    register_attr_action/4
+    register_attr_action/4  %% TODO: move to separate module.
 ]).
 
 

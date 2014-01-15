@@ -126,8 +126,14 @@
 %%
 -record(attr_action, {
     module,
-    name,
-    action  :: {create, Scope :: term()} | {update} | remove   %% TODO
+    attr_id,
+    action  ::
+        {create, Name :: term(), Scope :: term(), Data :: term()} |
+        {update, Name :: term(), NewScope :: term(), NewData :: term()} |
+        {remove, Reason :: (
+            {scope, NewSName :: term()} |
+            {user, UserReason :: term()}
+        )}
 }).
 
 
