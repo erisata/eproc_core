@@ -83,7 +83,8 @@
 %%  Attribute removed by `eproc_fsm`.
 %%
 -callback removed(
-        Attribute :: #attribute{}
+        Attribute :: #attribute{},
+        Data      :: term()
     ) ->
         {ok, Data :: term()} |
         {error, Reason :: term()}.
