@@ -15,8 +15,12 @@
 %\--------------------------------------------------------------------
 
 %%
-%%  TODO: Description.
+%%  This module handles generic part of FSM attributes.
+%%  FSM attribute is a mechanism for extending FSM at system level.
+%%  Several extensions are provided within `eproc_core`, but other
+%%  implementations can also be provided by an user.
 %%
+%%  TODO:
 %%  API for the eproc_fsm.
 %%  API for an attribute manager (for attaching attrs to FSM).
 %%  SPI for the attribute manager (for handling attached attrs).
@@ -30,7 +34,7 @@
 -module(eproc_fsm_attr).
 -compile([{parse_transform, lager_transform}]).
 -export([action/4, action/3, make_event/2]).
--export([init/3, transition_start/2, transition_end/4, event/2]).
+-export([init/3, transition_start/4, transition_end/4, event/2]).
 -include("eproc.hrl").
 
 
@@ -153,7 +157,7 @@ init(_SName, LastId, ActiveAttrs) ->
 %%
 %%  Invoked at the start of each transition.
 %%
-transition_start(SName, State) ->
+transition_start(_InstId, _TrnNr, _SName, State) ->
     erlang:put('eproc_fsm_attr$actions', []),
     {ok, State}.
 
