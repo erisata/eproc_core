@@ -23,6 +23,16 @@
 
 application_setup() ->
     % See config in "test/sys.config" and its use in Makefile.
+    %
+    % application:set_env(kernel, error_logger, {file, "log/eunit_kernel.log"}),
+    % application:set_env(sasl, sasl_error_logger, {file, "log/eunit_sasl.log"}),
+    % application:set_env(lager, handlers, [{lager_file_backend, [{file, "log/eunit_lager.log"}, {level, debug}]}]),
+    % application:set_env(lager, error_logger_redirect, true),
+    %
+    application:load(eproc_core),
+    application:set_env(eproc_core, store, {eproc_store_ets, []}),
+    application:set_env(eproc_core, registry, {eproc_registry_gproc, []}),
+    %
     application:ensure_all_started(eproc_core).
 
 
@@ -45,24 +55,38 @@ create_test() ->
     % initialization
     application_setup(),
     StoreRef = {eproc_store_ets, []},
+    ok = meck:new(eproc_fsm__void, [non_strict, passthrough]),
+    ok = meck:expect(eproc_fsm__void, init, 
+        fun(Args) -> 
+            ?debugFmt("~n [debug] mecked function invoked. [Args=~p] ~n", [Args]),
+            meck:passthrough([Args]) 
+        end),
     %
     % create test proceses
-    {ok, {inst, _} = VoidIID} = eproc_fsm:create(eproc_fsm__void, {}, []),
-    {ok, {inst, _} = SeqIID}  = eproc_fsm:create(eproc_fsm__seq,  {}, []),
+    {ok, {inst, _} = VoidIID} = eproc_fsm:create(eproc_fsm__void, {}, 
+        [{group, abc}, {name, void_test}]),
+    %{ok, {inst, _} = SeqIID}  = eproc_fsm:create(eproc_fsm__seq,  {}, []),
     %
     % asserts
     %   * Instance created.
     {ok, Instance} = eproc_store:get_instance(StoreRef, VoidIID, []),
     ?debugFmt("~n [debug] Instance: ~p ~n", [Instance]),
     %   * Instance is in running state.
-    running = Instance#instance.status,
+    ?assertEqual(running, Instance#instance.status),
+    %   * Instance group assigned properly (new and existing group).
+    ?assertEqual(abc, Instance#instance.group),
+    %   * Instance name assigned properly (with and without name).
+    ?assertEqual(void_test, Instance#instance.name),
     %
     % TODO
-    %   * Instance group assigned properly (new and existing group).
-    %   * Instance name assigned properly (with and without name).
     %   * init/1 is invoked.
+    ?assert(meck:validate(eproc_fsm__void)),
+%    ok = meck:unload(eproc_fsm__void),
+    %
     %   * Initial state is stored properly.
+    %% ka reiskia "stored properly"?
     %   * Custom options are stored with the instance.
+    %% kas yra "custom options"?
     %
     ok.
 
