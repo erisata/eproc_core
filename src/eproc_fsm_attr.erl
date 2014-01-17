@@ -211,7 +211,10 @@ init_on_start(ActiveAttrs = [#attribute{module = Module} | _], Started) ->
     {Similar, Other} = lists:partition(fun (#attribute{module = M}) -> M =:= Module end, ActiveAttrs),
     case Module:init(Similar) of
         {ok, SimilarStarted} ->
-            init_on_start(Other, SimilarStarted ++ Started);
+            ConvertFun = fun ({A = #attribute{attr_id = AID}, S}) ->
+                #attr_state{attr_id = AID, attr = A, state = S}
+            end,
+            init_on_start(Other, lists:map(ConvertFun, SimilarStarted) ++ Started);
         {error, Reason} ->
             erlang:throw({attr_init_failed, Reason})
     end.
@@ -289,12 +292,12 @@ perform_update(AttrState, Name, Action, Scope, {InstId, TrnNr, NextSName}) ->
 %%  Cleanup attributes, that became out-of-scope.
 %%  This function is designed to be used with `lists:folfl/3`.
 %%
-perform_cleanup(AttrState, {SName, Attrs, Actions}) ->
+perform_cleanup(AttrState, {SName, AttrStates, Actions}) ->
     #attr_state{attr = Attr, state = State} = AttrState,
     #attribute{attr_id = AttrId, module = Module, scope = Scope} = Attr,
     case eproc_fsm:state_in_scope(SName, Scope) of
         true ->
-            {SName, [Attr | Attrs], Actions};
+            {SName, [AttrState | AttrStates], Actions};
         false ->
             case Module:removed(Attr, State) of
                 ok ->
@@ -303,7 +306,7 @@ perform_cleanup(AttrState, {SName, Attrs, Actions}) ->
                         attr_id = AttrId,
                         action = {remove, {scope, SName}}
                     },
-                    {SName, Attrs, [Action | Actions]};
+                    {SName, AttrStates, [Action | Actions]};
                 {error, Reason} ->
                     erlang:throw({attr_cleanup_failed, Reason})
             end

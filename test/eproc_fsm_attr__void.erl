@@ -20,7 +20,7 @@
 %%
 -module(eproc_fsm_attr__void).
 -behaviour(eproc_fsm_attr).
--export([init/1, created/3, updated/2, removed/1]).
+-export([init/1, created/3, updated/2, removed/2]).
 -include("eproc.hrl").
 
 %%
@@ -67,8 +67,8 @@ updated(Attribute, Action) ->
 %%
 %%  Attribute removed by `eproc_fsm`.
 %%
-removed(Attribute) ->
-    {error, undefined}. % TODO
+removed(_Attribute, _State) ->
+    ok.
 
 
 

@@ -50,7 +50,7 @@ transition_start_test() ->
     meck:new(eproc_fsm_attr_test1, [non_strict]),
     meck:expect(eproc_fsm_attr_test1, init, fun([A]) -> {ok, [{A, undefined}]} end),
     {ok, State} = eproc_fsm_attr:init([], 0, [#attribute{module = eproc_fsm_attr_test1, scope = []}]),
-    ?assertMatch({ok, State}, eproc_fsm_attr:transition_start([], State)),
+    ?assertMatch({ok, State}, eproc_fsm_attr:transition_start(0, 0, [], State)),
     ?assertEqual([], erlang:get('eproc_fsm_attr$actions')),
     true = meck:validate([eproc_fsm_attr_test1]),
     meck:unload([eproc_fsm_attr_test1]).
@@ -61,9 +61,9 @@ transition_start_test() ->
 transition_end_empty_test() ->
     meck:new(eproc_fsm_attr_test1, [non_strict]),
     meck:expect(eproc_fsm_attr_test1, init, fun([A]) -> {ok, [{A, undefined}]} end),
-    {ok, State} = eproc_fsm_attr:init([], 0, [#attribute{module = eproc_fsm_attr_test1, scope = []}]),
-    {ok, State} = eproc_fsm_attr:transition_start([], State),
-    {ok, State} = eproc_fsm_attr:transition_end([], [], State),
+    {ok, State} = eproc_fsm_attr:init([], 0, [#attribute{attr_id = 1, module = eproc_fsm_attr_test1, scope = []}]),
+    ?assertMatch({ok, State}, eproc_fsm_attr:transition_start(0, 0, [], State)),
+    ?assertMatch({ok, [], State}, eproc_fsm_attr:transition_end(0, 0, [], State)),
     ?assertEqual(undefined, erlang:get('eproc_fsm_attr$actions')),
     true = meck:validate([eproc_fsm_attr_test1]),
     meck:unload([eproc_fsm_attr_test1]).
@@ -75,14 +75,15 @@ transition_end_empty_test() ->
 transition_end_remove_test() ->
     meck:new(eproc_fsm_attr__void),
     meck:expect(eproc_fsm_attr__void, init, fun([A, B]) -> {ok, [{A, undefined}, {B, undefined}]} end),
-    meck:expect(eproc_fsm_attr__void, removed, fun(Attr) -> {ok, something} end),
+    meck:expect(eproc_fsm_attr__void, removed, fun(_A, _S) -> ok end),
     {ok, State} = eproc_fsm_attr:init([], 0, [
         #attribute{module = eproc_fsm_attr__void, scope = []},
         #attribute{module = eproc_fsm_attr__void, scope = [some]}
     ]),
-    {ok, State} = eproc_fsm_attr:transition_start([some], State),
-    {ok, State} = eproc_fsm_attr:transition_end([], [some], State),
-    ?assert(meck:called(eproc_fsm_attr__void, removed, '_')),  % TODO
+    ?assertMatch({ok, State}, eproc_fsm_attr:transition_start(0, 0, [some], State)),
+    ?assertMatch({ok, [Action], State2}, eproc_fsm_attr:transition_end(0, 0, [], State)),
+    % TODO: Assert Action and State2
+    ?assertEqual(1, meck:num_calls(eproc_fsm_attr__void, removed, '_')),
     ?assert(meck:validate([eproc_fsm_attr__void])),
     meck:unload([eproc_fsm_attr__void]).
 
