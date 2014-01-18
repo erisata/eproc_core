@@ -129,7 +129,7 @@
     attr_id,
     action  ::
         {create, Name :: term(), Scope :: term(), Data :: term()} |
-        {update, Name :: term(), NewScope :: term(), NewData :: term()} |
+        {update, NewScope :: term(), NewData :: term()} |
         {remove, Reason :: (
             {scope, NewSName :: term()} |
             {user, UserReason :: term()}

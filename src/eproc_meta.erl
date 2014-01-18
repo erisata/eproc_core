@@ -20,7 +20,7 @@
 -module(eproc_meta).
 -behaviour(eproc_fsm_attr).
 -export([add_keyword/2]).
--export([started/1, created/3, updated/2, removed/1, store/3]).
+-export([started/1, created/3, updated/2, removed/1]).
 
 
 %% =============================================================================
@@ -65,16 +65,6 @@ updated(_Attribute, _Action) ->
 %%
 removed(_Attribute) ->
     {error, undefined}.
-
-
-%%
-%%  Store attribute information in the store.
-%%  This callback is invoked in the context of `eproc_store`.
-%%  TODO: Remove this, make this module a behaviour, that should
-%%  be implemented by the store.
-%%
-store(Store, Attribute, Args) ->
-    ok. % TODO
 
 
 

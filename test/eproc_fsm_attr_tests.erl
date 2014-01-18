@@ -80,18 +80,50 @@ transition_end_remove_test() ->
         #attribute{module = eproc_fsm_attr__void, scope = []},
         #attribute{module = eproc_fsm_attr__void, scope = [some]}
     ]),
-    ?assertMatch({ok, State}, eproc_fsm_attr:transition_start(0, 0, [some], State)),
-    ?assertMatch({ok, [Action], State2}, eproc_fsm_attr:transition_end(0, 0, [], State)),
-    % TODO: Assert Action and State2
+    {ok, State} = eproc_fsm_attr:transition_start(0, 0, [some], State),
+    {ok, [Action], _State2} = eproc_fsm_attr:transition_end(0, 0, [], State),
+    ?assertMatch(#attr_action{action = {remove, {scope, []}}}, Action),
     ?assertEqual(1, meck:num_calls(eproc_fsm_attr__void, removed, '_')),
     ?assert(meck:validate([eproc_fsm_attr__void])),
     meck:unload([eproc_fsm_attr__void]).
 
 
 %%
-%%  Test if attribute is added, updated and removed.
+%%  Test if attribute is created, updated and removed.
 %%
-action_test() ->
-    ?assert(not_implemented). % TODO
+action_success_test() ->
+    Mod = eproc_fsm_attr__void,
+    meck:new(Mod),
+    meck:expect(Mod, init, fun([A, B]) -> {ok, [{A, undefined}, {B, undefined}]} end),
+    meck:expect(Mod, updated, fun
+        (#attribute{name = a, data = 100}, undefined, del, undefined) -> {remove, deleted};
+        (#attribute{name = b, data = 200}, undefined, inc, undefined) -> {update, 201, undefined}
+    end),
+    meck:expect(Mod, created, fun
+        (c,         set, []) -> {create, 0, undefined};
+        (undefined, set, []) -> {create, 0, undefined}
+    end),
+    {ok, State} = eproc_fsm_attr:init([], 2, [
+        #attribute{attr_id = 1, module = Mod, name = a, data = 100, scope = []},
+        #attribute{attr_id = 2, module = Mod, name = b, data = 200, scope = []}
+    ]),
+    {ok, State} = eproc_fsm_attr:transition_start(0, 0, [some], State),
+    ?assertEqual(ok, eproc_fsm_attr:action(Mod, a, del)),             % remove attr
+    ?assertEqual(ok, eproc_fsm_attr:action(Mod, b, inc)),             % update attr
+    ?assertEqual(ok, eproc_fsm_attr:action(Mod, c, set, [])),         % create named attr
+    ?assertEqual(ok, eproc_fsm_attr:action(Mod, undefined, set, [])), % create first unnamed attr
+    ?assertEqual(ok, eproc_fsm_attr:action(Mod, undefined, set, [])), % create second unnamed attr
+    {ok, Actions, _State2} = eproc_fsm_attr:transition_end(0, 0, [], State),
+    ?assertEqual(5, length(Actions)),
+    ?assertEqual(1, length([any || #attr_action{attr_id = 1, action = {remove, {user, deleted}}} <- Actions])),
+    ?assertEqual(1, length([any || #attr_action{attr_id = 2, action = {update, [], 201}} <- Actions])),
+    ?assertEqual(1, length([any || #attr_action{action = {create, c,         [], 0}} <- Actions])),
+    ?assertEqual(2, length([any || #attr_action{action = {create, undefined, [], 0}} <- Actions])),
+    ?assertEqual(2, meck:num_calls(Mod, updated, '_')),
+    ?assertEqual(3, meck:num_calls(Mod, created, '_')),
+    ?assert(meck:validate([Mod])),
+    meck:unload([Mod]).
 
 
+% TODO: Update/remove unnamed attr.
+% TODO: Scope resolution.

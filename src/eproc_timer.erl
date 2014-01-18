@@ -21,7 +21,7 @@
 -module(eproc_timer).
 -behaviour(eproc_fsm_attr).
 -export([set/4, set/3, set/2, cancel/1]).
--export([started/1, created/3, updated/2, removed/1, store/3]).
+-export([started/1, created/3, updated/2, removed/1]).
 -include("eproc.hrl").
 
 -define(MAX_ATOMIC_DELAY, 4294967295).
@@ -119,16 +119,6 @@ updated(Attribute, {timer, remove}) ->
 %%
 removed(Attribute) ->
     {error, undefined}. % TODO
-
-
-%%
-%%  Store attribute information in the store.
-%%  This callback is invoked in the context of `eproc_store`.
-%%  TODO: Remove this, make this module a behaviour, that should
-%%  be implemented by the store.
-%%
-store(Store, Attribute, Args) ->
-    ok. % TODO
 
 
 

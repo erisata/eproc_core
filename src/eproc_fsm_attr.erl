@@ -38,14 +38,14 @@
 -include("eproc.hrl").
 
 
--record(attr_state, {
+-record(attr_ctx, {
     attr_id :: integer(),
     attr    :: #attribute{},
     state   :: term()
 }).
 -record(state, {
     last_id :: integer(),
-    attrs   :: [#attr_state{}]
+    attrs   :: [#attr_ctx{}]
 }).
 
 
@@ -67,21 +67,32 @@
 %%
 -callback created(
         Name    :: term(),
-        Action  :: #attr_action{},  % TODO: Wrong type
+        Action  :: term(),
         Scope   :: term()
     ) ->
-        {ok, Data :: term()} |  % TODO: Wrong response term
-        {error, Reason :: term()}.
+        {create, Data, State} |
+        {error, Reason}
+    when
+        Data :: term(),
+        State :: term(),
+        Reason :: term().
 
 %%
 %%  Attribute updated by user.
 %%
 -callback updated(
         Attribute   :: #attribute{},
-        Action      :: #attr_action{}
+        AttrState   :: term(),
+        Action      :: term(),
+        Scope       :: term() | undefined
     ) ->
-        {ok, Data :: term()} |
-        {error, Reason :: term()}.
+        {update, NewData, NewState} |
+        {remove, Reason} |
+        {error, Reason}
+    when
+        NewData :: term(),
+        NewState :: term(),
+        Reason :: term().
 
 %%
 %%  Attribute removed by `eproc_fsm`.
@@ -89,20 +100,6 @@
 -callback removed(
         Attribute :: #attribute{},
         AttrState :: term()
-    ) ->
-        ok |
-        {error, Reason :: term()}.
-
-%%
-%%  Store attribute information in the store.
-%%  This callback is invoked in the context of `eproc_store`.
-%%  TODO: Remove this, make this module a behaviour, that should
-%%  be implemented by the store.
-%%
--callback store(
-        Store       :: store_ref(),
-        Attribute   :: #attribute{},
-        Args        :: term()
     ) ->
         ok |
         {error, Reason :: term()}.
@@ -165,22 +162,22 @@ transition_start(_InstId, _TrnNr, _SName, State) ->
 %%
 %%  Invoked at the end of each transition.
 %%
-transition_end(InstId, TrnNr, NextSName, State = #state{last_id = LastAttrId, attrs = AttrStates}) ->
+transition_end(InstId, TrnNr, NextSName, State = #state{last_id = LastAttrId, attrs = AttrCtxs}) ->
     ActionSpecs = erlang:erase('eproc_fsm_attr$actions'),
-    {AttrStatesAfterActions, UserActions, _, NewAttrId} = lists:foldl(
+    {AttrCtxsAfterActions, UserActions, _, NewAttrId} = lists:foldl(
         fun perform_action/2,
-        {AttrStates, [], {InstId, TrnNr, NextSName}, LastAttrId},
+        {AttrCtxs, [], {InstId, TrnNr, NextSName}, LastAttrId},
         ActionSpecs
     ),
-    {NextSName, AttrStatesAfterCleanup, CleanupActions} = lists:foldl(
+    {NextSName, AttrCtxsAfterCleanup, CleanupActions} = lists:foldl(
         fun perform_cleanup/2,
         {NextSName, [], []},
-        AttrStatesAfterActions
+        AttrCtxsAfterActions
     ),
     AllActions = UserActions ++ CleanupActions,
     NewState = State#state{
         last_id = NewAttrId,
-        attrs = AttrStatesAfterCleanup
+        attrs = AttrCtxsAfterCleanup
     },
     {ok, AllActions, NewState}.
 
@@ -212,7 +209,7 @@ init_on_start(ActiveAttrs = [#attribute{module = Module} | _], Started) ->
     case Module:init(Similar) of
         {ok, SimilarStarted} ->
             ConvertFun = fun ({A = #attribute{attr_id = AID}, S}) ->
-                #attr_state{attr_id = AID, attr = A, state = S}
+                #attr_ctx{attr_id = AID, attr = A, state = S}
             end,
             init_on_start(Other, lists:map(ConvertFun, SimilarStarted) ++ Started);
         {error, Reason} ->
@@ -224,21 +221,25 @@ init_on_start(ActiveAttrs = [#attribute{module = Module} | _], Started) ->
 %%  Perform user actions on attributes.
 %%  This function is designed to be used with `lists:folfl/3`.
 %%
-perform_action(ActionSpec, {AttrStates, Actions, Context, LastAttrId}) ->
+perform_action(ActionSpec, {AttrCtxs, Actions, Context, LastAttrId}) ->
     {Module, Name, Action, Scope} = ActionSpec,
     case Name of
         undefined ->
-            {NewAttrState, NewAction, NewAttrId} = perform_create(Module, Name, Action, Scope, Context, LastAttrId),
-            {[NewAttrState | AttrStates], [NewAction | Actions], Context, NewAttrId};
+            {ok, NewAttrCtx, NewAction, NewAttrId} = perform_create(Module, Name, Action, Scope, Context, LastAttrId),
+            {[NewAttrCtx | AttrCtxs], [NewAction | Actions], Context, NewAttrId};
         _ ->
-            ByNameFun = fun (#attr_state{attr = #attribute{name = N}}) -> N =:= Name end,
-            case lists:partition(ByNameFun, AttrStates) of
-                {[], AttrStates} ->
-                    {NewAttrState, NewAction, NewAttrId} = perform_create(Module, Name, Action, Scope, Context, LastAttrId),
-                    {[NewAttrState | AttrStates], [NewAction | Actions], Context, NewAttrId};
-                {[AttrState], OtherAttrStates} ->
-                    {NewAttrState, NewAction} = perform_update(AttrState, Name, Action, Scope, Context),
-                    {[NewAttrState | OtherAttrStates], [NewAction | Actions], Context, LastAttrId}
+            ByNameFun = fun (#attr_ctx{attr = #attribute{name = N}}) -> N =:= Name end,
+            case lists:partition(ByNameFun, AttrCtxs) of
+                {[], AttrCtxs} ->
+                    {ok, NewAttrCtx, NewAction, NewAttrId} = perform_create(Module, Name, Action, Scope, Context, LastAttrId),
+                    {[NewAttrCtx | AttrCtxs], [NewAction | Actions], Context, NewAttrId};
+                {[AttrCtx], OtherAttrCtxs} ->
+                    case perform_update(AttrCtx, Action, Scope, Context) of
+                        {updated, NewAttrCtx, NewAction} ->
+                            {[NewAttrCtx | OtherAttrCtxs], [NewAction | Actions], Context, LastAttrId};
+                        {removed, NewAction} ->
+                            {OtherAttrCtxs, [NewAction | Actions], Context, LastAttrId}
+                    end
             end
     end.
 
@@ -247,35 +248,32 @@ perform_action(ActionSpec, {AttrStates, Actions, Context, LastAttrId}) ->
 %%  Create new attribute.
 %%
 perform_create(Module, Name, Action, Scope, {InstId, TrnNr, NextSName}, LastAttrId) ->
-    ResolvedScope = case Scope of
-        next -> NextSName;
-        _ -> Scope
-    end,
-    case Module:updated(Name, Action, ResolvedScope) of
-        {ok, Data, State} ->
+    ResolvedScope = resolve_scope(Scope, undefined, NextSName),
+    case Module:created(Name, Action, ResolvedScope) of
+        {create, AttrData, AttrState} ->
             NewAttrId = LastAttrId + 1,
-            Attr = #attribute{
+            Attribute = #attribute{
                 inst_id = InstId,
                 attr_id = NewAttrId,
                 module = Module,
                 name = Name,
                 scope = ResolvedScope,
-                data = Data,
+                data = AttrData,
                 from = TrnNr,
                 upds = [],
                 till = undefined
             },
-            AttrState = #attr_state{
+            AttrCtx = #attr_ctx{
                 attr_id = NewAttrId,
-                attr = Attr,
-                state = State
+                attr = Attribute,
+                state = AttrState
             },
             AttrAction = #attr_action{
                 module = Module,
                 attr_id = NewAttrId,
-                action = todo % TODO
+                action = {create, Name, ResolvedScope, AttrData}
             },
-            {AttrState, AttrAction, NewAttrId};
+            {ok, AttrCtx, AttrAction, NewAttrId};
         {error, Reason} ->
             erlang:throw({attr_create_failed, Reason})
     end.
@@ -284,20 +282,55 @@ perform_create(Module, Name, Action, Scope, {InstId, TrnNr, NextSName}, LastAttr
 %%
 %%  Update existing attribute.
 %%
-perform_update(AttrState, Name, Action, Scope, {InstId, TrnNr, NextSName}) ->
-    {}. % TODO
+perform_update(AttrCtx, Action, Scope, {InstId, TrnNr, NextSName}) ->
+    #attr_ctx{
+        attr = Attribute,
+        state = AttrState
+    } = AttrCtx,
+    #attribute{
+        attr_id = AttrId,
+        module = Module,
+        scope = OldScope
+    } = Attribute,
+    ResolvedScope = resolve_scope(Scope, OldScope, NextSName),
+    case Module:updated(Attribute, AttrState, Action, Scope) of
+        {update, NewData, NewState} ->
+            AttrAction = #attr_action{
+                module = Module,
+                attr_id = AttrId,
+                action = {update, ResolvedScope, NewData}
+            },
+            NewAttribute = Attribute#attribute{
+                data = NewData,
+                scope = ResolvedScope
+            },
+            NewAttrCtx = AttrCtx#attr_ctx{
+                attr = NewAttribute,
+                state = NewState
+            },
+            {updated, NewAttrCtx, AttrAction};
+        {remove, UserReason} ->
+            AttrAction = #attr_action{
+                module = Module,
+                attr_id = AttrId,
+                action = {remove, {user, UserReason}}
+            },
+            {removed, AttrAction};
+        {error, Reason} ->
+            erlang:throw({attr_update_failed, Reason})
+    end.
 
 
 %%
 %%  Cleanup attributes, that became out-of-scope.
 %%  This function is designed to be used with `lists:folfl/3`.
 %%
-perform_cleanup(AttrState, {SName, AttrStates, Actions}) ->
-    #attr_state{attr = Attr, state = State} = AttrState,
+perform_cleanup(AttrCtx, {SName, AttrCtxs, Actions}) ->
+    #attr_ctx{attr = Attr, state = State} = AttrCtx,
     #attribute{attr_id = AttrId, module = Module, scope = Scope} = Attr,
     case eproc_fsm:state_in_scope(SName, Scope) of
         true ->
-            {SName, [AttrState | AttrStates], Actions};
+            {SName, [AttrCtx | AttrCtxs], Actions};
         false ->
             case Module:removed(Attr, State) of
                 ok ->
@@ -306,10 +339,21 @@ perform_cleanup(AttrState, {SName, AttrStates, Actions}) ->
                         attr_id = AttrId,
                         action = {remove, {scope, SName}}
                     },
-                    {SName, AttrStates, [Action | Actions]};
+                    {SName, AttrCtxs, [Action | Actions]};
                 {error, Reason} ->
                     erlang:throw({attr_cleanup_failed, Reason})
             end
+    end.
+
+
+%%
+%%
+%%
+resolve_scope(Scope, OldScope, NextSName) when Scope =/= undefined; OldScope =/= undefined ->
+    case Scope of
+        next      -> NextSName;
+        undefined -> OldScope;
+        _         -> Scope
     end.
 
 
