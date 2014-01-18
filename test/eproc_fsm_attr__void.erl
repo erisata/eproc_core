@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013-2014 Erisata, Ltd.
+%| Copyright 2013-2014 Erisata, UAB (Ltd.)
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -22,14 +22,6 @@
 -behaviour(eproc_fsm_attr).
 -export([init/1, created/3, updated/4, removed/2]).
 -include("eproc.hrl").
-
-%%
-%%  Persistent state.
-%%
--record(data, {
-    some
-}).
-
 
 
 
@@ -54,14 +46,14 @@ init(ActiveAttrs) ->
 %%
 %%  Attribute created.
 %%
-created(Name, Action, _Scope) ->
+created(_Name, _Action, _Scope) ->
     {error, undefined}.
 
 
 %%
 %%  Attribute updated by user.
 %%
-updated(Attribute, AttrState, Action, Scope) ->
+updated(_Attribute, _AttrState, _Action, _Scope) ->
     {error, undefined}.
 
 
