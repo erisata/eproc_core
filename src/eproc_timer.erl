@@ -135,7 +135,10 @@ handle_removed(_Attribute, State) ->
 %%
 %%
 %%
-handle_event(_Attribute, _State, _Event) ->
+handle_event(#attribute{attr_id = AttrId, data = AttrData}, _State, long_delay) ->
+    {ok, NewState} = start_timer(AttrId, AttrData);
+
+handle_event(_Attribute, _State, {timer, Event}) ->
     ok. % TODO
 
 
@@ -161,7 +164,7 @@ start_timer(AttrId, #data{start = Start, delay = Delay, event = Event}) ->
             TimerRef = erlang:send_after(?MAX_ATOMIC_DELAY, self(), EventMsg),
             {ok, #state{ref = TimerRef}};
         true ->
-            {ok, EventMsg} = eproc_fsm_attr:make_attr_event(?MODULE, AttrId, Event),
+            {ok, EventMsg} = eproc_fsm_attr:make_attr_event(?MODULE, AttrId, {timer, Event}),
             TimerRef = erlang:send_after(Left, self(), EventMsg),
             {ok, #state{ref = TimerRef}}
     end.

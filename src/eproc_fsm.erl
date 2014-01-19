@@ -122,8 +122,7 @@
 %%
 -export([
     state_in_scope/2,
-    register_message/2,
-    register_attr_action/4  %% TODO: move to separate module.
+    register_message/2
 ]).
 
 
@@ -892,14 +891,6 @@ register_message(Sender, Event) ->
     ok.
 
 
-%%
-%%  TODO: Implement.
-%%  This function is used by modules managing FSM attributes.
-%%
-register_attr_action(Module, Name, Action, Scope) ->
-    ok.
-
-
 
 %% =============================================================================
 %%  Internal state of the module.
@@ -972,6 +963,10 @@ handle_info(Event, State = #state{attrs = Attrs}) ->
     case eproc_fsm_attr:event(Event, Attrs) of
         {ok, NewAttrs} ->
             {noreply, State#state{attrs = NewAttrs}};
+        {ok, NewAttrs, Trigger} ->
+            NewState = State#state{attrs = NewAttrs},
+            % TODO: do a transition.
+            {noreply, NewState};
         unknown ->
             lager:warning("Ignoring unknown event ~p", Event),
             {noreply, State}

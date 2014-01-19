@@ -60,8 +60,12 @@
 -callback init(
         ActiveAttrs :: [#attribute{}]
     ) ->
-        {ok, [{Attribute :: #attribute{}, Data :: term()}]} |
-        {error, Reason :: term()}.
+        {ok, [{Attribute, AttrState}]} |
+        {error, Reason}
+    when
+        Attribute :: #attribute{},
+        AttrState :: term(),
+        Reason :: term().
 
 %%
 %%  Attribute created.
@@ -106,20 +110,29 @@
         AttrState :: term()
     ) ->
         ok |
-        {error, Reason :: term()}.
+        {error, Reason}
+    when
+        Reason :: term().
 
 
 %%
-%%  Attribute removed by `eproc_fsm`.
-%%  This callback will always be called in the scope of transition.
+%%  Notifies about an event, received by the attribute.
+%%  This handler can update attribute's runtime state and
+%%  optionally initiate an FSM transition by providing its
+%%  trigger.
 %%
 -callback handle_event(
         Attribute   :: #attribute{},
         AttrState   :: term(),
         Event       :: term()
     ) ->
-        ok |
-        {error, Reason :: term()}.
+        {ok, NewAttrState} |
+        {ok, NewAttrState, Trigger} |
+        {error, Reason}
+    when
+        NewAttrState :: term(),
+        Trigger :: trigger(),
+        Reason :: term().
 
 
 
@@ -210,9 +223,16 @@ event({'eproc_fsm_attr$event', AttrId, Event}, State = #state{attrs = AttrCtxs})
         AttrCtx ->
             #attr_ctx{attr = Attribute, state = AttrState} = AttrCtx,
             #attribute{module = Module} = Attribute,
+            UpdateAttrStateFun = fun (NewAttrState) ->
+                NewAttrCtx = AttrCtx#attr_ctx{state = NewAttrState},
+                NewAttrCtxs = lists:keyreplace(AttrId, #attr_ctx.attr_id, AttrCtxs, NewAttrCtx),
+                State#state{attrs = NewAttrCtxs}
+            end,
             case Module:handle_event(Attribute, AttrState, Event) of
-                ok ->
-                    {ok, State};
+                {ok, NewAttrState} ->
+                    {ok, UpdateAttrStateFun(NewAttrState)};
+                {ok, NewAttrState, Trigger} ->
+                    {ok, UpdateAttrStateFun(NewAttrState), Trigger};
                 {error, Reason} ->
                     erlang:throw({attr_event_failed, Reason})
             end
