@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013-2014 Erisata, Ltd.
+%| Copyright 2013-2014 Erisata, UAB (Ltd.)
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@
 -module(eproc_timer).
 -behaviour(eproc_fsm_attr).
 -export([set/4, set/3, set/2, cancel/1]).
--export([started/1, created/3, updated/2, removed/1]).
+-export([init/1, handle_created/3, handle_updated/4, handle_removed/2, handle_event/3]).
 -include("eproc.hrl").
 
 -define(MAX_ATOMIC_DELAY, 4294967295).
@@ -38,7 +38,7 @@
 %%
 %%  Runtime state.
 %%
--record(rtdata, {
+-record(state, {
     ref
 }).
 
@@ -89,36 +89,54 @@ cancel(Name) ->
 %%
 %%  FSM started.
 %%
-started(ActiveAttrs) ->
-    Started = [ start_timer(A) || A <- ActiveAttrs ],
+init(ActiveAttrs) ->
+    InitTimerFun = fun (Attr = #attribute{attr_id = AttrId, data = Data}) ->
+        {ok, State} = start_timer(AttrId, Data),
+        {Attr, State}
+    end,
+    Started = lists:map(InitTimerFun, ActiveAttrs),
     {ok, Started}.
 
 
 %%
 %%  Attribute created.
 %%
-created(Name, {timer, After, Event}, _Scope) ->
-    {error, undefined}; % TODO
+handle_created(#attribute{attr_id = AttrId}, {timer, After, Event}, _Scope) ->
+    Data = #data{start = erlang:now(), delay = After, event = Event},
+    {ok, State} = start_timer(AttrId, Data),
+    {ok, Data, State};
 
-created(Name, {timer, remove}, _Scope) ->
-    {error, {unknown_timer, Name}}.
+handle_created(_Attribute, {timer, remove}, _Scope) ->
+    {error, {unknown_timer}}.
 
 
 %%
 %%  Attribute updated by user.
 %%
-updated(Attribute, {timer, After, Event}) ->
-    {error, undefined}; % TODO
+handle_updated(Attribute, AttrState, {timer, After, Event}, _Scope) ->
+    #attribute{attr_id = AttrId} = Attribute,
+    NewData = #data{start = erlang:now(), delay = After, event = Event},
+    ok = stop_timer(AttrState),
+    {ok, NewState} = start_timer(AttrId, NewData),
+    {update, NewData, NewState};
 
-updated(Attribute, {timer, remove}) ->
-    {error, undefined}. % TODO
+handle_updated(_Attribute, AttrState, {timer, remove}, _Scope) ->
+    ok = stop_timer(AttrState),
+    {remove, explicit}.
 
 
 %%
 %%  Attribute removed by `eproc_fsm`.
 %%
-removed(Attribute) ->
-    {error, undefined}. % TODO
+handle_removed(_Attribute, State) ->
+    ok = stop_timer(State).
+
+
+%%
+%%
+%%
+handle_event(_Attribute, _State, _Event) ->
+    ok. % TODO
 
 
 
@@ -127,26 +145,33 @@ removed(Attribute) ->
 %% =============================================================================
 
 
-
-start_timer(Attribute) ->
-    #attribute{data = Data} = Attribute,
-    #data{start = Start, delay = Delay, event = Event} = Data,
+%%
+%%  Starts a timer.
+%%
+start_timer(AttrId, #data{start = Start, delay = Delay, event = Event}) ->
     Now = erlang:now(),
     Left = Delay - (timer:now_diff(Start, Now) div 1000),
     if
         Left < 0 ->
-            {ok, EventMsg} = eproc_fsm_attr:make_fsm_event(Attribute, Event),   % TODO: Implement
+            {ok, EventMsg} = eproc_fsm_attr:make_fsm_event(?MODULE, AttrId, Event),
             self() ! EventMsg,
-            {ok, #rtdata{ref = delayed}};
+            {ok, #state{ref = delayed}};
         Left > ?MAX_ATOMIC_DELAY ->
-            {ok, EventMsg} = eproc_fsm_attr:make_attr_event(Attribute, long_delay),   % TODO: Implement
+            {ok, EventMsg} = eproc_fsm_attr:make_attr_event(?MODULE, AttrId, long_delay),
             TimerRef = erlang:send_after(?MAX_ATOMIC_DELAY, self(), EventMsg),
-            {ok, #rtdata{ref = TimerRef}};
+            {ok, #state{ref = TimerRef}};
         true ->
-            {ok, EventMsg} = eproc_fsm_attr:make_attr_event(Attribute, Event),   % TODO: Implement
+            {ok, EventMsg} = eproc_fsm_attr:make_attr_event(?MODULE, AttrId, Event),
             TimerRef = erlang:send_after(Left, self(), EventMsg),
-            {ok, #rtdata{ref = TimerRef}}
+            {ok, #state{ref = TimerRef}}
     end.
 
+
+%%
+%%  Stops a timer.
+%%
+stop_timer(#state{ref = TimerRef}) ->
+    erlang:cancel_timer(TimerRef),
+    ok.
 
 

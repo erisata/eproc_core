@@ -20,7 +20,7 @@
 %%
 -module(eproc_fsm_attr__void).
 -behaviour(eproc_fsm_attr).
--export([init/1, created/3, updated/4, removed/2]).
+-export([init/1, handle_created/3, handle_updated/4, handle_removed/2, handle_event/3]).
 -include("eproc.hrl").
 
 
@@ -46,21 +46,28 @@ init(ActiveAttrs) ->
 %%
 %%  Attribute created.
 %%
-created(_Name, _Action, _Scope) ->
+handle_created(_Attribute, _Action, _Scope) ->
     {error, undefined}.
 
 
 %%
 %%  Attribute updated by user.
 %%
-updated(_Attribute, _AttrState, _Action, _Scope) ->
+handle_updated(_Attribute, _AttrState, _Action, _Scope) ->
     {error, undefined}.
 
 
 %%
 %%  Attribute removed by `eproc_fsm`.
 %%
-removed(_Attribute, _AttrState) ->
+handle_removed(_Attribute, _AttrState) ->
+    ok.
+
+
+%%
+%%  Attribute event received.
+%%
+handle_event(_Attribute, _AttrState, _Event) ->
     ok.
 
 

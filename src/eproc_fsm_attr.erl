@@ -33,19 +33,20 @@
 %%
 -module(eproc_fsm_attr).
 -compile([{parse_transform, lager_transform}]).
--export([action/4, action/3, make_event/2]).
+-export([action/4, action/3, make_event/3]).
 -export([init/3, transition_start/4, transition_end/4, event/2]).
 -include("eproc.hrl").
 
 
 -record(attr_ctx, {
-    attr_id :: integer(),
-    attr    :: #attribute{},
-    state   :: term()
+    attr_id :: integer(),       %%  Attribute ID.
+    attr    :: #attribute{},    %%  Attribute info.
+    state   :: term()           %%  Runtime state of the attribute.
 }).
+
 -record(state, {
-    last_id :: integer(),
-    attrs   :: [#attr_ctx{}]
+    last_id :: integer(),       %%  Last used attribute ID.
+    attrs   :: [#attr_ctx{}]    %%  Contexts for all active attributes of the FSM.
 }).
 
 
@@ -54,7 +55,7 @@
 %% =============================================================================
 
 %%
-%%  FSM started.
+%%  Invoked when FSM started or restarted.
 %%
 -callback init(
         ActiveAttrs :: [#attribute{}]
@@ -64,11 +65,12 @@
 
 %%
 %%  Attribute created.
+%%  This callback will always be called in the scope of transition.
 %%
--callback created(
-        Name    :: term(),
-        Action  :: term(),
-        Scope   :: term()
+-callback handle_created(
+        Attribute   :: #attribute{},
+        Action      :: term(),
+        Scope       :: term()
     ) ->
         {create, Data, State} |
         {error, Reason}
@@ -79,8 +81,9 @@
 
 %%
 %%  Attribute updated by user.
+%%  This callback will always be called in the scope of transition.
 %%
--callback updated(
+-callback handle_updated(
         Attribute   :: #attribute{},
         AttrState   :: term(),
         Action      :: term(),
@@ -96,10 +99,24 @@
 
 %%
 %%  Attribute removed by `eproc_fsm`.
+%%  This callback will always be called in the scope of transition.
 %%
--callback removed(
+-callback handle_removed(
         Attribute :: #attribute{},
         AttrState :: term()
+    ) ->
+        ok |
+        {error, Reason :: term()}.
+
+
+%%
+%%  Attribute removed by `eproc_fsm`.
+%%  This callback will always be called in the scope of transition.
+%%
+-callback handle_event(
+        Attribute   :: #attribute{},
+        AttrState   :: term(),
+        Event       :: term()
     ) ->
         ok |
         {error, Reason :: term()}.
@@ -128,11 +145,11 @@ action(Module, Name, Action) ->
 
 
 %%
+%%  Returns a message, that can be sent to the FSM process. It will be recognized
+%%  as a message sent to the particular attribute and its handler.
 %%
-%%
-make_event(#attribute{module = Module}, Event) ->
-    Sender = {attr, Module},
-    eproc_fsm:make_info(Sender, Event).     %% TODO: Implement.
+make_event(_Module, AttrId, Event) ->
+    {'eproc_fsm_attr$event', AttrId, Event}.
 
 
 
@@ -185,9 +202,21 @@ transition_end(InstId, TrnNr, NextSName, State = #state{last_id = LastAttrId, at
 %%
 %%  Invoked, when the FSM receives
 %%
-event({'eproc_fsm_attr$event', AttrId, Event}, State) ->
-    % TODO: Handle.
-    {ok, State};
+event({'eproc_fsm_attr$event', AttrId, Event}, State = #state{attrs = AttrCtxs}) ->
+    case lists:keyfind(AttrId, #attr_ctx.attr_id, AttrCtxs) of
+        false ->
+            lager:debug("Ignoring attribute event with unknown id=~p", [attr_id]),
+            {ok, State};
+        AttrCtx ->
+            #attr_ctx{attr = Attribute, state = AttrState} = AttrCtx,
+            #attribute{module = Module} = Attribute,
+            case Module:handle_event(Attribute, AttrState, Event) of
+                ok ->
+                    {ok, State};
+                {error, Reason} ->
+                    erlang:throw({attr_event_failed, Reason})
+            end
+    end;
 
 event(_Event, _State) ->
     unknown.
@@ -249,23 +278,23 @@ perform_action(ActionSpec, {AttrCtxs, Actions, Context, LastAttrId}) ->
 %%
 perform_create(Module, Name, Action, Scope, {InstId, TrnNr, NextSName}, LastAttrId) ->
     ResolvedScope = resolve_scope(Scope, undefined, NextSName),
-    case Module:created(Name, Action, ResolvedScope) of
+    NewAttrId = LastAttrId + 1,
+    NewAttribute = #attribute{
+        inst_id = InstId,
+        attr_id = NewAttrId,
+        module = Module,
+        name = Name,
+        scope = ResolvedScope,
+        data = undefined,
+        from = TrnNr,
+        upds = [],
+        till = undefined
+    },
+    case Module:handle_created(NewAttribute, Action, ResolvedScope) of
         {create, AttrData, AttrState} ->
-            NewAttrId = LastAttrId + 1,
-            Attribute = #attribute{
-                inst_id = InstId,
-                attr_id = NewAttrId,
-                module = Module,
-                name = Name,
-                scope = ResolvedScope,
-                data = AttrData,
-                from = TrnNr,
-                upds = [],
-                till = undefined
-            },
             AttrCtx = #attr_ctx{
                 attr_id = NewAttrId,
-                attr = Attribute,
+                attr = NewAttribute#attribute{data = AttrData},
                 state = AttrState
             },
             AttrAction = #attr_action{
@@ -282,7 +311,7 @@ perform_create(Module, Name, Action, Scope, {InstId, TrnNr, NextSName}, LastAttr
 %%
 %%  Update existing attribute.
 %%
-perform_update(AttrCtx, Action, Scope, {InstId, TrnNr, NextSName}) ->
+perform_update(AttrCtx, Action, Scope, {_InstId, TrnNr, NextSName}) ->
     #attr_ctx{
         attr = Attribute,
         state = AttrState
@@ -290,10 +319,11 @@ perform_update(AttrCtx, Action, Scope, {InstId, TrnNr, NextSName}) ->
     #attribute{
         attr_id = AttrId,
         module = Module,
-        scope = OldScope
+        scope = OldScope,
+        upds = Upds
     } = Attribute,
     ResolvedScope = resolve_scope(Scope, OldScope, NextSName),
-    case Module:updated(Attribute, AttrState, Action, Scope) of
+    case Module:handle_updated(Attribute, AttrState, Action, Scope) of
         {update, NewData, NewState} ->
             AttrAction = #attr_action{
                 module = Module,
@@ -302,7 +332,8 @@ perform_update(AttrCtx, Action, Scope, {InstId, TrnNr, NextSName}) ->
             },
             NewAttribute = Attribute#attribute{
                 data = NewData,
-                scope = ResolvedScope
+                scope = ResolvedScope,
+                upds = [TrnNr | Upds]
             },
             NewAttrCtx = AttrCtx#attr_ctx{
                 attr = NewAttribute,
@@ -332,7 +363,7 @@ perform_cleanup(AttrCtx, {SName, AttrCtxs, Actions}) ->
         true ->
             {SName, [AttrCtx | AttrCtxs], Actions};
         false ->
-            case Module:removed(Attr, State) of
+            case Module:handle_removed(Attr, State) of
                 ok ->
                     Action = #attr_action{
                         module = Module,

@@ -20,7 +20,6 @@
 %%
 %%      [] --- done ---> [done].
 %%
-
 -module(eproc_fsm__void).
 -behaviour(eproc_fsm).
 -compile([{parse_transform, lager_transform}]).

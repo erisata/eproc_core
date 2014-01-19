@@ -13,6 +13,7 @@
 %| See the License for the specific language governing permissions and
 %| limitations under the License.
 %\--------------------------------------------------------------------
+
 -module(eproc_fsm_attr_tests).
 -compile([{parse_transform, lager_transform}]).
 -include("eproc.hrl").
@@ -75,7 +76,7 @@ transition_end_empty_test() ->
 transition_end_remove_test() ->
     meck:new(eproc_fsm_attr__void),
     meck:expect(eproc_fsm_attr__void, init, fun([A, B]) -> {ok, [{A, undefined}, {B, undefined}]} end),
-    meck:expect(eproc_fsm_attr__void, removed, fun(_A, _S) -> ok end),
+    meck:expect(eproc_fsm_attr__void, handle_removed, fun(_A, _S) -> ok end),
     {ok, State} = eproc_fsm_attr:init([], 0, [
         #attribute{module = eproc_fsm_attr__void, scope = []},
         #attribute{module = eproc_fsm_attr__void, scope = [some]}
@@ -83,7 +84,7 @@ transition_end_remove_test() ->
     {ok, State} = eproc_fsm_attr:transition_start(0, 0, [some], State),
     {ok, [Action], _State2} = eproc_fsm_attr:transition_end(0, 0, [], State),
     ?assertMatch(#attr_action{action = {remove, {scope, []}}}, Action),
-    ?assertEqual(1, meck:num_calls(eproc_fsm_attr__void, removed, '_')),
+    ?assertEqual(1, meck:num_calls(eproc_fsm_attr__void, handle_removed, '_')),
     ?assert(meck:validate([eproc_fsm_attr__void])),
     meck:unload([eproc_fsm_attr__void]).
 
@@ -95,13 +96,13 @@ action_success_test() ->
     Mod = eproc_fsm_attr__void,
     meck:new(Mod),
     meck:expect(Mod, init, fun([A, B]) -> {ok, [{A, undefined}, {B, undefined}]} end),
-    meck:expect(Mod, updated, fun
+    meck:expect(Mod, handle_updated, fun
         (#attribute{name = a, data = 100}, undefined, del, undefined) -> {remove, deleted};
         (#attribute{name = b, data = 200}, undefined, inc, undefined) -> {update, 201, undefined}
     end),
-    meck:expect(Mod, created, fun
-        (c,         set, []) -> {create, 0, undefined};
-        (undefined, set, []) -> {create, 0, undefined}
+    meck:expect(Mod, handle_created, fun
+        (#attribute{name = c        }, set, []) -> {create, 0, undefined};
+        (#attribute{name = undefined}, set, []) -> {create, 0, undefined}
     end),
     {ok, State} = eproc_fsm_attr:init([], 2, [
         #attribute{attr_id = 1, module = Mod, name = a, data = 100, scope = []},
@@ -119,11 +120,47 @@ action_success_test() ->
     ?assertEqual(1, length([any || #attr_action{attr_id = 2, action = {update, [], 201}} <- Actions])),
     ?assertEqual(1, length([any || #attr_action{action = {create, c,         [], 0}} <- Actions])),
     ?assertEqual(2, length([any || #attr_action{action = {create, undefined, [], 0}} <- Actions])),
-    ?assertEqual(2, meck:num_calls(Mod, updated, '_')),
-    ?assertEqual(3, meck:num_calls(Mod, created, '_')),
+    ?assertEqual(2, meck:num_calls(Mod, handle_updated, '_')),
+    ?assertEqual(3, meck:num_calls(Mod, handle_created, '_')),
     ?assert(meck:validate([Mod])),
     meck:unload([Mod]).
 
 
-% TODO: Update/remove unnamed attr.
-% TODO: Scope resolution.
+%%
+%%  Update for unnamed attributes should fail.
+%%
+action_update_unnamed_test() ->
+    Mod = eproc_fsm_attr__void,
+    meck:new(Mod),
+    meck:expect(Mod, init, fun([A, B]) -> {ok, [{A, undefined}, {B, undefined}]} end),
+    {ok, State} = eproc_fsm_attr:init([], 2, [
+        #attribute{attr_id = 1, module = Mod, scope = []},
+        #attribute{attr_id = 2, module = Mod, scope = []}
+    ]),
+    {ok, State} = eproc_fsm_attr:transition_start(0, 0, [some], State),
+    ?assertEqual(ok, eproc_fsm_attr:action(Mod, undefined, any)),
+    ?assertError(function_clause, eproc_fsm_attr:transition_end(0, 0, [], State)),
+    ?assert(meck:validate([Mod])),
+    meck:unload([Mod]).
+
+
+%%
+%%  Check event handling.
+%%
+event_test() ->
+    Mod = eproc_fsm_attr__void,
+    meck:new(Mod),
+    meck:expect(Mod, init, fun ([A]) -> {ok, [{A, undefined}]} end),
+    meck:expect(Mod, handle_event, fun (#attribute{attr_id = 1}, undefined, my_event) -> ok end),
+    {ok, State} = eproc_fsm_attr:init([], 2, [
+        #attribute{attr_id = 1, module = Mod, scope = []}
+    ]),
+    Event1 = eproc_fsm_attr:make_event(Mod, 1, my_event),
+    Event2 = any_message,
+    ?assertEqual({ok, State}, eproc_fsm_attr:event(Event1, State)),
+    ?assertEqual(unknown,     eproc_fsm_attr:event(Event2, State)),
+    ?assertEqual(1, meck:num_calls(Mod, handle_event, '_')),
+    ?assert(meck:validate([Mod])),
+    meck:unload([Mod]).
+
+
