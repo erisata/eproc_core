@@ -961,9 +961,9 @@ handle_info({'eproc_fsm$start', FsmRef, StartOptions}, State) ->
 %%
 handle_info(Event, State = #state{attrs = Attrs}) ->
     case eproc_fsm_attr:event(Event, Attrs) of
-        {ok, NewAttrs} ->
+        {handled, NewAttrs} ->
             {noreply, State#state{attrs = NewAttrs}};
-        {ok, NewAttrs, Trigger} ->
+        {trigger, NewAttrs, Trigger, AttrAction} ->
             NewState = State#state{attrs = NewAttrs},
             % TODO: do a transition.
             {noreply, NewState};

@@ -16,20 +16,9 @@
 
 %%
 %%  This module handles generic part of FSM attributes.
-%%  FSM attribute is a mechanism for extending FSM at system level.
-%%  Several extensions are provided within `eproc_core`, but other
+%%  FSM attribute is a mechanism for extending FSM at a system level.
+%%  Several extensions are provided within `eproc_core`, and other
 %%  implementations can also be provided by an user.
-%%
-%%  TODO:
-%%  API for the eproc_fsm.
-%%  API for an attribute manager (for attaching attrs to FSM).
-%%  SPI for the attribute manager (for handling attached attrs).
-%%
-%%  Differentiate between:
-%%    * Attributes.
-%%    * Attribute actions.
-%%
-%%  TODO: Define this while implementing `eproc_timer` module!!!
 %%
 -module(eproc_fsm_attr).
 -compile([{parse_transform, lager_transform}]).
@@ -126,12 +115,16 @@
         AttrState   :: term(),
         Event       :: term()
     ) ->
-        {ok, NewAttrState} |
-        {ok, NewAttrState, Trigger} |
+        {handled, NewAttrState} |
+        {trigger, Trigger, Action} |
         {error, Reason}
     when
         NewAttrState :: term(),
+        NewAttrData :: term(),
         Trigger :: trigger(),
+        Action ::
+            {update, NewAttrData, NewAttrState} |
+            {remove, Reason},
         Reason :: term().
 
 
@@ -219,22 +212,21 @@ event({'eproc_fsm_attr$event', AttrId, Event}, State = #state{attrs = AttrCtxs})
     case lists:keyfind(AttrId, #attr_ctx.attr_id, AttrCtxs) of
         false ->
             lager:debug("Ignoring attribute event with unknown id=~p", [attr_id]),
-            {ok, State};
+            {handled, State};
         AttrCtx ->
-            #attr_ctx{attr = Attribute, state = AttrState} = AttrCtx,
-            #attribute{module = Module} = Attribute,
-            UpdateAttrStateFun = fun (NewAttrState) ->
-                NewAttrCtx = AttrCtx#attr_ctx{state = NewAttrState},
-                NewAttrCtxs = lists:keyreplace(AttrId, #attr_ctx.attr_id, AttrCtxs, NewAttrCtx),
-                State#state{attrs = NewAttrCtxs}
-            end,
-            case Module:handle_event(Attribute, AttrState, Event) of
-                {ok, NewAttrState} ->
-                    {ok, UpdateAttrStateFun(NewAttrState)};
-                {ok, NewAttrState, Trigger} ->
-                    {ok, UpdateAttrStateFun(NewAttrState), Trigger};
-                {error, Reason} ->
-                    erlang:throw({attr_event_failed, Reason})
+            case process_event(AttrCtx, Event) of
+                {handled, NewAttrCtx} ->
+                    NewAttrCtxs = lists:keyreplace(AttrId, #attr_ctx.attr_id, AttrCtxs, NewAttrCtx),
+                    NewState = State#state{attrs = NewAttrCtxs},
+                    {handled, NewState};
+                {trigger, removed, Trigger, AttrAction} ->
+                    NewAttrCtxs = lists:keydelete(AttrId, #attr_ctx.attr_id, AttrCtxs),
+                    NewState = State#state{attrs = NewAttrCtxs},
+                    {trigger, NewState, Trigger, AttrAction};
+                {trigger, NewAttrCtx, Trigger, AttrAction} ->
+                    NewAttrCtxs = lists:keyreplace(AttrId, #attr_ctx.attr_id, AttrCtxs, NewAttrCtx),
+                    NewState = State#state{attrs = NewAttrCtxs},
+                    {trigger, NewState, Trigger, AttrAction}
             end
     end;
 
@@ -394,6 +386,39 @@ perform_cleanup(AttrCtx, {SName, AttrCtxs, Actions}) ->
                 {error, Reason} ->
                     erlang:throw({attr_cleanup_failed, Reason})
             end
+    end.
+
+
+%%
+%%
+%%
+process_event(AttrCtx, Event) ->
+    #attr_ctx{attr = Attribute, state = AttrState} = AttrCtx,
+    #attribute{attr_id = AttrId, module = Module, scope = Scope} = Attribute,
+    case Module:handle_event(Attribute, AttrState, Event) of
+        {handled, NewAttrState} ->
+            NewAttrCtx = AttrCtx#attr_ctx{state = NewAttrState},
+            {handled, NewAttrCtx};
+        {trigger, Trigger, {remove, Reason}} ->
+            AttrAction = #attr_action{
+                module = Module,
+                attr_id = AttrId,
+                action = {remove, {user, Reason}}
+            },
+            {trigger, removed, Trigger, AttrAction};
+        {trigger, Trigger, {update, NewAttrData, NewAttrState}} ->
+            NewAttrCtx = AttrCtx#attr_ctx{
+                attr = Attribute#attribute{data = NewAttrData},
+                state = NewAttrState
+            },
+            AttrAction = #attr_action{
+                module = Module,
+                attr_id = AttrId,
+                action = {update, Scope, NewAttrData}
+            },
+            {trigger, NewAttrCtx, Trigger, AttrAction};
+        {error, Reason} ->
+            erlang:throw({attr_event_failed, Reason})
     end.
 
 
