@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013 Robus, Ltd.
+%| Copyright 2013-2014 Erisata, UAB (Ltd.)
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -145,7 +145,7 @@ get_instance(_StoreArgs, {inst, InstId}, _Query) ->
             {error, not_found};
         [Instance] ->
             % TODO: how about transitions ?
-            % Transitions = [],   
+            % Transitions = [],
             % LoadedInstance = Instance#instance{
                 % transitions = Transitions
             % },
@@ -154,8 +154,8 @@ get_instance(_StoreArgs, {inst, InstId}, _Query) ->
 
 get_instance(_StoreArgs, {name, _Name}, _Query) ->
     {error, not_implemented}.   % TODO
-    
-    
+
+
 
 %% =============================================================================
 %%  Internal functions.

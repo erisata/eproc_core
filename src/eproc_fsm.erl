@@ -151,25 +151,9 @@
 
 
 
-%-record(inst_key, { % TODO
-%    key,
-%    scope
-%}).
-%-record(inst_timer, { % TODO
-%    from,
-%    duration,
-%    event
-%}).
-%-record(inst_prop, { % TODO
-%    name,
-%    value
-%}).
-
-
 -type name() :: {via, Registry :: module(), InstId :: inst_id()}.
 -opaque id()  :: integer().
 -opaque group() :: integer().
--type prop_elem() :: list() | binary() | integer().
 
 -type timer_name() :: term().
 
@@ -245,16 +229,6 @@
 %%  #state{} record in the user module.
 %%
 -type state_data() :: term().
-
-%%
-%%  TODO: Describe.
-%%
--type state_effect() ::
-    {name, Name :: term()} |
-    {key, Key :: term(), Scope :: state_scope()} |  % Options are left as undocumented feature.
-    {prop, PropName :: prop_elem(), PropValue :: prop_elem()} |
-    {timer, TimerName :: term(), After :: integer(), Event :: state_event(), Scope :: state_scope()} |
-    {timer, TimerName :: term(), cancel}.
 
 
 %% =============================================================================
@@ -350,16 +324,15 @@
 %%  If the function was invoked with `{event, Message}` or `{timer, Timer, Message}`,
 %%  the function should return one of the following:
 %%
-%%  `{same_state, NewStateData, Effects}`
+%%  `{same_state, NewStateData}`
 %%  :   to indicate, that transition is to the the same state. In this case, corresponding
-%%      state exit and entry callbacks will not be invoked. The term Effects is optional (in all cases).
-%%  `{next_state, NextStateName, NewStateData, Effects}`
+%%      state exit and entry callbacks will not be invoked.
+%%  `{next_state, NextStateName, NewStateData}`
 %%  :   indicates a transition to the next state. Next state can also be the current state,
 %%      but in this case state exit/entry callbacks will be invoked anyway.
-%%  `{final_state, FinalStateName, NewStateData, Effects}`
+%%  `{final_state, FinalStateName, NewStateData}`
 %%  :   indicates a transition to the final state of the FSM. I.e. FSM is terminated after
-%%      this transition. Not all effects are meaningfull in the case of final state, but
-%%      assignment of keys or properties can be useful.
+%%      this transition.
 %%
 %%  In the case of synchronous events `{sync, From, Message}`, the callback can return all the
 %%  responses listed above, if reply to the caller was sent explicitly using function `reply/2`.
@@ -368,7 +341,7 @@
 %%  the same as for the `same_state`, `next_state` and `final_state` correspondingly.
 %%
 %%  If the callback was invoked to handle state exit or entry, the response term should be
-%%  `{ok, NewStateData}` or `{ok, NewStateData, Effects}`.
+%%  `{ok, NewStateData}`.
 %%
 %%  The state exit action is not invoked for the initial transition. The initial transition
 %%  can be recognized by the state entry action, it will be invoked with `[]` as a PrevStateName
@@ -385,19 +358,12 @@
         StateData   :: state_data()
     ) ->
         {same_state, NewStateData} |
-        {same_state, NewStateData, Effects} |
         {next_state, NextStateName, NewStateData} |
-        {next_state, NextStateName, NewStateData, Effects} |
         {final_state, FinalStateName, NewStateData} |
-        {final_state, FinalStateName, NewStateData, Effects} |
         {reply_same, Reply, NewStateData} |
-        {reply_same, Reply, NewStateData, Effects} |
         {reply_next, Reply, NextStateName, NewStateData} |
-        {reply_next, Reply, NextStateName, NewStateData, Effects} |
         {reply_final, Reply, FinalStateName, NewStateData} |
-        {reply_final, Reply, FinalStateName, NewStateData, Effects} |
-        {ok, NewStateData} |
-        {ok, NewStateData, Effects}
+        {ok, NewStateData}
     when
         From    :: term(),
         Timer   :: timer_name(),
@@ -405,8 +371,7 @@
         NewStateData    :: state_data(),
         NextStateName   :: state_name(),
         PrevStateName   :: state_name(),
-        FinalStateName  :: state_name(),
-        Effects         :: [state_effect()].
+        FinalStateName  :: state_name().
 
 
 %%
@@ -1245,7 +1210,7 @@ reload_state(Instance, Transition) ->
         number = LastTrnNr,
         sname  = LastSName,
         sdata  = LastSData,
-        attr_id = LastAttrId,
+        attr_last_id = LastAttrId,
         attrs_active = AttrsActive
     } = Transition,
     {ok, LastTrnNr, LastSName, LastSData, LastAttrId, AttrsActive}.
@@ -1265,8 +1230,7 @@ reload_state(Instance, Transition) ->
 %    } = Transition,
 %    #inst_suspension{
 %        upd_sname = UpdSName,
-%        upd_sdata = UpdSData,
-%        upd_effects = UpdEffects
+%        upd_sdata = UpdSData
 %    } = Update,
 %    NewTrnNr = LastTrnNr + 1,
 %    NewTransition = #transition{
@@ -1276,8 +1240,7 @@ reload_state(Instance, Transition) ->
 %        sdata = UpdSData,
 %        timestamp = eproc:now(),
 %        duration = 0,
-%        trigger = todo, % TODO,
-%        effects = todo  % TODO
+%        trigger = todo % TODO,
 %    },
 %    {ok, NewTrnNr} = eproc_store:add_transition(Store, NewTransition),
 %    {ok, UpgradedSName, UpgradedSData} = upgrade_state(Instance, UpdSName, UpdSData),
@@ -1295,39 +1258,6 @@ upgrade_state(#instance{module = Module}, SName, SData) ->
             lager:warning("Runtime field is returned from the code_change/4, but it will be overriden in init/2."),
             {ok, NextSName, NewSData}
     end.
-
-
-%%
-%%
-%%
-handle_effects(_Actions, State) ->
-    % TODO: Implement, call code_change.
-    {ok, State}.
-
-
-%%
-%%
-%%
-cleanup_keys(Keys, _SName) ->
-    % TODO: Implement.
-    {ok, Keys}.
-
-
-%%
-%%
-%%
-cleanup_timers(Timers, _SName) ->
-    % TODO: Implement.
-    {ok, Timers}.
-
-
-%%
-%%
-%%
-setup_timers(Timers) ->
-    % TODO: Implement.
-    {ok, Timers}.
-
 
 
 %%
@@ -1366,26 +1296,4 @@ state_in_scope(_State, _Scope) ->
 %% =============================================================================
 
 -ifdef(TEST).
-
-state_in_scope_test_() ->
-    [
-        ?_assert(true =:= state_in_scope([], [])),
-        ?_assert(true =:= state_in_scope([a], [])),
-        ?_assert(true =:= state_in_scope([a], [a])),
-        ?_assert(true =:= state_in_scope([a, b], [a])),
-        ?_assert(true =:= state_in_scope([a, b], [a, b])),
-        ?_assert(true =:= state_in_scope([a, b], ['_', b])),
-        ?_assert(true =:= state_in_scope([{a, [b], [c]}], [a])),
-        ?_assert(true =:= state_in_scope([{a, [b], [c]}], [{a, [], []}])),
-        ?_assert(true =:= state_in_scope([{a, [b], [c]}], [{a, '_', '_'}])),
-        ?_assert(true =:= state_in_scope([{a, [b], [c]}], [{a, [b], '_'}])),
-        ?_assert(false =:= state_in_scope([], [a])),
-        ?_assert(false =:= state_in_scope([a], [b])),
-        ?_assert(false =:= state_in_scope([{a, [b], [c]}], [b])),
-        ?_assert(false =:= state_in_scope([{a, [b], [c]}], [{b}])),
-        ?_assert(false =:= state_in_scope([{a, [b], [c]}], [{b, []}])),
-        ?_assert(false =:= state_in_scope([{a, [b], [c]}], [{b, [], []}])),
-        ?_assert(false =:= state_in_scope([{a, [b], [c]}], [{a, [c], []}]))
-    ].
-
 -endif.

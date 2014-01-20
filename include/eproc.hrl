@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013 Robus, Ltd.
+%| Copyright 2013-2014 Erisata, UAB (Ltd.)
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -183,7 +183,7 @@
     duration    :: duration(),  %% Duration of the transition (in microseconds).
     trigger     :: trigger(),   %% Event, initiated the transition.
     effects     :: [effect()],  %% Effects made in this transition. TODO: Remove?
-    attr_id     :: integer(),                           %% Last action id.
+    attr_last_id    :: integer(),                       %% Last action id.
     attr_actions    :: [#attr_action{}],                %% All attribute actions performed in this transition.
     attrs_active    :: [inst_attr()] | undefined,       %% Active props, keys and timers at the target state, Calculated field.
     suspensions     :: #inst_suspension{} | undefined   %% Filled, if the instance was suspended and its state updated.

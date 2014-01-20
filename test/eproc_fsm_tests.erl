@@ -37,6 +37,31 @@ application_setup() ->
 
 
 %%
+%%  Check if scope handing works.
+%%
+state_in_scope_test_() ->
+    [
+        ?_assert(true =:= state_in_scope([], [])),
+        ?_assert(true =:= state_in_scope([a], [])),
+        ?_assert(true =:= state_in_scope([a], [a])),
+        ?_assert(true =:= state_in_scope([a, b], [a])),
+        ?_assert(true =:= state_in_scope([a, b], [a, b])),
+        ?_assert(true =:= state_in_scope([a, b], ['_', b])),
+        ?_assert(true =:= state_in_scope([{a, [b], [c]}], [a])),
+        ?_assert(true =:= state_in_scope([{a, [b], [c]}], [{a, [], []}])),
+        ?_assert(true =:= state_in_scope([{a, [b], [c]}], [{a, '_', '_'}])),
+        ?_assert(true =:= state_in_scope([{a, [b], [c]}], [{a, [b], '_'}])),
+        ?_assert(false =:= state_in_scope([], [a])),
+        ?_assert(false =:= state_in_scope([a], [b])),
+        ?_assert(false =:= state_in_scope([{a, [b], [c]}], [b])),
+        ?_assert(false =:= state_in_scope([{a, [b], [c]}], [{b}])),
+        ?_assert(false =:= state_in_scope([{a, [b], [c]}], [{b, []}])),
+        ?_assert(false =:= state_in_scope([{a, [b], [c]}], [{b, [], []}])),
+        ?_assert(false =:= state_in_scope([{a, [b], [c]}], [{a, [c], []}]))
+    ].
+
+
+%%
 %%
 %%
 fsm_test() ->
@@ -56,14 +81,14 @@ create_test() ->
     application_setup(),
     StoreRef = {eproc_store_ets, []},
     ok = meck:new(eproc_fsm__void, [non_strict, passthrough]),
-    ok = meck:expect(eproc_fsm__void, init, 
-        fun(Args) -> 
+    ok = meck:expect(eproc_fsm__void, init,
+        fun(Args) ->
             ?debugFmt("~n [debug] mecked function invoked. [Args=~p] ~n", [Args]),
-            meck:passthrough([Args]) 
+            meck:passthrough([Args])
         end),
     %
     % create test proceses
-    {ok, {inst, _} = VoidIID} = eproc_fsm:create(eproc_fsm__void, {}, 
+    {ok, {inst, _} = VoidIID} = eproc_fsm:create(eproc_fsm__void, {},
         [{group, abc}, {name, void_test}]),
     %{ok, {inst, _} = SeqIID}  = eproc_fsm:create(eproc_fsm__seq,  {}, []),
     %
