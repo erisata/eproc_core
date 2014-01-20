@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013-2014 Erisata, Ltd.
+%| Copyright 2013-2014 Erisata, UAB (Ltd.)
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -15,12 +15,25 @@
 %\--------------------------------------------------------------------
 
 %%
-%%  TODO: Description.
+%%  Message router is used to map incoming messages to FSM events and
+%%  to route them to the corresponding FSM instances.
+%%
+%%  An FSM whos messages should be routed using this router, should
+%%  provide keys, that uniquelly identified an FSM instance. Function
+%%  `add_key/2` should be used by FSM implementations to attach keys.
+%%  Keys are maintained as FSM attributes and can be limited to
+%%  particular scope.
 %%
 -module(eproc_router).
 -behaviour(eproc_fsm_attr).
 -export([add_key/2]).
--export([started/1, created/3, updated/2, removed/1]).
+-export([init/1, handle_created/3, handle_updated/4, handle_removed/2, handle_event/3]).
+-include("eproc.hrl").
+
+
+-record(data, {
+    key :: term()
+}).
 
 
 %% =============================================================================
@@ -31,7 +44,9 @@
 %%
 %%
 add_key(Key, Scope) ->
-    eproc_fsm_attr:action(?MODULE, undefined, {key, Key}, Scope).
+    Name = undefined,
+    Action = {key, Key},
+    eproc_fsm_attr:action(?MODULE, Name, Action, Scope).
 
 
 
@@ -42,33 +57,43 @@ add_key(Key, Scope) ->
 %%
 %%  FSM started.
 %%
-started(ActiveAttrs) ->
-    {error, undefined}. % TODO
+init(ActiveAttrs) ->
+    {ok, [ {A, undefined} || A <- ActiveAttrs ]}.
 
 
 %%
 %%  Attribute created.
 %%
-created(Name, {key, Key}, _Scope) ->
-    {error, undefined}. % TODO
+handle_created(_Attribute, {key, Key}, _Scope) ->
+    AttrData = #data{key = Key},
+    AttrState = undefined,
+    {create, AttrData, AttrState}.
 
 
 %%
-%%  Attribute updated by user.
+%%  Keys cannot be updated.
 %%
-updated(Attribute, {key, Key}) ->
-    {error, undefined}. % TODO
+handle_updated(_Attribute, _AttrState, {key, _Key}, _Scope) ->
+    {error, keys_non_updateable}.
 
 
 %%
-%%  Attribute removed by `eproc_fsm`.
+%%  Attributes should never be removed.
 %%
-removed(_Attribute) ->
-    {error, undefined}. % TODO
+handle_removed(_Attribute, _AttrState) ->
+    ok.
+
+
+%%
+%%  Events are not used for keywords.
+%%
+handle_event(_Attribute, _AttrState, Event) ->
+    throw({unknown_event, Event}).
 
 
 
 %% =============================================================================
 %%  Internal functions.
 %% =============================================================================
+
 
