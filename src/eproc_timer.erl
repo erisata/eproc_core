@@ -78,7 +78,7 @@ set(After, Event) ->
 %%
 %%
 cancel(Name) ->
-    eproc_fsm_attr:set(?MODULE, Name, {timer, remove}).
+    eproc_fsm_attr:action(?MODULE, Name, {timer, remove}).
 
 
 
@@ -104,7 +104,7 @@ init(ActiveAttrs) ->
 handle_created(#attribute{attr_id = AttrId}, {timer, After, Event}, _Scope) ->
     Data = #data{start = erlang:now(), delay = After, event = Event},
     {ok, State} = start_timer(AttrId, Data),
-    {ok, Data, State};
+    {create, Data, State};
 
 handle_created(_Attribute, {timer, remove}, _Scope) ->
     {error, {unknown_timer}}.
@@ -140,16 +140,17 @@ handle_event(Attribute, _State, long_delay) ->
         attr_id = AttrId,
         data = AttrData
     } = Attribute,
-    {ok, _NewState} = start_timer(AttrId, AttrData);
+    {ok, NewState} = start_timer(AttrId, AttrData),
+    {handled, NewState};
 
-handle_event(Attribute, State, fired) ->
+handle_event(Attribute, _State, fired) ->
     #attribute{
         name = Name,
         data = #data{event = Event}
     } = Attribute,
-    NewState = State#state{ref = undefined},
     Trigger = {timer, Name, Event},
-    {ok, NewState, Trigger}.
+    Action = {remove, fired},
+    {trigger, Trigger, Action}.
 
 
 

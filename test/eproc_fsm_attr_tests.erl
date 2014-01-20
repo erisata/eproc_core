@@ -160,9 +160,9 @@ event_test() ->
         #attribute{attr_id = 1, module = Mod, scope = []}
     ]),
     Event0 = any_message,
-    Event1 = eproc_fsm_attr:make_event(Mod, 1, my_event1),
-    Event2 = eproc_fsm_attr:make_event(Mod, 1, my_event2),
-    Event3 = eproc_fsm_attr:make_event(Mod, 1, my_event3),
+    {ok, Event1} = eproc_fsm_attr:make_event(Mod, 1, my_event1),
+    {ok, Event2} = eproc_fsm_attr:make_event(Mod, 1, my_event2),
+    {ok, Event3} = eproc_fsm_attr:make_event(Mod, 1, my_event3),
     ?assertEqual(unknown, eproc_fsm_attr:event(Event0, State)),
     {handled, State1}                = eproc_fsm_attr:event(Event1, State),
     {trigger, State2, trg2, Action2} = eproc_fsm_attr:event(Event2, State),

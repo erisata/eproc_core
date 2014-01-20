@@ -155,7 +155,7 @@ action(Module, Name, Action) ->
 %%  as a message sent to the particular attribute and its handler.
 %%
 make_event(_Module, AttrId, Event) ->
-    {'eproc_fsm_attr$event', AttrId, Event}.
+    {ok, {'eproc_fsm_attr$event', AttrId, Event}}.
 
 
 
