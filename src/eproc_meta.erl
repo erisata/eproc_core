@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013-2014 Erisata, Ltd.
+%| Copyright 2013-2014 Erisata, UAB (Ltd.)
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -15,12 +15,25 @@
 %\--------------------------------------------------------------------
 
 %%
-%%  TODO: Description.
+%%  This module is responsible for maintaining FSM metadata. For now,
+%%  the metadata is maintained as keywords, that can be attached to
+%%  an FSM instance.
+%%
+%%  Keywords can be used to find FSM instances or caregorize them.
+%%  Keywords don't need to be unique, but required to be binaries.
+%%  They are maintained as FSM attributes.
 %%
 -module(eproc_meta).
 -behaviour(eproc_fsm_attr).
 -export([add_keyword/2]).
--export([started/1, created/3, updated/2, removed/1]).
+-export([init/1, handle_created/3, handle_updated/4, handle_removed/2, handle_event/3]).
+-include("eproc.hrl").
+
+
+-record(data, {
+    keyword :: binary(),
+    type    :: binary()
+}).
 
 
 %% =============================================================================
@@ -30,8 +43,9 @@
 %%
 %%
 %%
-add_keyword(Value, Type) ->
-    eproc_fsm_attr:action(?MODULE, undefined, {keyword, Value, Type}, []).
+add_keyword(Keyword, Type) ->
+    Name = Action = {keyword, Keyword, Type},
+    eproc_fsm_attr:action(?MODULE, Name, Action, []).
 
 
 
@@ -42,29 +56,40 @@ add_keyword(Value, Type) ->
 %%
 %%  FSM started.
 %%
-started(ActiveAttrs) ->
-    {error, undefined}. % TODO
+init(ActiveAttrs) ->
+    {ok, [ {A, undefined} || A <- ActiveAttrs ]}.
 
 
 %%
 %%  Attribute created.
 %%
-created(Name, {keyword, Value, Type}, _Scope) ->
-    {error, undefined}. % TODO
+handle_created(_Attribute, {keyword, Keyword, Type}, _Scope) ->
+    AttrData = #data{keyword = Keyword, type = Type},
+    AttrState = undefined,
+    {create, AttrData, AttrState}.
 
 
 %%
-%%  Attribute updated by user.
+%%  A keyword can only be updated to the same value.
 %%
-updated(_Attribute, _Action) ->
-    {error, undefined}.
+handle_updated(Attribute, AttrState, {keyword, Keyword, Type}, _Scope) ->
+    #attribute{data = AttrData} = Attribute,
+    AttrData = #data{keyword = Keyword, type = Type},
+    {update, AttrData, AttrState}.
 
 
 %%
-%%  Attribute removed by `eproc_fsm`.
+%%  Attributes should never be removed.
 %%
-removed(_Attribute) ->
-    {error, undefined}.
+handle_removed(_Attribute, _AttrState) ->
+    {error, keywords_non_removable}.
+
+
+%%
+%%  Events are not used for keywords.
+%%
+handle_event(_Attribute, _AttrState, Event) ->
+    throw({unknown_event, Event}).
 
 
 
