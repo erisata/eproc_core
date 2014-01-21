@@ -41,12 +41,15 @@
 %% =============================================================================
 
 %%
-%%
+%%  TODO: Spec and docs.
 %%
 add_key(Key, Scope) ->
     Name = undefined,
     Action = {key, Key},
     eproc_fsm_attr:action(?MODULE, Name, Action, Scope).
+
+
+%%  TODO: route function, corresponding behaviour and generic functionality.
 
 
 
@@ -65,6 +68,7 @@ init(ActiveAttrs) ->
 %%  Attribute created.
 %%
 handle_created(_Attribute, {key, Key}, _Scope) ->
+    % TODO: Register key synchronously.
     AttrData = #data{key = Key},
     AttrState = undefined,
     {create, AttrData, AttrState}.

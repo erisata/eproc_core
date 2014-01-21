@@ -63,7 +63,7 @@ create_test() ->
     application_setup(),
     {ok, StoreRef} = eproc_store:ref(),
     ok = meck:new(eproc_fsm__void, [non_strict, passthrough]),
-    {ok, {inst, _} = VoidIID1} = eproc_fsm:create(eproc_fsm__void, {}, [{group, 17}, {name, create_test}]),
+    {ok, {inst, _} = VoidIID1} = eproc_fsm:create(eproc_fsm__void, {}, [{group, 17}, {name, create_test}, {custom1, c1}]),
     {ok, {inst, _} = VoidIID2} = eproc_fsm:create(eproc_fsm__void, {}, []),
     {ok, Instance1} = eproc_store:get_instance(StoreRef, VoidIID1, []),
     {ok, Instance2} = eproc_store:get_instance(StoreRef, VoidIID2, []),
@@ -73,15 +73,29 @@ create_test() ->
     ?assert(is_integer(Instance2#instance.group)),
     ?assertEqual(create_test, Instance1#instance.name),
     ?assertEqual(undefined,   Instance2#instance.name),
-    %   TODO:
-    %   * Initial state is stored properly.
-    %% ka reiskia "stored properly"?
-    %   * Custom options are stored with the instance.
-    %% kas yra "custom options"?
-    %
+    ?assertEqual([{custom1, c1}], Instance1#instance.opts),
+    ?assertEqual([],              Instance2#instance.opts),
     ?assertEqual(2, meck:num_calls(eproc_fsm__void, init, [{}])),
     ?assert(meck:validate(eproc_fsm__void)),
     ok = meck:unload(eproc_fsm__void).
+
+
+%%
+%%  Check if initial state if stored properly.
+%%
+create_state_test() ->
+    application_setup(),
+    {ok, StoreRef} = eproc_store:ref(),
+    ok = meck:new(eproc_fsm__void),
+    ok = meck:expect(eproc_fsm__void, init, fun ({A, B}) -> {ok, {state, A, B}} end),
+    {ok, IID} = eproc_fsm:create(eproc_fsm__void, {a, b}, []),
+    {ok, Inst} = eproc_store:get_instance(StoreRef, IID, []),
+    ?assertEqual({a, b},        Inst#instance.args),
+    ?assertEqual({state, a, b}, Inst#instance.init),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__void, init, '_')),
+    ?assert(meck:validate(eproc_fsm__void)),
+    ok = meck:unload(eproc_fsm__void).
+
 
 
 %%

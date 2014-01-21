@@ -111,9 +111,7 @@
 %%  Process-side functions.
 %%
 -export([
-    reply/2, add_key_sync/3, add_key/3,
-    add_timer/5, add_timer/4, cancel_timer/2,
-    add_prop/3, set_name/2
+    reply/2
 ]).
 
 
@@ -796,56 +794,6 @@ set_state(Name, NewStateName, NewStateData, Reason) ->
 
 reply(To, Reply) ->
     gen_server:reply(To, Reply).
-
-
-%%
-%%
-%%
-add_key_sync(Key, Scope, Actions) ->
-    % TODO: Register the key to the registry synchronously.
-    [ {key, Key, Scope, [sync]} | Actions ].
-
-
-%%
-%%
-%%
-add_key(Key, Scope, Actions) ->
-    [ {key, Key, Scope} | Actions ].
-
-
-%%
-%%  Creates or modifies a timer.
-%%
-add_timer(Name, After, Event, Scope, Actions) ->
-    [ {timer, Name, After, Event, Scope} | Actions ].
-
-
-%%
-%%
-%%
-add_timer(After, Event, Scope, Actions) ->
-    add_timer(undefined, After, Event, Scope, Actions).
-
-
-%%
-%%  Cancels a timer by name.
-%%
-cancel_timer(Name, Actions) ->
-    [ {timer, Name, cancel} | Actions ].
-
-
-%%
-%%
-%%
-add_prop(Name, Value, Actions) ->
-    [ {prop, Name, Value} | Actions].
-
-
-%%
-%%
-%%
-set_name(Name, Actions) ->
-    [ {name, Name} | Actions ].
 
 
 %%
