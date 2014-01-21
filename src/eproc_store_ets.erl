@@ -105,7 +105,7 @@ add_instance(_StoreArgs, Instance = #instance{name = Name, group = Group}) ->
         is_integer(Group) -> Group
     end,
     ResolvedName = case Name of
-        undefined -> InstId;
+        undefined -> undefined;
         _         -> Name
     end,
     true = ets:insert('eproc_store_ets$inst', Instance#instance{

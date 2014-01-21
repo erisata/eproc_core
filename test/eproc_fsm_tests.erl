@@ -57,57 +57,32 @@ state_in_scope_test_() ->
 
 
 %%
+%%  Test for eproc_fsm:create(Module, Args, Options)
 %%
-%%
-fsm_test() ->
-    %Event = a,
-    %Store = undefined,
-    %Registry = undefined,
-    %{ok, InstanceId, ProcessId} = eproc_fsm_void:start_link(Event, Store, Registry),
-    %TODO: Asserts
-    ok.
-
-%%
-%% test for eproc_fsm:create(Module, Args, Options)
-%% todo: description
 create_test() ->
-    ?debugFmt("~n [debug] create_test START. ~n", []),
-    % initialization
     application_setup(),
-    StoreRef = {eproc_store_ets, []},
+    {ok, StoreRef} = eproc_store:ref(),
     ok = meck:new(eproc_fsm__void, [non_strict, passthrough]),
-    ok = meck:expect(eproc_fsm__void, init,
-        fun(Args) ->
-            ?debugFmt("~n [debug] mecked function invoked. [Args=~p] ~n", [Args]),
-            meck:passthrough([Args])
-        end),
-    %
-    % create test proceses
-    {ok, {inst, _} = VoidIID} = eproc_fsm:create(eproc_fsm__void, {}, [{group, 17}, {name, void_test}]),
-    %{ok, {inst, _} = SeqIID}  = eproc_fsm:create(eproc_fsm__seq,  {}, []),
-    %
-    % asserts
-    %   * Instance created.
-    {ok, Instance} = eproc_store:get_instance(StoreRef, VoidIID, []),
-    ?debugFmt("~n [debug] Instance: ~p ~n", [Instance]),
-    %   * Instance is in running state.
-    ?assertEqual(running, Instance#instance.status),
-    %   * Instance group assigned properly (new and existing group).
-    ?assertEqual(17, Instance#instance.group),
-    %   * Instance name assigned properly (with and without name).
-    ?assertEqual(void_test, Instance#instance.name),
-    %
-    % TODO
-    %   * init/1 is invoked.
-    ?assert(meck:validate(eproc_fsm__void)),
-%    ok = meck:unload(eproc_fsm__void),
-    %
+    {ok, {inst, _} = VoidIID1} = eproc_fsm:create(eproc_fsm__void, {}, [{group, 17}, {name, create_test}]),
+    {ok, {inst, _} = VoidIID2} = eproc_fsm:create(eproc_fsm__void, {}, []),
+    {ok, Instance1} = eproc_store:get_instance(StoreRef, VoidIID1, []),
+    {ok, Instance2} = eproc_store:get_instance(StoreRef, VoidIID2, []),
+    ?assertEqual(running, Instance1#instance.status),
+    ?assertEqual(running, Instance2#instance.status),
+    ?assertEqual(17, Instance1#instance.group),
+    ?assert(is_integer(Instance2#instance.group)),
+    ?assertEqual(create_test, Instance1#instance.name),
+    ?assertEqual(undefined,   Instance2#instance.name),
+    %   TODO:
     %   * Initial state is stored properly.
     %% ka reiskia "stored properly"?
     %   * Custom options are stored with the instance.
     %% kas yra "custom options"?
     %
-    ok.
+    ?assertEqual(2, meck:num_calls(eproc_fsm__void, init, [{}])),
+    ?assert(meck:validate(eproc_fsm__void)),
+    ok = meck:unload(eproc_fsm__void).
+
 
 %%
 %%  Check if start_link/2-3 works.
