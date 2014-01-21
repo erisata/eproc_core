@@ -23,7 +23,7 @@
 -behaviour(gen_server).
 -compile([{parse_transform, lager_transform}]).
 -export([start_link/1]).
--export([add_instance/2, load_instance/2, get_instance/3]).
+-export([add_instance/2, add_transition/2, load_instance/2, get_instance/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -include("eproc.hrl").
 
@@ -120,6 +120,13 @@ add_instance(_StoreArgs, Instance = #instance{name = Name, group = Group}) ->
 %%
 %%
 %%
+add_transition(_StoreArgs, _Transition) ->
+    {error, not_implemented}.   % TODO
+
+
+%%
+%%  Loads instance data for runtime.
+%%
 load_instance(_StoreArgs, {inst, InstId}) ->
     case ets:lookup('eproc_store_ets$inst', InstId) of
         [] ->
@@ -132,8 +139,20 @@ load_instance(_StoreArgs, {inst, InstId}) ->
             {ok, LoadedInstance}
     end;
 
-load_instance(_StoreArgs, {name, _Name}) ->
-    {error, not_implemented}.   % TODO
+load_instance(_StoreArgs, {name, undefined}) ->
+    {error, not_found};
+
+load_instance(_StoreArgs, {name, Name}) ->
+    case ets:match_object('eproc_store_ets$inst', #instance{name = Name, _ = '_'}) of
+        [] ->
+            {error, not_found};
+        [Instance] ->
+            Transitions = [],   % TODO
+            LoadedInstance = Instance#instance{
+                transitions = Transitions
+            },
+            {ok, LoadedInstance}
+    end.
 
 
 %%

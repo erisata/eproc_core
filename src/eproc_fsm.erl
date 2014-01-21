@@ -865,7 +865,8 @@ handle_info({'eproc_fsm$start', FsmRef, StartOptions}, State) ->
     case handle_start(FsmRef, StartOptions, State) of
         {online, NewState} ->
             {noreply, NewState};
-        offline ->
+        {offline, InstId} ->
+            eproc_restart:cleanup({?MODULE, InstId}),
             {stop, normal, State}
     end;
 
@@ -1032,13 +1033,20 @@ handle_create(Module, Args, CreateOpts, CustomOpts) ->
 %%
 handle_start(FsmRef, StartOptions, State = #state{store = Store}) ->
     case eproc_store:load_instance(Store, FsmRef) of
-        {ok, Instance = #instance{status = running}} ->
-            {ok, NewState} = start_loaded(Instance, StartOptions, State),
-            lager:debug("FSM started, ref=~p.", [FsmRef]),
-            {online, NewState};
-        {ok, #instance{status = Status}} ->
+        {ok, Instance = #instance{id = InstId, status = running}} ->
+            case eproc_restart:restarted({?MODULE, InstId}, []) of
+                ok ->
+                    {ok, NewState} = start_loaded(Instance, StartOptions, State),
+                    lager:debug("FSM started, ref=~p.", [FsmRef]),
+                    {online, NewState};
+                fail ->
+                    % TODO: Suspend
+                    lager:notice("Suspending FSM on startup, give up restarting, ref=~p, id=~p.", [FsmRef, InstId]),
+                    {offline, InstId}
+            end;
+        {ok, #instance{id = InstId, status = Status}} ->
             lager:notice("FSM going to offline during startup, ref=~p, status=~p.", [FsmRef, Status]),
-            offline
+            {offline, InstId}
     end.
 
 
@@ -1069,22 +1077,8 @@ start_loaded(Instance, StartOptions, State) ->
     end,
 
     {ok, UpgradedSName, UpgradedSData} = upgrade_state(Instance, LastSName, LastSData),
-
     {ok, AttrState} = eproc_fsm_attr:init(UpgradedSName, LastAttrId, ActiveAttrs),
-
-    %% TODO: Restart on suspend.
-    %Name    = undefined,   % TODO
-    %Props   = undefined,   % TODO
-    %Keys    = undefined,   % TODO
-    %Timers  = undefined,   % TODO
-
     {ok, LastSDataWithRT, RTField, RTDefault} = call_init_runtime(UpgradedSName, UpgradedSData, Module),
-
-    % TODO: Load them properly
-    %{ok, CleanedKeys} = cleanup_keys(Keys, UpgradedSName),
-    %{ok, CleanedTimers} = cleanup_timers(Timers, UpgradedSName),
-
-    %{ok, SetupedTimers} = setup_timers(CleanedTimers),
 
     NewState = State#state{
         inst_id = InstId,

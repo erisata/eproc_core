@@ -30,6 +30,14 @@ application_setup() ->
     application:set_env(eproc_core, registry, {eproc_registry_gproc, []}),
     application:ensure_all_started(eproc_core).
 
+%%
+%%
+%%
+unlink_kill(PID) ->
+    true = unlink(PID),
+    true = exit(PID, normal),
+    ok.
+
 
 %%
 %%  Check if scope handing works.
@@ -99,12 +107,15 @@ create_state_test() ->
 
 
 %%
-%%  Check if start_link/2-3 works.
+%%  Check if process can be started by instance id.
 %%
-start_link_test() ->
+start_link_by_inst_test() ->
     application_setup(),
+    ok = meck:new(eproc_restart),
+    ok = meck:expect(eproc_restart, restarted, fun (_, _) -> ok end),
     {ok, IID} = eproc_fsm:create(eproc_fsm__void, {}, []),
     {ok, PID} = eproc_fsm:start_link(IID, []),
+    ?assert(is_process_alive(PID)),
     % TODO: Assert the following
     %   * Start by IID,
     %   * Start by Name
@@ -119,5 +130,22 @@ start_link_test() ->
     %   * Check initialization of runtime state in init/2.
     %   * Check if callback code_change/3 is invoked with `state`.
     %   * Check if functions id/0, group/0, name/0 work.
-    ok.
+    ?assert(meck:validate(eproc_restart)),
+    ok = meck:unload(eproc_restart),
+    ok = unlink_kill(PID).
 
+
+%%
+%%  Check if process can be started by name.
+%%
+start_link_by_name_test() ->
+    application_setup(),
+    ok = meck:new(eproc_restart),
+    ok = meck:expect(eproc_restart, restarted, fun (_, _) -> ok end),
+    {ok, IID} = eproc_fsm:create(eproc_fsm__void, {}, [{name, start_link_by_name_test}]),
+    {ok, PID} = eproc_fsm:start_link({name, start_link_by_name_test}, []),
+    ?assertMatch({inst, _}, IID),
+    ?assert(is_process_alive(PID)),
+    ?assert(meck:validate(eproc_restart)),
+    ok = meck:unload(eproc_restart),
+    ok = unlink_kill(PID).
