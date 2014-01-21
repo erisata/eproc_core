@@ -495,7 +495,7 @@
 
 create(Module, Args, Options) ->
     {KnownOpts, UnknownOpts} = proplists:split(Options, [group, name, store]),
-    {ok, InstId} = handle_create(Module, Args, KnownOpts, UnknownOpts),
+    {ok, InstId} = handle_create(Module, Args, lists:append(KnownOpts), UnknownOpts),
     {ok, {inst, InstId}}.
 
 
@@ -979,7 +979,7 @@ resolve_timeout(Options) ->
 %%
 resolve_start_link_opts(Options) ->
     {StartOptions, ProcessOptions} = proplists:split(Options, [restart_delay, register]),
-    {ok, StartOptions, ProcessOptions}.
+    {ok, lists:append(StartOptions), ProcessOptions}.
 
 
 %%

@@ -20,19 +20,14 @@
 -include("eproc.hrl").
 
 
-
+%%
+%%  Configure application for tests.
+%%  See also config in "test/sys.config" and its use in Makefile.
+%%
 application_setup() ->
-    % See config in "test/sys.config" and its use in Makefile.
-    %
-    % application:set_env(kernel, error_logger, {file, "log/eunit_kernel.log"}),
-    % application:set_env(sasl, sasl_error_logger, {file, "log/eunit_sasl.log"}),
-    % application:set_env(lager, handlers, [{lager_file_backend, [{file, "log/eunit_lager.log"}, {level, debug}]}]),
-    % application:set_env(lager, error_logger_redirect, true),
-    %
     application:load(eproc_core),
     application:set_env(eproc_core, store, {eproc_store_ets, []}),
     application:set_env(eproc_core, registry, {eproc_registry_gproc, []}),
-    %
     application:ensure_all_started(eproc_core).
 
 
@@ -41,23 +36,23 @@ application_setup() ->
 %%
 state_in_scope_test_() ->
     [
-        ?_assert(true =:= state_in_scope([], [])),
-        ?_assert(true =:= state_in_scope([a], [])),
-        ?_assert(true =:= state_in_scope([a], [a])),
-        ?_assert(true =:= state_in_scope([a, b], [a])),
-        ?_assert(true =:= state_in_scope([a, b], [a, b])),
-        ?_assert(true =:= state_in_scope([a, b], ['_', b])),
-        ?_assert(true =:= state_in_scope([{a, [b], [c]}], [a])),
-        ?_assert(true =:= state_in_scope([{a, [b], [c]}], [{a, [], []}])),
-        ?_assert(true =:= state_in_scope([{a, [b], [c]}], [{a, '_', '_'}])),
-        ?_assert(true =:= state_in_scope([{a, [b], [c]}], [{a, [b], '_'}])),
-        ?_assert(false =:= state_in_scope([], [a])),
-        ?_assert(false =:= state_in_scope([a], [b])),
-        ?_assert(false =:= state_in_scope([{a, [b], [c]}], [b])),
-        ?_assert(false =:= state_in_scope([{a, [b], [c]}], [{b}])),
-        ?_assert(false =:= state_in_scope([{a, [b], [c]}], [{b, []}])),
-        ?_assert(false =:= state_in_scope([{a, [b], [c]}], [{b, [], []}])),
-        ?_assert(false =:= state_in_scope([{a, [b], [c]}], [{a, [c], []}]))
+        ?_assert(true =:= eproc_fsm:state_in_scope([], [])),
+        ?_assert(true =:= eproc_fsm:state_in_scope([a], [])),
+        ?_assert(true =:= eproc_fsm:state_in_scope([a], [a])),
+        ?_assert(true =:= eproc_fsm:state_in_scope([a, b], [a])),
+        ?_assert(true =:= eproc_fsm:state_in_scope([a, b], [a, b])),
+        ?_assert(true =:= eproc_fsm:state_in_scope([a, b], ['_', b])),
+        ?_assert(true =:= eproc_fsm:state_in_scope([{a, [b], [c]}], [a])),
+        ?_assert(true =:= eproc_fsm:state_in_scope([{a, [b], [c]}], [{a, [], []}])),
+        ?_assert(true =:= eproc_fsm:state_in_scope([{a, [b], [c]}], [{a, '_', '_'}])),
+        ?_assert(true =:= eproc_fsm:state_in_scope([{a, [b], [c]}], [{a, [b], '_'}])),
+        ?_assert(false =:= eproc_fsm:state_in_scope([], [a])),
+        ?_assert(false =:= eproc_fsm:state_in_scope([a], [b])),
+        ?_assert(false =:= eproc_fsm:state_in_scope([{a, [b], [c]}], [b])),
+        ?_assert(false =:= eproc_fsm:state_in_scope([{a, [b], [c]}], [{b}])),
+        ?_assert(false =:= eproc_fsm:state_in_scope([{a, [b], [c]}], [{b, []}])),
+        ?_assert(false =:= eproc_fsm:state_in_scope([{a, [b], [c]}], [{b, [], []}])),
+        ?_assert(false =:= eproc_fsm:state_in_scope([{a, [b], [c]}], [{a, [c], []}]))
     ].
 
 
@@ -88,8 +83,7 @@ create_test() ->
         end),
     %
     % create test proceses
-    {ok, {inst, _} = VoidIID} = eproc_fsm:create(eproc_fsm__void, {},
-        [{group, abc}, {name, void_test}]),
+    {ok, {inst, _} = VoidIID} = eproc_fsm:create(eproc_fsm__void, {}, [{group, 17}, {name, void_test}]),
     %{ok, {inst, _} = SeqIID}  = eproc_fsm:create(eproc_fsm__seq,  {}, []),
     %
     % asserts
@@ -99,7 +93,7 @@ create_test() ->
     %   * Instance is in running state.
     ?assertEqual(running, Instance#instance.status),
     %   * Instance group assigned properly (new and existing group).
-    ?assertEqual(abc, Instance#instance.group),
+    ?assertEqual(17, Instance#instance.group),
     %   * Instance name assigned properly (with and without name).
     ?assertEqual(void_test, Instance#instance.name),
     %

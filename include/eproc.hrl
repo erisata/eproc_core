@@ -44,69 +44,30 @@
     uid :: binary()     %% Username.
 }).
 
+
+%%
+%%  TODO: Docs.
+%%
 -record(user_action, {
     user    :: #user{},
     time    :: timestamp(),
     comment :: binary()
 }).
 
+
 %%
-%%  See `eproc_fsm.erl` for more details.
+%%  TODO: Documentation.
+%%  TODO: Do something with the timer.
 %%
-
--record(inst_prop, {
-    inst_id :: inst_id(),   %% Id of an instance the property belongs to.
-    name    :: binary(),    %% Name of the property.
-    value   :: binary(),    %% Value of the property.
-    from    :: trn_nr()     %% Transition at which the property was set.
-}).
-
--record(inst_key, {
-    inst_id :: inst_id(),   %% Id of an instance the key belongs to.
-    value   :: term(),      %% Value of the key.
-    scope   :: scope(),     %% Scope, in which the key is valid.
-    from    :: trn_nr(),                %% Transition at which the key was set.
-    till    :: trn_nr() | undefined,    %% Transition at which the key was removed.
-    reason  :: (scope | cancel | admin) %% Reason for the key removal.
-}).
-
--record(inst_timer, {
-    inst_id     :: inst_id(),   %% Id of an instance the timer belongs to.
-    name        :: term(),      %% Name of the timer.
-    start       :: timestamp(), %% Time at which the timer was set.
-    duration    :: integer(),   %% Duration of the timer in miliseconds.
-    message     :: term(),      %% Message to be sent to the FSM when the timer fires.
-    scope       :: scope(),     %% Scope in which the key is valid.
-    from        :: trn_nr(),                        %% Transition at which the timer was set.
-    till        :: trn_nr() | undefined,            %% Transition at which the timer was removed.
-    reason      :: (fired | scope | cancel | admin) %% Reason for the timer removal.
-}).
-
--type inst_attr() ::
-    #inst_prop{} |
-    #inst_key{} |
-    #inst_timer{}.
-
 -type trigger() ::
     {event, Src :: party(), Message :: term()} |
     {sync,  Src :: party(), Request :: term(), Response :: term()} |
     {timer, Name :: term(), Message :: term()} |
     {admin, Reason :: term()}.
 
--type effect() ::
-    {event, Dst :: party(), Message :: term()} |                        %% Async message sent.
-    {sync,  Dst :: party(), Request :: term(), Response :: term()} |    %% Synchronous message sent.
-    {name,  Name :: term()} |                                           %% New name set.
-    {prop,  PropName :: term(), PropValue :: term()} |                  %% New property set / existing replaced.
-    {key,   KeyValue :: term(), Scope :: term()} |                      %% New key added.
-    {key,   KeyValue :: term(), Reason :: (scope | cancel | admin)} |   %% Key removed.
-    {timer, TimerName :: term(), After :: integer(), Message :: term(), Scope :: term()} |  %% Timer added.
-    {timer, TimerName :: term(), Reason :: (fired | scope | cancel | admin)}.               %% Timer removed.
-
-
 
 %%
-%%  TODO
+%%  TODO: Docs
 %%
 -record(attribute, {
     inst_id,
@@ -121,8 +82,9 @@
     reason      :: term()                   %%  Reason for the attribute removal.
 }).
 
+
 %%
-%%  TODO
+%%  TODO: Docs
 %%
 -record(attr_action, {
     module,
@@ -137,7 +99,6 @@
 }).
 
 
-
 %%
 %%  Describes a manual state update.
 %%  An administrator can update the process state and its
@@ -149,7 +110,7 @@
 %%  with the `sname` and `sdata` copied from it. This way the suspension
 %%  record will became not active (not referring the last transition).
 %%
-%%  If resume is failing due to updated data or effects, the process
+%%  If resume is failing due to updated data or attribute actions, the process
 %%  is marked as suspended again, but no new suspension record is created.
 %%  The failure will be appended to the list of resume failures ('res_faults').
 %%
@@ -162,7 +123,7 @@
     updated     :: #user_action{} | undefined,  %% Who, when, why updated the state.
     upd_sname   :: term() | undefined,          %% FSM state name set by an administrator.
     upd_sdata   :: term() | undefined,          %% FSM state data set by an administrator.
-    upd_effects :: [effect()] | undefined,      %% Effects made in this transition.
+    upd_attrs   :: [#attr_action{}] | undefined,%% Manual attribute changes.
     resumed     :: [{                           %% Multiple attempts to resume prcess can exist.
         #user_action{},                         %% Who, when, why resumed the FSM.
         FailTime :: timestamp() | undefined,    %% Failure timestamp, if any.
@@ -182,10 +143,9 @@
     timestamp   :: timestamp(), %% Start of the transition.
     duration    :: duration(),  %% Duration of the transition (in microseconds).
     trigger     :: trigger(),   %% Event, initiated the transition.
-    effects     :: [effect()],  %% Effects made in this transition. TODO: Remove?
     attr_last_id    :: integer(),                       %% Last action id.
     attr_actions    :: [#attr_action{}],                %% All attribute actions performed in this transition.
-    attrs_active    :: [inst_attr()] | undefined,       %% Active props, keys and timers at the target state, Calculated field.
+    attrs_active    :: [#attribute{}] | undefined,      %% Active props, keys and timers at the target state, Calculated field.
     suspensions     :: #inst_suspension{} | undefined   %% Filled, if the instance was suspended and its state updated.
 }).
 
