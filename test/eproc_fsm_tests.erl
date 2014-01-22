@@ -21,8 +21,11 @@
 
 
 %%
+%%  Helper function.
 %%
-%%
+unlink_kill(PIDs) when is_list(PIDs) ->
+    lists:foreach(fun unlink_kill/1, PIDs);
+
 unlink_kill(PID) ->
     true = unlink(PID),
     true = exit(PID, normal),
@@ -226,10 +229,91 @@ start_link_init_runtime_test() ->
     ok = unlink_kill(PID).
 
 
+%%
+%%  Check, if FSM can be started with standard process registration.
+%%
+start_link_fsmname_test() ->
+    ok = meck:new(eproc_store, []),
+    ok = meck:new(eproc_fsm__void, [passthrough]),
+    ok = meck:expect(eproc_store, ref, fun () -> {ok, store} end),
+    ok = meck:expect(eproc_store, load_instance, fun
+        (store, {inst, I = 1000}) ->
+            {ok, #instance{
+                id = I, group = 2000, name = name, module = eproc_fsm__void,
+                args = {a}, opts = [], init = {state, a}, status = running,
+                created = erlang:now(), transitions = []
+            }}
+    end),
+    {ok, PID} = eproc_fsm:start_link({local, start_link_fsmname_test}, {inst, 1000}, []),
+    ?assert(eproc_fsm:is_online(PID)),
+    ?assert(eproc_fsm:is_online(start_link_fsmname_test)),
+    ?assert(meck:validate([eproc_store, eproc_fsm__void])),
+    ok = meck:unload([eproc_store, eproc_fsm__void]),
+    ok = unlink_kill(PID).
+
+
+%%
+%%  Check if register option is handled properly.
+%%  This test also checks, if registry is resolved.
+%%
+start_link_register_test() ->
+    GenInst = fun (I, N) -> #instance{
+        id = I, group = I, name = N, module = eproc_fsm__void,
+        args = {a}, opts = [], init = {state, a}, status = running,
+        created = erlang:now(), transitions = []
+    } end,
+    ok = meck:new(eproc_store, []),
+    ok = meck:new(eproc_registry, []),
+    ok = meck:new(eproc_fsm__void, [passthrough]),
+    ok = meck:expect(eproc_store, ref, fun
+        () -> {ok, store}
+    end),
+    ok = meck:expect(eproc_store, load_instance, fun
+        (store, {inst, I = 1000}) -> {ok, GenInst(I, name0)};
+        (store, {inst, I = 1001}) -> {ok, GenInst(I, name1)};
+        (store, {inst, I = 1002}) -> {ok, GenInst(I, name2)};
+        (store, {inst, I = 1003}) -> {ok, GenInst(I, name3)};
+        (store, {inst, I = 1004}) -> {ok, GenInst(I, name4)}
+    end),
+    ok = meck:expect(eproc_registry, ref, fun
+        () -> {ok, reg2}
+    end),
+    ok = meck:expect(eproc_registry, register_inst, fun
+        (reg1, 1001) -> ok;
+        (reg1, 1003) -> ok;
+        (reg2, 1004) -> ok
+    end),
+    ok = meck:expect(eproc_registry, register_name, fun
+        (reg1, 1002, name2) -> ok;
+        (reg1, 1003, name3) -> ok;
+        (reg2, 1004, name4) -> ok
+    end),
+    {ok, PID0a} = eproc_fsm:start_link({inst, 1000}, [{register, none}]), % Registry will be not used.
+    {ok, PID0b} = eproc_fsm:start_link({inst, 1000}, [{register, none}, {registry, reg1}]),
+    {ok, PID1}  = eproc_fsm:start_link({inst, 1001}, [{register, id},   {registry, reg1}]),
+    {ok, PID2}  = eproc_fsm:start_link({inst, 1002}, [{register, name}, {registry, reg1}]),
+    {ok, PID3}  = eproc_fsm:start_link({inst, 1003}, [{register, both}, {registry, reg1}]),
+    {ok, PID4}  = eproc_fsm:start_link({inst, 1004}, [{register, both}]), % Will use default
+    ?assert(eproc_fsm:is_online(PID0a)),
+    ?assert(eproc_fsm:is_online(PID0b)),
+    ?assert(eproc_fsm:is_online(PID1)),
+    ?assert(eproc_fsm:is_online(PID2)),
+    ?assert(eproc_fsm:is_online(PID3)),
+    ?assert(eproc_fsm:is_online(PID4)),
+    ?assertEqual(1, meck:num_calls(eproc_registry, register_inst, [reg1, 1001])),
+    ?assertEqual(1, meck:num_calls(eproc_registry, register_inst, [reg1, 1003])),
+    ?assertEqual(1, meck:num_calls(eproc_registry, register_inst, [reg2, 1004])),
+    ?assertEqual(1, meck:num_calls(eproc_registry, register_name, [reg1, 1002, name2])),
+    ?assertEqual(1, meck:num_calls(eproc_registry, register_name, [reg1, 1003, name3])),
+    ?assertEqual(1, meck:num_calls(eproc_registry, register_name, [reg2, 1004, name4])),
+    ?assertEqual(1, meck:num_calls(eproc_registry, ref, [])),
+    ?assert(meck:validate([eproc_store, eproc_registry, eproc_fsm__void])),
+    ok = meck:unload([eproc_store, eproc_registry, eproc_fsm__void]),
+    ok = unlink_kill([PID0a, PID0b, PID1, PID2, PID3, PID4]).
+
+
 % TODO: Assert the following for `start_link`
-%   * Start with FsmName specified.
 %   * Start with restart_delay option.
-%   * Start with all cases of register option.
 
 
 % TODO: Assert the following for `send_event`

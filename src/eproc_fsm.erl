@@ -937,7 +937,7 @@ resolve_timeout(Options) ->
 %%
 %%
 resolve_start_link_opts(Options) ->
-    {StartOptions, ProcessOptions} = proplists:split(Options, [restart_delay, register]),
+    {StartOptions, ProcessOptions} = proplists:split(Options, [restart_delay, register, store, registry]),
     {ok, lists:append(StartOptions), ProcessOptions}.
 
 
@@ -971,7 +971,7 @@ resolve_calling_fsm() ->
 
 
 %%
-%%
+%%  Resolve store.
 %%
 resolve_store(StartOptions) ->
     case proplists:get_value(store, StartOptions) of
@@ -984,18 +984,22 @@ resolve_store(StartOptions) ->
 
 
 %%
-%%
+%%  Resolve registry, if needed.
 %%
 resolve_registry(StartOptions) ->
-    case proplists:get_value(store, StartOptions) of
-        undefined ->
+    case {proplists:get_value(register, StartOptions), proplists:get_value(registry, StartOptions)} of
+        {none, undefined} ->
+            undefined;
+        {undefined, undefined} ->
+            undefined;
+        {_, undefined} ->
             case eproc_registry:ref() of
                 {ok, Registry} ->
                     Registry;
                 undefined ->
                     undefined
             end;
-        Registry ->
+        {_, Registry} ->
             Registry
     end.
 
@@ -1133,6 +1137,8 @@ call_init_runtime(SName, SData, Module) ->
 register_online(#instance{id = InstId, name = Name}, Registry, StartOptions) ->
     case proplists:get_value(register, StartOptions) of
         undefined ->
+            ok;
+        none ->
             ok;
         id ->
             eproc_registry:register_inst(Registry, InstId);
