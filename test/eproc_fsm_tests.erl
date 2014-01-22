@@ -95,9 +95,11 @@ create_state_test() ->
 
 %%
 %%  Check if new process can be started by instance id.
+%%  Also checks, if attributes initialized.
 %%
 start_link_new_by_inst_test() ->
     ok = meck:new(eproc_store, []),
+    ok = meck:new(eproc_fsm_attr, []),
     ok = meck:new(eproc_fsm__void, [passthrough]),
     ok = meck:expect(eproc_store, ref, fun () -> {ok, store} end),
     ok = meck:expect(eproc_store, load_instance, fun
@@ -108,12 +110,16 @@ start_link_new_by_inst_test() ->
                 created = erlang:now(), transitions = []
             }}
     end),
+    ok = meck:expect(eproc_fsm_attr, init, fun
+        ([], 0, []) -> {ok, []}
+    end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, []),
     ?assert(eproc_fsm:is_online(PID)),
+    ?assert(meck:called(eproc_fsm_attr, init, [[], 0, []])),
     ?assert(meck:called(eproc_fsm__void, init, [[], {state, a}])),
     ?assert(meck:called(eproc_fsm__void, code_change, [state, [], {state, a}, undefined])),
-    ?assert(meck:validate([eproc_store, eproc_fsm__void])),
-    ok = meck:unload([eproc_store, eproc_fsm__void]),
+    ?assert(meck:validate([eproc_store, eproc_fsm_attr, eproc_fsm__void])),
+    ok = meck:unload([eproc_store, eproc_fsm_attr, eproc_fsm__void]),
     ok = unlink_kill(PID).
 
 
@@ -143,9 +149,11 @@ start_link_new_by_name_test() ->
 
 %%
 %%  Check if existing process can be restarted.
+%%  Also checks, if attributes initialized.
 %%
 start_link_existing_test() ->
     ok = meck:new(eproc_store, []),
+    ok = meck:new(eproc_fsm_attr, []),
     ok = meck:new(eproc_fsm__void, [passthrough]),
     ok = meck:expect(eproc_store, ref, fun () -> {ok, store} end),
     ok = meck:expect(eproc_store, load_instance, fun
@@ -155,16 +163,23 @@ start_link_existing_test() ->
                 args = {a}, opts = [], init = {state, a}, status = running,
                 created = erlang:now(), transitions = [#transition{
                     inst_id = I, number = 1, sname = [some], sdata = {state, b},
-                    attr_last_id = 0, attr_actions = [], attrs_active = []
+                    attr_last_id = 2, attr_actions = [], attrs_active = [
+                        #attribute{attr_id = 1},
+                        #attribute{attr_id = 2}
+                    ]
                 }]
             }}
     end),
+    ok = meck:expect(eproc_fsm_attr, init, fun
+        ([some], 2, [A = #attribute{attr_id = 1}, B = #attribute{attr_id = 2}]) -> {ok, [{A, undefined}, {B, undefined}]}
+    end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, []),
     ?assert(eproc_fsm:is_online(PID)),
+    ?assert(meck:called(eproc_fsm_attr, init, '_')),
     ?assert(meck:called(eproc_fsm__void, init, [[some], {state, b}])),
     ?assert(meck:called(eproc_fsm__void, code_change, [state, [some], {state, b}, undefined])),
-    ?assert(meck:validate([eproc_store, eproc_fsm__void])),
-    ok = meck:unload([eproc_store, eproc_fsm__void]),
+    ?assert(meck:validate([eproc_store, eproc_fsm_attr, eproc_fsm__void])),
+    ok = meck:unload([eproc_store, eproc_fsm_attr, eproc_fsm__void]),
     ok = unlink_kill(PID).
 
 
@@ -342,11 +357,6 @@ start_link_opts_restart_test() ->
     ?assert(meck:validate([eproc_store, eproc_restart, eproc_fsm__void])),
     ok = meck:unload([eproc_store, eproc_restart, eproc_fsm__void]),
     ok = unlink_kill([PID1, PID2]).
-
-
-
-% TODO: Assert the following for `start_link`
-%   * Start with restart_delay option.
 
 
 % TODO: Assert the following for `send_event`
