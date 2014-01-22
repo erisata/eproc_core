@@ -526,9 +526,10 @@ create(Module, Args, Options) ->
 %%
 %%  Options supprted by this function:
 %%
-%%  `{restart_delay, integer()}`        TODO: Implement it.
-%%  :   specifies a delay, that is made on each process restart. The default is 1000 ms.
-%%      The delay is make on each crash, during an abnormal termination of a process.
+%%  `{restart, list()}`
+%%  :   specifies options used to limit process restart rate and duration. These
+%%      options are passed to `eproc_restart:restarted/2`. See docs for that function
+%%      for more details. If this option is not specified, [] is used as a default.
 %%  `{register, (id | name | both)}`
 %%  :   specifies, what to register to the `eproc_registry` on startup.
 %%      The registration is performed asynchronously and the id or name are those
@@ -937,7 +938,7 @@ resolve_timeout(Options) ->
 %%
 %%
 resolve_start_link_opts(Options) ->
-    {StartOptions, ProcessOptions} = proplists:split(Options, [restart_delay, register, store, registry]),
+    {StartOptions, ProcessOptions} = proplists:split(Options, [restart, register, store, registry]),
     {ok, lists:append(StartOptions), ProcessOptions}.
 
 
@@ -1048,7 +1049,8 @@ handle_create(Module, Args, CreateOpts, CustomOpts) ->
 handle_start(FsmRef, StartOptions, State = #state{store = Store}) ->
     case eproc_store:load_instance(Store, FsmRef) of
         {ok, Instance = #instance{id = InstId, status = running}} ->
-            case eproc_restart:restarted({?MODULE, InstId}, []) of
+            RestartOpts = proplists:get_value(restart, StartOptions, []),
+            case eproc_restart:restarted({?MODULE, InstId}, RestartOpts) of
                 ok ->
                     {ok, NewState} = start_loaded(Instance, StartOptions, State),
                     lager:debug("FSM started, ref=~p.", [FsmRef]),

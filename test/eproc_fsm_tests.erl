@@ -256,7 +256,7 @@ start_link_fsmname_test() ->
 %%  Check if register option is handled properly.
 %%  This test also checks, if registry is resolved.
 %%
-start_link_register_test() ->
+start_link_opts_register_test() ->
     GenInst = fun (I, N) -> #instance{
         id = I, group = I, name = N, module = eproc_fsm__void,
         args = {a}, opts = [], init = {state, a}, status = running,
@@ -310,6 +310,39 @@ start_link_register_test() ->
     ?assert(meck:validate([eproc_store, eproc_registry, eproc_fsm__void])),
     ok = meck:unload([eproc_store, eproc_registry, eproc_fsm__void]),
     ok = unlink_kill([PID0a, PID0b, PID1, PID2, PID3, PID4]).
+
+
+%%
+%%  Check if restart options are handled properly.
+%%  Also checks, if store is resolved from args.
+%%
+start_link_opts_restart_test() ->
+    ok = meck:new(eproc_store, []),
+    ok = meck:new(eproc_restart, []),
+    ok = meck:new(eproc_fsm__void, [passthrough]),
+    ok = meck:expect(eproc_store, load_instance, fun
+        (store, {inst, 100}) ->
+            {ok, #instance{
+                id = 100, group = 200, name = name, module = eproc_fsm__void,
+                args = {a}, opts = [], init = {state, a}, status = running,
+                created = erlang:now(), transitions = []
+            }}
+    end),
+    ok = meck:expect(eproc_restart, restarted, fun
+        ({eproc_fsm, 100}, [{delay, {const, 100}}]) -> ok;
+        ({eproc_fsm, 100}, []) -> ok
+    end),
+
+    {ok, PID1} = eproc_fsm:start_link({inst, 100}, [{store, store}, {restart, [{delay, {const, 100}}]}]),
+    {ok, PID2} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
+    ?assert(eproc_fsm:is_online(PID1)),
+    ?assert(eproc_fsm:is_online(PID2)),
+    ?assertEqual(1, meck:num_calls(eproc_restart, restarted, [{eproc_fsm, 100}, [{delay, {const, 100}}]])),
+    ?assertEqual(1, meck:num_calls(eproc_restart, restarted, [{eproc_fsm, 100}, []])),
+    ?assert(meck:validate([eproc_store, eproc_restart, eproc_fsm__void])),
+    ok = meck:unload([eproc_store, eproc_restart, eproc_fsm__void]),
+    ok = unlink_kill([PID1, PID2]).
+
 
 
 % TODO: Assert the following for `start_link`
