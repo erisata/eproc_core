@@ -93,7 +93,7 @@ create_state_test() ->
 %%
 %%  Check if new process can be started by instance id.
 %%
-start_link_by_inst_test() ->
+start_link_new_by_inst_test() ->
     ok = meck:new(eproc_store, []),
     ok = meck:new(eproc_fsm__void, [passthrough]),
     ok = meck:expect(eproc_store, ref, fun () -> {ok, store} end),
@@ -107,7 +107,8 @@ start_link_by_inst_test() ->
     end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, []),
     ?assert(eproc_fsm:is_online(PID)),
-    ?assert(meck:called(eproc_fsm__void, init, ['_', '_'])),
+    ?assert(meck:called(eproc_fsm__void, init, [[], {state, a}])),
+    ?assert(meck:called(eproc_fsm__void, code_change, [state, [], {state, a}, undefined])),
     ?assert(meck:validate([eproc_store, eproc_fsm__void])),
     ok = meck:unload([eproc_store, eproc_fsm__void]),
     ok = unlink_kill(PID).
@@ -116,7 +117,7 @@ start_link_by_inst_test() ->
 %%
 %%  Check if new process can be started by name.
 %%
-start_link_by_name_test() ->
+start_link_new_by_name_test() ->
     ok = meck:new(eproc_store, []),
     ok = meck:new(eproc_fsm__void, [passthrough]),
     ok = meck:expect(eproc_store, ref, fun () -> {ok, store} end),
@@ -130,23 +131,108 @@ start_link_by_name_test() ->
     end),
     {ok, PID} = eproc_fsm:start_link({name, start_link_by_name_test}, []),
     ?assert(eproc_fsm:is_online(PID)),
-    ?assert(meck:called(eproc_fsm__void, init, ['_', '_'])),
+    ?assert(meck:called(eproc_fsm__void, init, [[], {state, a}])),
+    ?assert(meck:called(eproc_fsm__void, code_change, [state, [], {state, a}, undefined])),
     ?assert(meck:validate([eproc_store, eproc_fsm__void])),
     ok = meck:unload([eproc_store, eproc_fsm__void]),
     ok = unlink_kill(PID).
 
 
-% TODO: Assert the following
-%   * Start new instance.
-%       - Check StateData and StateName.
-%   * Restart existing instance.
-%       - Check StateData and StateName.
+%%
+%%  Check if existing process can be restarted.
+%%
+start_link_existing_test() ->
+    ok = meck:new(eproc_store, []),
+    ok = meck:new(eproc_fsm__void, [passthrough]),
+    ok = meck:expect(eproc_store, ref, fun () -> {ok, store} end),
+    ok = meck:expect(eproc_store, load_instance, fun
+        (store, {inst, I = 100}) ->
+            {ok, #instance{
+                id = I, group = I, name = name, module = eproc_fsm__void,
+                args = {a}, opts = [], init = {state, a}, status = running,
+                created = erlang:now(), transitions = [#transition{
+                    inst_id = I, number = 1, sname = [some], sdata = {state, b},
+                    attr_last_id = 0, attr_actions = [], attrs_active = []
+                }]
+            }}
+    end),
+    {ok, PID} = eproc_fsm:start_link({inst, 100}, []),
+    ?assert(eproc_fsm:is_online(PID)),
+    ?assert(meck:called(eproc_fsm__void, init, [[some], {state, b}])),
+    ?assert(meck:called(eproc_fsm__void, code_change, [state, [some], {state, b}, undefined])),
+    ?assert(meck:validate([eproc_store, eproc_fsm__void])),
+    ok = meck:unload([eproc_store, eproc_fsm__void]),
+    ok = unlink_kill(PID).
+
+
+%%
+%%  Check if functions id/0, group/0, name/0 works in an FSM process.
+%%
+start_link_get_id_group_name_test() ->
+    ok = meck:new(eproc_store, []),
+    ok = meck:new(eproc_fsm__void, [passthrough]),
+    ok = meck:expect(eproc_store, ref, fun () -> {ok, store} end),
+    ok = meck:expect(eproc_store, load_instance, fun
+        (store, {inst, I = 1000}) ->
+            {ok, #instance{
+                id = I, group = 2000, name = name, module = eproc_fsm__void,
+                args = {a}, opts = [], init = {state, a}, status = running,
+                created = erlang:now(), transitions = []
+            }}
+    end),
+    ok = meck:expect(eproc_fsm__void, init, fun
+        ([], {state, a}) ->
+            ?assertEqual({ok, 1000}, eproc_fsm:id()),
+            ?assertEqual({ok, 2000}, eproc_fsm:group()),
+            ?assertEqual({ok, name}, eproc_fsm:name()),
+            ok
+    end),
+    {ok, PID} = eproc_fsm:start_link({inst, 1000}, []),
+    ?assert(eproc_fsm:is_online(PID)),
+    ?assert(meck:called(eproc_fsm__void, init, [[], {state, a}])),
+    ?assert(meck:called(eproc_fsm__void, code_change, [state, [], {state, a}, undefined])),
+    ?assert(meck:validate([eproc_store, eproc_fsm__void])),
+    ok = meck:unload([eproc_store, eproc_fsm__void]),
+    ok = unlink_kill(PID).
+
+
+%%
+%%  Check if runtime state initialization works.
+%%  This will not theck, id runtime field is passed to other
+%%  callbacks and not stored in DB. Other tests exists for that.
+%%
+start_link_init_runtime_test() ->
+    ok = meck:new(eproc_store, []),
+    ok = meck:new(eproc_fsm__void, [passthrough]),
+    ok = meck:expect(eproc_store, ref, fun () -> {ok, store} end),
+    ok = meck:expect(eproc_store, load_instance, fun
+        (store, {inst, I = 1000}) ->
+            {ok, #instance{
+                id = I, group = 2000, name = name, module = eproc_fsm__void,
+                args = {a}, opts = [], init = {state, a, undefined}, status = running,
+                created = erlang:now(), transitions = []
+            }}
+    end),
+    ok = meck:expect(eproc_fsm__void, init, fun
+        ([], {state, a, undefined}) ->
+            {ok, 3, z}
+    end),
+    {ok, PID} = eproc_fsm:start_link({inst, 1000}, []),
+    ?assert(eproc_fsm:is_online(PID)),
+    ?assert(meck:called(eproc_fsm__void, init, [[], {state, a, undefined}])),
+    ?assert(meck:called(eproc_fsm__void, code_change, [state, [], {state, a, undefined}, undefined])),
+    ?assert(meck:validate([eproc_store, eproc_fsm__void])),
+    ok = meck:unload([eproc_store, eproc_fsm__void]),
+    ok = unlink_kill(PID).
+
+
+% TODO: Assert the following for `start_link`
 %   * Start with FsmName specified.
 %   * Start with restart_delay option.
 %   * Start with all cases of register option.
-%   * Check if callback init/2 is invoked.
-%   * Check initialization of runtime state in init/2.
-%   * Check if callback code_change/3 is invoked with `state`.
-%   * Check if functions id/0, group/0, name/0 work.
+
+
+% TODO: Assert the following for `send_event`
+%   * Check if runtime field is passed to transition and not stored to DB.
 
 
