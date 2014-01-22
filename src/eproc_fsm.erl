@@ -104,7 +104,7 @@
     create/3, start_link/3, start_link/2, await/2, id/0, group/0, name/0,
     send_create_event/4, sync_send_create_event/4, send_event/2,
     sync_send_event/3, sync_send_event/2,
-    kill/2, suspend/2, resume/2, set_state/4
+    kill/2, suspend/2, resume/2, set_state/4, is_online/1
 ]).
 
 %%
@@ -772,6 +772,13 @@ set_state(Name, NewStateName, NewStateData, Reason) ->
 
 
 %%
+%%  Checks is process is online.
+%%
+is_online(FsmRef) ->
+    gen_server:call(FsmRef, {is_online}).
+
+
+%%
 %%  To be used by the process implementation to sent response to a synchronous
 %%  request before the `handle_state/3` function completes.
 %%
@@ -847,6 +854,9 @@ init({FsmRef, StartOptions}) ->
 %%
 %%  TODO:
 %%
+handle_call({is_online}, _From, State) ->
+    {reply, true, State};
+
 handle_call(_Event, _From, State) ->
     {reply, not_implemented, State}.
 

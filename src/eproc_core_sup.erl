@@ -51,6 +51,11 @@ init({}) ->
         permanent, 10000, worker, [StoreMod, eproc_store]
     },
 
+    RestartSpec = {restart,
+        {eproc_restart, start_link, []},
+        permanent, 10000, worker, [eproc_restart]
+    },
+
     RegistrySpec = case eproc_core_app:registry_cfg() of
         {ok, {RegistryMod, RegistryArgs}} ->
             [{registry,
@@ -62,7 +67,7 @@ init({}) ->
     end,
 
     {ok, {{one_for_all, 100, 10},
-        [StoreSpec] ++ RegistrySpec
+        [StoreSpec, RestartSpec] ++ RegistrySpec
     }}.
 
 
