@@ -359,7 +359,46 @@ start_link_opts_restart_test() ->
     ok = unlink_kill([PID1, PID2]).
 
 
-% TODO: Assert the following for `send_event`
+%%
+%%  Check if `send_event/*` works with next_state.
+%%
+send_event_next_state_test() ->
+    ok = meck:new(eproc_store, []),
+    ok = meck:new(eproc_fsm__void, [passthrough]),
+    ok = meck:expect(eproc_store, load_instance, fun
+        (store, {inst, 100}) ->
+            {ok, #instance{
+                id = 100, group = 200, name = name, module = eproc_fsm__void,
+                args = {a}, opts = [], init = {state, a}, status = running,
+                created = erlang:now(), transitions = []
+            }}
+    end),
+    {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
+    ?assert(eproc_fsm:is_online(PID)),
+    ?assertEqual(ok, eproc_fsm:send_event(PID, sender, event)),
+
+    ?assert(meck:validate([eproc_store,eproc_fsm__void])),
+    ok = meck:unload([eproc_store, eproc_fsm__void]),
+    ok = unlink_kill(PID).
+
+
+
+% TODO: Check if `send_event/*` works, assert the following:
 %   * Check if runtime field is passed to transition and not stored to DB.
+%   * Check all transtion responses.
+%   * Check if attributes handled properly.
 
 
+
+% TODO: Check if sync_send_event/* and reply/* works.
+% TODO: Check if await/* works.
+
+% TODO: Check if send_create_event/* works.
+% TODO: Check if sync_send_create_event/* works.
+% TODO: Check if kill/* works.
+% TODO: Check if suspend/* works.
+% TODO: Check if resume/* works.
+% TODO: Check if set_state/* works.
+
+% TODO: Check if register_message/* works.
+% TODO: Check if is_online/* works.

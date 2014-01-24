@@ -585,6 +585,8 @@ start_link(FsmRef, Options) ->
 %%  `Timeout`
 %%  :   Number of milliseconds to await.
 %%
+%%  TODO: Should it work without a registry?
+%%
 -spec await(
         FsmRef :: fsm_ref(),
         Timeout :: integer()
