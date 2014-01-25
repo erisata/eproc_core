@@ -724,54 +724,54 @@ sync_send_create_event(Module, Args, Event, Options) ->
 %%
 %%  Sends an event to the FSM asynchronously.
 %%
-send_event(Name, Event) ->
-    From = resolve_calling_fsm(),
-    gen_server:cast(Name, {'eproc_fsm$send_event', Event, From}).
+send_event(FsmRef, Event) ->
+    From = resolve_event_src(),
+    gen_server:cast(FsmRef, {'eproc_fsm$send_event', Event, From}).
 
 
 %%
 %%  Sends an event to the FSM synchronously.
 %%
-sync_send_event(Name, Event) ->
-    From = resolve_calling_fsm(),
-    gen_server:call(Name, {'eproc_fsm$sync_send_event', Event, From}).
+sync_send_event(FsmRef, Event) ->
+    From = resolve_event_src(),
+    gen_server:call(FsmRef, {'eproc_fsm$sync_send_event', Event, From}).
 
 
 %%
 %%
 %%
-sync_send_event(Name, Event, Timeout) ->
-    From = resolve_calling_fsm(),
-    gen_server:call(Name, {'eproc_fsm$sync_send_event', Event, From}, Timeout).
+sync_send_event(FsmRef, Event, Timeout) ->
+    From = resolve_event_src(),
+    gen_server:call(FsmRef, {'eproc_fsm$sync_send_event', Event, From}, Timeout).
 
 
 %%
 %%
 %%
-kill(Name, Reason) ->
-    gen_server:cast(Name, {'eproc_fsm$kill', Reason}).
+kill(FsmRef, Reason) ->
+    gen_server:cast(FsmRef, {'eproc_fsm$kill', Reason}).
 
 
 %%
 %%
 %%
-suspend(Name, Reason) ->
-    gen_server:call(Name, {'eproc_fsm$suspend', Reason}).
+suspend(FsmRef, Reason) ->
+    gen_server:call(FsmRef, {'eproc_fsm$suspend', Reason}).
 
 
 %%
 %%
 %%
-resume(Name, Reason) ->
-    gen_server:call(Name, {'eproc_fsm$resume', Reason}).
+resume(FsmRef, Reason) ->
+    gen_server:call(FsmRef, {'eproc_fsm$resume', Reason}).
 
 
 %%
 %%
 %%
-set_state(Name, NewStateName, NewStateData, Reason) ->
+set_state(FsmRef, NewStateName, NewStateData, Reason) ->
     % TODO: Make it offline.
-    gen_server:call(Name, {'eproc_fsm$set_state', NewStateName, NewStateData, Reason}).
+    gen_server:call(FsmRef, {'eproc_fsm$set_state', NewStateName, NewStateData, Reason}).
 
 
 %%
@@ -966,7 +966,7 @@ resolve_create_opts(group, CreateOptions) ->
 %%  Returns either instance id or undefined, if the current process
 %%  is not `eproc_fsm` process.
 %%
-resolve_calling_fsm() ->
+resolve_event_src() ->
     case id() of
         {ok, InstId}     -> InstId;
         {error, not_fsm} -> undefined
