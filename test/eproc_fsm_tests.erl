@@ -375,8 +375,8 @@ send_event_next_state_test() ->
     end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
-    ?assertEqual(ok, eproc_fsm:send_event(PID, sender, event)),
-
+    ?assertEqual(ok, eproc_fsm:send_event(PID, event, [{source, test}])),
+    ?assertEqual(3, meck:num_calls(eproc_fsm__void, handle_state, '_')),
     ?assert(meck:validate([eproc_store,eproc_fsm__void])),
     ok = meck:unload([eproc_store, eproc_fsm__void]),
     ok = unlink_kill(PID).
@@ -387,6 +387,7 @@ send_event_next_state_test() ->
 %   * Check if runtime field is passed to transition and not stored to DB.
 %   * Check all transtion responses.
 %   * Check if attributes handled properly.
+%   * Check if event source is determined correctly in all cases.
 
 
 

@@ -19,8 +19,13 @@
 %%  It is used by the `eproc_fsm` to resolve event source (sender),
 %%  if not specified explicitly.
 %%
+%%  The event source should be in format `{Type, Identifier}`, where
+%%  the Type identifies a class of the sender and the Identifier the
+%%  corresponding instance.
+%%
 -module(eproc_event_src).
 -export([set_source/1, source/0]).
+-include("eproc.hrl").
 
 
 %% =============================================================================
@@ -31,6 +36,8 @@
 %%
 %%  Set message source description for this process.
 %%
+-spec set_source(Source :: event_src()) -> ok.
+
 set_source(Source) ->
     erlang:put('eproc_event_src$source', Source),
     ok.
@@ -39,6 +46,8 @@ set_source(Source) ->
 %%
 %%  Get message source description of the current process.
 %%
+-spec source() -> Source :: event_src() | undefined.
+
 source() ->
     erlang:get('eproc_event_src$source').
 

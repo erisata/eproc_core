@@ -52,7 +52,7 @@
 %%
 %%
 set(Name, After, Event, Scope) ->
-    ok = eproc_fsm:register_message({timer, Name}, Event),
+    ok = eproc_fsm:register_message({inst, eproc_fsm:id()}, {timer, Name}, Event, undefined),
     ok = eproc_fsm_attr:action(?MODULE, Name, {timer, After, Event}, Scope).
 
 
@@ -61,7 +61,7 @@ set(Name, After, Event, Scope) ->
 %%
 set(After, Event, Scope) ->
     Name = undefined,
-    ok = eproc_fsm:register_message({timer, Name}, Event),
+    ok = eproc_fsm:register_message({inst, eproc_fsm:id()}, {timer, Name}, Event, undefined),
     ok = eproc_fsm_attr:action(?MODULE, Name, {timer, After, Event}, Scope).
 
 
@@ -70,7 +70,7 @@ set(After, Event, Scope) ->
 %%
 set(After, Event) ->
     Name = undefined,
-    ok = eproc_fsm:register_message({timer, Name}, Event),
+    ok = eproc_fsm:register_message({inst, eproc_fsm:id()}, {timer, Name}, Event, undefined),
     ok = eproc_fsm_attr:action(?MODULE, Name, {timer, After, Event}, next).
 
 
@@ -150,7 +150,7 @@ handle_event(Attribute, _State, fired) ->
     } = Attribute,
     Trigger = {timer, Name, Event},
     Action = {remove, fired},
-    {trigger, Trigger, Action}.
+    {trigger, Trigger, Action}. %% TODO: Trigger source should be included into the trigger or not?
 
 
 

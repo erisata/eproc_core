@@ -102,7 +102,8 @@
 %%
 -export([
     create/3, start_link/3, start_link/2, await/2, id/0, group/0, name/0,
-    send_create_event/4, sync_send_create_event/4, send_event/2,
+    send_create_event/4, sync_send_create_event/4,
+    send_event/3, send_event/2,
     sync_send_event/3, sync_send_event/2,
     kill/2, suspend/2, resume/2, set_state/4, is_online/1
 ]).
@@ -120,7 +121,7 @@
 %%
 -export([
     state_in_scope/2,
-    register_message/2
+    register_message/4
 ]).
 
 
@@ -138,7 +139,7 @@
 %%  Internal things...
 %%
 -include("eproc.hrl").
--define(DEFAULT_TIMEOUT, 10000).
+-define(DEFAULT_TIMEOUT, 5000).
 
 %%
 %%  Unit tests.
@@ -370,6 +371,9 @@
         NextStateName   :: state_name(),
         PrevStateName   :: state_name(),
         FinalStateName  :: state_name().
+
+
+%%  TODO: Add canback `handle_info`.
 
 
 %%
@@ -683,7 +687,7 @@ name() ->
         {error, term()}.
 
 send_create_event(Module, Args, Event, Options) ->
-    Timeout = resolve_timeout(Options),
+    {ok, Timeout} = resolve_timeout(Options),
     {ok, InstId} = create_start_link(Module, Args, Options, Timeout),
     % TODO: The following is the second remote sync in the case of riak.
     %       Await - is probably the third. Move it somehow to the remote part.
@@ -710,7 +714,7 @@ send_create_event(Module, Args, Event, Options) ->
         {error, term()}.
 
 sync_send_create_event(Module, Args, Event, Options) ->
-    Timeout = resolve_timeout(Options),
+    {ok, Timeout} = resolve_timeout(Options),
     {ok, InstId} = create_start_link(Module, Args, Options, Timeout),
     % TODO: The following is the second remote sync in the case of riak.
     %       Move it somehow to the remote part.
@@ -723,51 +727,127 @@ sync_send_create_event(Module, Args, Event, Options) ->
 
 %%
 %%  Sends an event to the FSM asynchronously.
+%%  This function returns `ok` immediatelly.
+%%
+%%  Parameters:
+%%
+%%  `FsmRef`
+%%  :   References particular FSM instance.
+%%      Standard OTP reference types can be used to access process, that was
+%%      started with `FsmName` provided when invoking `start_link/3` or registered
+%%      explicitly in a standard OTP process registry (like local, global or gproc).
+%%      Additionally FSM reference in form `{inst, InstId}` or `{name, Name}` can
+%%      be used if the FSM was started with the corresponding `register` option.
+%%      PID (erlang process identifier) can be used to access the process in any case.
+%%  `Event`
+%%  :   Its an event to be sent to the FSM. It can be any term.
+%%      This event is then passed to the `handle_state` callback.
+%%  `Options`
+%%  :   List of options, that can be specified when sending
+%%      a message for the FSM. They are listed bellow.
+%%
+%%  Available options:
+%%
+%%  `{source, EventSrc}`
+%%  :   This option can be used to specify event source (who is sending the event) explicitly.
+%%      By default, this information is resolved from the context. The resolution is performed
+%%      using the following sources (in order):
+%%
+%%       1. Explicitly specified by this option.
+%%       2. Context of the sending process configured using `eproc_event_src` (uses process dictionary).
+%%       3. The event is sent by an FSM instance. This case is also resolved from the process dictionary.
+%%
+%%  TODO: Options for metadata, event redelivery.
+%%  TODO: invoke register_message here.
+%%
+-spec send_event(
+        FsmRef  :: fsm_ref() | otp_ref(),
+        Event   :: term(),
+        Options :: proplist()
+    ) ->
+        ok.
+
+send_event(FsmRef, Event, Options) ->
+    {ok, EventSrc} = resolve_event_src(Options),
+    {ok, ResolvedFsmRef} = resolve_fsm_ref(FsmRef),
+    gen_server:cast(ResolvedFsmRef, {'eproc_fsm$send_event', Event, EventSrc}).
+
+
+%%
+%%  Simplified version of the `send_event/3`,
+%%  equivalent to `send_event(FsmRef, Event, [])`.
+%%
+%%  TODO: Add spec.
 %%
 send_event(FsmRef, Event) ->
-    From = resolve_event_src(),
-    gen_server:cast(FsmRef, {'eproc_fsm$send_event', Event, From}).
+    send_event(FsmRef, Event, []).
 
 
 %%
-%%  Sends an event to the FSM synchronously.
+%%  Sends an event to the FSM synchronously. The function returns term, provided
+%%  by the FSM callback module, similarly to the corresponding function in `gen_fsm`.
+%%
+%%  Parameters:
+%%
+%%  `FsmRef`
+%%  :   References particular FSM instance.
+%%      See `send_event/3` for more details.
+%%  `Event`
+%%  :   Its an event to be sent to the FSM. It can be any term.
+%%      This event is then passed to the `handle_state` callback.
+%%  `Options`
+%%  :   List of options, that can be specified when sending a message
+%%      for the FSM. All options supported by `send_event/3` are also
+%%      supported here.
+%%
+%%  The following options are valid here (additionally to `send_event/3`):
+%%
+%%  `{timeout, Timeout}`
+%%  :   Maximal time in milliseconds for the synchronous call.
+%%      5000 (5 seconds) is the default.
+%%
+%%  TODO: Add spec.
+%%
+sync_send_event(FsmRef, Event, Options) ->
+    {ok, EventSrc} = resolve_event_src(Options),
+    {ok, Timeout}  = resolve_timeout(Options),
+    {ok, ResolvedFsmRef} = resolve_fsm_ref(FsmRef),
+    gen_server:call(ResolvedFsmRef, {'eproc_fsm$sync_send_event', Event, EventSrc}, Timeout).
+
+
+%%
+%%  Simplified version of the `sync_send_event/3`,
+%%  equivalent to `sync_send_event(FsmRef, Event, [])`.
+%%
+%%  TODO: Add spec.
 %%
 sync_send_event(FsmRef, Event) ->
-    From = resolve_event_src(),
-    gen_server:call(FsmRef, {'eproc_fsm$sync_send_event', Event, From}).
+    sync_send_event(FsmRef, Event, []).
 
 
 %%
-%%
-%%
-sync_send_event(FsmRef, Event, Timeout) ->
-    From = resolve_event_src(),
-    gen_server:call(FsmRef, {'eproc_fsm$sync_send_event', Event, From}, Timeout).
-
-
-%%
-%%
+%%  TODO: Add spec.
 %%
 kill(FsmRef, Reason) ->
     gen_server:cast(FsmRef, {'eproc_fsm$kill', Reason}).
 
 
 %%
-%%
+%%  TODO: Add spec.
 %%
 suspend(FsmRef, Reason) ->
     gen_server:call(FsmRef, {'eproc_fsm$suspend', Reason}).
 
 
 %%
-%%
+%%  TODO: Add spec.
 %%
 resume(FsmRef, Reason) ->
     gen_server:call(FsmRef, {'eproc_fsm$resume', Reason}).
 
 
 %%
-%%
+%%  TODO: Add spec.
 %%
 set_state(FsmRef, NewStateName, NewStateData, Reason) ->
     % TODO: Make it offline.
@@ -776,6 +856,8 @@ set_state(FsmRef, NewStateName, NewStateData, Reason) ->
 
 %%
 %%  Checks is process is online.
+%%
+%%  TODO: Add spec.
 %%
 is_online(FsmRef) ->
     gen_server:call(FsmRef, {is_online}).
@@ -807,11 +889,36 @@ reply(To, Reply) ->
 
 
 %%
-%%  TODO: Implement.
-%%  This function is used by modules sending outgoing messages from the FSM.
+%%  This function is used by modules sending outgoing messages
+%%  from the FSM, like connectors.
 %%
-register_message(Sender, Event) ->
-    ok.
+%%  Target FSM is responsible for storing message to the DB. If the event
+%%  recipient is not FSM, the sending FSM is responsible for storing the event.
+%%
+-spec register_message(
+        EventSrc    :: term(),
+        EventDst    :: term(),
+        Event       :: term(),
+        EventId     :: term() | undefined
+    ) ->
+        {ok, skipped | registered} |
+        {error, Reason :: term()}.
+
+%%  Event between FSMs.
+register_message({inst, _SrcInstId}, {inst, DstInstId}, _Event, EventId) when EventId =/= undefined ->
+    Messages = erlang:get('eproc_fsm$messages'),
+    Messages = erlang:put('eproc_fsm$messages', [{ref, DstInstId, EventId} | Messages]),
+    {ok, registered};
+
+%%  Source is not FSM and target is FSM.
+register_message(_EventSrc, {inst, _DstInstId}, _Event, EventId) when EventId =/= undefined ->
+    {ok, skipped};
+
+%%  Source is FSM and target is not.
+register_message({inst, _SrcInstId}, EventDst, Event, EventId) when EventId =:= undefined ->
+    Messages = erlang:get('eproc_fsm$messages'),
+    Messages = erlang:put('eproc_fsm$messages', [{own, EventDst, Event} | Messages]),
+    {ok, registered}.
 
 
 
@@ -855,7 +962,7 @@ init({FsmRef, StartOptions}) ->
 
 
 %%
-%%  TODO:
+%%  Syncronous calls.
 %%
 handle_call({is_online}, _From, State) ->
     {reply, true, State};
@@ -865,10 +972,15 @@ handle_call(_Event, _From, State) ->
 
 
 %%
-%%  TODO:
+%%  Asynchronous messages.
 %%
-handle_cast(_Event, State) ->
-    {noreply, State}.
+handle_cast({'eproc_fsm$send_event', Event, EventSrc}, State) ->
+    case perform_transition(Event, EventSrc, [], State) of
+        {ok, NewState} ->
+            {noreply, NewState};
+        {error, Reason} ->
+            {stop, Reason, State}
+    end.
 
 
 %%
@@ -890,10 +1002,11 @@ handle_info(Event, State = #state{attrs = Attrs}) ->
     case eproc_fsm_attr:event(Event, Attrs) of
         {handled, NewAttrs} ->
             {noreply, State#state{attrs = NewAttrs}};
-        {trigger, NewAttrs, Trigger, AttrAction} ->
-            NewState = State#state{attrs = NewAttrs},
-            % TODO: do a transition.
-            {noreply, NewState};
+        {trigger, NewAttrs, Trigger, TriggerSrc, AttrAction} ->
+            case perform_transition(Trigger, TriggerSrc, [AttrAction], State#state{attrs = NewAttrs}) of
+                {ok, NewState}  -> {ok, NewState};
+                {error, Reason} -> {error, Reason}
+            end;
         unknown ->
             lager:warning("Ignoring unknown event ~p", Event),
             {noreply, State}
@@ -933,7 +1046,8 @@ create_start_link(Module, Args, Options, Timeout) ->
 %%  Extracts timeout from the options.
 %%
 resolve_timeout(Options) ->
-    proplists:get_value(timeout, Options, ?DEFAULT_TIMEOUT).
+    Timeout = proplists:get_value(timeout, Options, ?DEFAULT_TIMEOUT),
+    {ok, Timeout}.
 
 
 %%
@@ -966,11 +1080,30 @@ resolve_create_opts(group, CreateOptions) ->
 %%  Returns either instance id or undefined, if the current process
 %%  is not `eproc_fsm` process.
 %%
-resolve_event_src() ->
-    case id() of
-        {ok, InstId}     -> InstId;
-        {error, not_fsm} -> undefined
+resolve_event_src(SendOptions) ->
+    case proplists:lookup(source, SendOptions) of
+        none ->
+            case {eproc_event_src:source(), eproc_fsm:id()} of
+                {undefined, {ok, InstId}}     -> {ok, {inst, InstId}};
+                {undefined, {error, not_fsm}} -> {ok, undefined};
+                {EventSrc,  _}                -> {ok, EventSrc}
+            end;
+        {source, EventSrc} ->
+            {ok, EventSrc}
     end.
+
+
+%%
+%%  Resolves instance reference.
+%%
+resolve_fsm_ref({inst, InstId}) ->
+    {ok, {via, eproc_registry, {inst, InstId}}};
+
+resolve_fsm_ref({name, Name}) ->
+    {ok, {via, eproc_registry, {name, Name}}};
+
+resolve_fsm_ref(FsmRef) ->
+    {ok, FsmRef}.
 
 
 %%
@@ -1220,6 +1353,14 @@ upgrade_state(#instance{module = Module}, SName, SData) ->
             lager:warning("Runtime field is returned from the code_change/4, but it will be overriden in init/2."),
             {ok, NextSName, NewSData}
     end.
+
+
+%%
+%%  Perform a state transition.
+%%
+perform_transition(Trigger, TriggerSrc, InitAttrActions, State) ->
+    % TODO
+    ok.
 
 
 %%

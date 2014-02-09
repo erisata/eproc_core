@@ -23,6 +23,17 @@
 -type timestamp()       :: erlang:timestamp().      % {Mega, Secs, Micro}
 -type duration()        :: integer().               % in ms.
 
+%%
+%%  OTP standard process reference. See `gen_server` or
+%%  other OTP behaviour for more details.
+%%
+-type otp_ref() ::
+    pid() |
+    atom() |
+    {atom(), atom()} |
+    {global, atom()} |
+    {via, module(), term()}.
+
 -type inst_id()         :: eproc_fsm:id().
 -type fsm_ref()         :: {inst, inst_id()} | {name, term()}.  % TODO: Key should not be used in runtime registration: {key, term()}.
 -type inst_name()       :: term().
@@ -64,6 +75,14 @@
     {sync,  Src :: party(), Request :: term(), Response :: term()} |
     {timer, Name :: term(), Message :: term()} |
     {admin, Reason :: term()}.
+
+
+%%
+%%  Identifies party and its type that sent the corresponding event.
+%%
+-type event_src() ::
+    {inst, inst_id()} |
+    term().
 
 
 %%
