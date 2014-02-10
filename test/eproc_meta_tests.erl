@@ -39,9 +39,9 @@ add_keyword_test() ->
     {ok, State2} = eproc_fsm_attr:transition_start(0, 0, [], State1),
     ok = eproc_meta:add_keyword(keyword1, type),
     ok = eproc_meta:add_keyword(keyword2, type),
-    {ok, [_, _], State3} = eproc_fsm_attr:transition_end(0, 0, [], State2),
+    {ok, [_, _], _LastAttrId3, State3} = eproc_fsm_attr:transition_end(0, 0, [], State2),
     {ok, State4} = eproc_fsm_attr:transition_start(0, 0, [], State3),
     ok = eproc_meta:add_keyword(keyword1, type),
-    {ok, [_], _State5} = eproc_fsm_attr:transition_end(0, 0, [], State4).
+    {ok, [_], _LastAttrId5, _State5} = eproc_fsm_attr:transition_end(0, 0, [], State4).
 
 

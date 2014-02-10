@@ -64,7 +64,7 @@ transition_end_empty_test() ->
     meck:expect(eproc_fsm_attr_test1, init, fun([A]) -> {ok, [{A, state}]} end),
     {ok, State} = eproc_fsm_attr:init([], 0, [#attribute{attr_id = 1, module = eproc_fsm_attr_test1, scope = []}]),
     ?assertMatch({ok, State}, eproc_fsm_attr:transition_start(0, 0, [], State)),
-    ?assertMatch({ok, [], State}, eproc_fsm_attr:transition_end(0, 0, [], State)),
+    ?assertMatch({ok, [], 0, State}, eproc_fsm_attr:transition_end(0, 0, [], State)),
     ?assertEqual(undefined, erlang:get('eproc_fsm_attr$actions')),
     true = meck:validate([eproc_fsm_attr_test1]),
     meck:unload([eproc_fsm_attr_test1]).
@@ -82,7 +82,7 @@ transition_end_remove_test() ->
         #attribute{module = eproc_fsm_attr__void, scope = [some]}
     ]),
     {ok, State} = eproc_fsm_attr:transition_start(0, 0, [some], State),
-    {ok, [Action], _State2} = eproc_fsm_attr:transition_end(0, 0, [], State),
+    {ok, [Action], 0, _State2} = eproc_fsm_attr:transition_end(0, 0, [], State),
     ?assertMatch(#attr_action{action = {remove, {scope, []}}}, Action),
     ?assertEqual(1, meck:num_calls(eproc_fsm_attr__void, handle_removed, '_')),
     ?assert(meck:validate([eproc_fsm_attr__void])),
@@ -114,7 +114,7 @@ action_success_test() ->
     ?assertEqual(ok, eproc_fsm_attr:action(Mod, c, set, [])),         % create named attr
     ?assertEqual(ok, eproc_fsm_attr:action(Mod, undefined, set, [])), % create first unnamed attr
     ?assertEqual(ok, eproc_fsm_attr:action(Mod, undefined, set, [])), % create second unnamed attr
-    {ok, Actions, _State2} = eproc_fsm_attr:transition_end(0, 0, [], State),
+    {ok, Actions, 5, _State2} = eproc_fsm_attr:transition_end(0, 0, [], State),
     ?assertEqual(5, length(Actions)),
     ?assertEqual(1, length([any || #attr_action{attr_id = 1, action = {remove, {user, deleted}}} <- Actions])),
     ?assertEqual(1, length([any || #attr_action{attr_id = 2, action = {update, [], 201}} <- Actions])),
@@ -153,8 +153,8 @@ event_test() ->
     meck:expect(Mod, init, fun ([A]) -> {ok, [{A, state}]} end),
     meck:expect(Mod, handle_event, fun
         (#attribute{attr_id = 1}, state, my_event1) -> {handled, state1};
-        (#attribute{attr_id = 1}, state, my_event2) -> {trigger, trg2, src2, {update, data2, state2}};
-        (#attribute{attr_id = 1}, state, my_event3) -> {trigger, trg3, src3, {remove, reason3}}
+        (#attribute{attr_id = 1}, state, my_event2) -> {trigger, #trigger{type = trg2}, {update, data2, state2}};
+        (#attribute{attr_id = 1}, state, my_event3) -> {trigger, #trigger{type = trg3}, {remove, reason3}}
     end),
     {ok, State} = eproc_fsm_attr:init([], 1, [
         #attribute{attr_id = 1, module = Mod, scope = []}
@@ -165,8 +165,8 @@ event_test() ->
     {ok, Event3} = eproc_fsm_attr:make_event(Mod, 1, my_event3),
     ?assertEqual(unknown, eproc_fsm_attr:event(Event0, State)),
     {handled, _State1}                = eproc_fsm_attr:event(Event1, State),
-    {trigger, _State2, trg2, src2, Action2} = eproc_fsm_attr:event(Event2, State),
-    {trigger, _State3, trg3, src3, Action3} = eproc_fsm_attr:event(Event3, State),
+    {trigger, _State2, #trigger{type = trg2}, Action2} = eproc_fsm_attr:event(Event2, State),
+    {trigger, _State3, #trigger{type = trg3}, Action3} = eproc_fsm_attr:event(Event3, State),
     ?assertEqual(#attr_action{attr_id = 1, module = Mod, action = {update, [], data2}},       Action2),
     ?assertEqual(#attr_action{attr_id = 1, module = Mod, action = {remove, {user, reason3}}}, Action3),
     ?assertEqual(3, meck:num_calls(Mod, handle_event, '_')),

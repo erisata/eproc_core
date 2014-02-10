@@ -39,8 +39,8 @@ add_key_test() ->
     {ok, State2} = eproc_fsm_attr:transition_start(0, 0, [first], State1),
     ok = eproc_router:add_key(key1, next),
     ok = eproc_router:add_key(key2, []),
-    {ok, [_, _], State3} = eproc_fsm_attr:transition_end(0, 0, [second], State2),
+    {ok, [_, _], _LastAttrId3, State3} = eproc_fsm_attr:transition_end(0, 0, [second], State2),
     {ok, State4} = eproc_fsm_attr:transition_start(0, 0, [second], State3),
-    {ok, [_], _State5} = eproc_fsm_attr:transition_end(0, 0, [third], State4).
+    {ok, [_], _LastAttrId5, _State5} = eproc_fsm_attr:transition_end(0, 0, [third], State4).
 
 

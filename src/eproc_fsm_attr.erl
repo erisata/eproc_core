@@ -202,7 +202,7 @@ transition_end(InstId, TrnNr, NextSName, State = #state{last_id = LastAttrId, at
         last_id = NewAttrId,
         attrs = AttrCtxsAfterCleanup
     },
-    {ok, AllActions, NewState}.
+    {ok, AllActions, NewAttrId, NewState}.
 
 
 %%

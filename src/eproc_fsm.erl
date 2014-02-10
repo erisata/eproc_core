@@ -1385,9 +1385,12 @@ upgrade_state(#instance{module = Module}, SName, SData) ->
 %%
 perform_transition(Trigger, InitAttrActions, State) ->
     #state{
+        inst_id = InstId,
         module = Module,
         sname = SName,
-        sdata = SData
+        sdata = SData,
+        trn_nr = LastTrnNr,
+        attrs = Attrs
     } = State,
     #trigger{
         type = TriggerType,
@@ -1397,6 +1400,11 @@ perform_transition(Trigger, InitAttrActions, State) ->
         reply_fun = From,
         src_arg = TriggerSrcArg
     } = Trigger,
+
+    TrnNr = LastTrnNr + 1,
+    TrnStart = erlang:now(),
+    {ok, TrnAttrs} = eproc_fsm_attr:transition_start(InstId, TrnNr, SName, Attrs),
+
     TriggerArg = case {TriggerSrcArg, TriggerSync} of
         {true,  true}  -> {TriggerType, TriggerSrc, From, TriggerMsg};
         {true,  false} -> {TriggerType, TriggerSrc, TriggerMsg};
@@ -1422,11 +1430,31 @@ perform_transition(Trigger, InitAttrActions, State) ->
             {ok, SDataAfterExit} = perform_exit(SName, NewSName, NewSData, State),
             SDataAfterExit
     end,
+
+    {ok, AttrActions, LastAttrId, NewAttrs} = eproc_fsm_attr:transition_end(InstId, TrnNr, NewSName, TrnAttrs),
+    Transition = #transition{
+        inst_id = InstId,
+        number = TrnNr,
+        sname = NewSName,
+        sdata = NewSData,
+        timestamp = TrnStart,
+        duration = timer:now_diff(erlang:now(), TrnStart),
+        trigger = Trigger,
+        attr_last_id = LastAttrId,
+        attr_actions = InitAttrActions ++ AttrActions,
+        attrs_active = undefined,
+        suspensions = undefined
+    },
+    % TODO: Store transition to DB.
+    % TODO: Add message.
+    % TODO: Add response, if exist
+
     NewState = State#state{
         sname = NewSName,
-        sdata = SDataAfterTrn
+        sdata = SDataAfterTrn,
+        trn_nr = TrnNr,
+        attrs = NewAttrs
     },
-    % TODO: Store transition to DB, handle actions..
     {ok, Reply, NewState}.
 
 
