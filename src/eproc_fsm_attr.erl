@@ -116,13 +116,12 @@
         Event       :: term()
     ) ->
         {handled, NewAttrState} |
-        {trigger, Trigger, TriggerSrc, Action} |
+        {trigger, Trigger, Action} |
         {error, Reason}
     when
         NewAttrState :: term(),
         NewAttrData :: term(),
-        Trigger     :: trigger(),
-        TriggerSrc  :: event_src(),
+        Trigger     :: #trigger{},
         Action ::
             {update, NewAttrData, NewAttrState} |
             {remove, Reason},
@@ -220,14 +219,14 @@ event({'eproc_fsm_attr$event', AttrId, Event}, State = #state{attrs = AttrCtxs})
                     NewAttrCtxs = lists:keyreplace(AttrId, #attr_ctx.attr_id, AttrCtxs, NewAttrCtx),
                     NewState = State#state{attrs = NewAttrCtxs},
                     {handled, NewState};
-                {trigger, removed, Trigger, TriggerSrc, AttrAction} ->
+                {trigger, removed, Trigger, AttrAction} ->
                     NewAttrCtxs = lists:keydelete(AttrId, #attr_ctx.attr_id, AttrCtxs),
                     NewState = State#state{attrs = NewAttrCtxs},
-                    {trigger, NewState, Trigger, TriggerSrc, AttrAction};
-                {trigger, NewAttrCtx, Trigger, TriggerSrc, AttrAction} ->
+                    {trigger, NewState, Trigger, AttrAction};
+                {trigger, NewAttrCtx, Trigger, AttrAction} ->
                     NewAttrCtxs = lists:keyreplace(AttrId, #attr_ctx.attr_id, AttrCtxs, NewAttrCtx),
                     NewState = State#state{attrs = NewAttrCtxs},
-                    {trigger, NewState, Trigger, TriggerSrc, AttrAction}
+                    {trigger, NewState, Trigger, AttrAction}
             end
     end;
 
@@ -400,14 +399,14 @@ process_event(AttrCtx, Event) ->
         {handled, NewAttrState} ->
             NewAttrCtx = AttrCtx#attr_ctx{state = NewAttrState},
             {handled, NewAttrCtx};
-        {trigger, Trigger, TriggerSrc, {remove, Reason}} ->
+        {trigger, Trigger, {remove, Reason}} when is_record(Trigger, trigger) ->
             AttrAction = #attr_action{
                 module = Module,
                 attr_id = AttrId,
                 action = {remove, {user, Reason}}
             },
-            {trigger, removed, Trigger, TriggerSrc, AttrAction};
-        {trigger, Trigger, TriggerSrc, {update, NewAttrData, NewAttrState}} ->
+            {trigger, removed, Trigger, AttrAction};
+        {trigger, Trigger, {update, NewAttrData, NewAttrState}} when is_record(Trigger, trigger) ->
             NewAttrCtx = AttrCtx#attr_ctx{
                 attr = Attribute#attribute{data = NewAttrData},
                 state = NewAttrState
@@ -417,7 +416,7 @@ process_event(AttrCtx, Event) ->
                 attr_id = AttrId,
                 action = {update, Scope, NewAttrData}
             },
-            {trigger, NewAttrCtx, Trigger, TriggerSrc, AttrAction};
+            {trigger, NewAttrCtx, Trigger, AttrAction};
         {error, Reason} ->
             erlang:throw({attr_event_failed, Reason})
     end.

@@ -351,7 +351,7 @@
         StateName   :: state_name(),
         Trigger     :: {event, Message} |
                        {sync, From, Message} |
-                       {timer, Timer, Message} |
+                       {timer, Timer, Message} |    %% TODO: Derive some generic form.
                        {exit, NextStateName} |
                        {entry, PrevStateName},
         StateData   :: state_data()
@@ -885,7 +885,7 @@ is_online(FsmRef) ->
         {error, Reason :: term()}.
 
 reply(To, Reply) ->
-    gen_server:reply(To, Reply).
+    To(Reply).
 
 
 %%
@@ -967,16 +967,39 @@ init({FsmRef, StartOptions}) ->
 handle_call({is_online}, _From, State) ->
     {reply, true, State};
 
-handle_call(_Event, _From, State) ->
-    {reply, not_implemented, State}.
+handle_call({'eproc_fsm$sync_send_event', Event, EventSrc}, From, State) ->
+    Trigger = #trigger{
+        type = sync,
+        source = EventSrc,
+        message = Event,
+        sync = true,
+        reply_fun = fun (R) -> gen_server:reply(From, R), ok end,
+        src_arg = false
+    },
+    case perform_transition(Trigger, [], State) of
+        {ok, noreply, NewState} ->
+            {noreply, NewState};
+        {ok, {reply, Reply}, NewState} ->
+            {reply, Reply, NewState};
+        {error, Reason} ->
+            {stop, Reason, State}
+    end.
 
 
 %%
 %%  Asynchronous messages.
 %%
 handle_cast({'eproc_fsm$send_event', Event, EventSrc}, State) ->
-    case perform_transition(Event, EventSrc, [], State) of
-        {ok, NewState} ->
+    Trigger = #trigger{
+        type = event,
+        source = EventSrc,
+        message = Event,
+        sync = false,
+        reply_fun = undefined,
+        src_arg = false
+    },
+    case perform_transition(Trigger, [], State) of
+        {ok, noreply, NewState} ->
             {noreply, NewState};
         {error, Reason} ->
             {stop, Reason, State}
@@ -1002,10 +1025,12 @@ handle_info(Event, State = #state{attrs = Attrs}) ->
     case eproc_fsm_attr:event(Event, Attrs) of
         {handled, NewAttrs} ->
             {noreply, State#state{attrs = NewAttrs}};
-        {trigger, NewAttrs, Trigger, TriggerSrc, AttrAction} ->
-            case perform_transition(Trigger, TriggerSrc, [AttrAction], State#state{attrs = NewAttrs}) of
-                {ok, NewState}  -> {ok, NewState};
-                {error, Reason} -> {error, Reason}
+        {trigger, NewAttrs, Trigger, AttrAction} ->
+            case perform_transition(Trigger, [AttrAction], State#state{attrs = NewAttrs}) of
+                {ok, noreply, NewState} ->
+                    {ok, NewState};
+                {error, Reason} ->
+                    {error, Reason}
             end;
         unknown ->
             lager:warning("Ignoring unknown event ~p", Event),
@@ -1358,9 +1383,74 @@ upgrade_state(#instance{module = Module}, SName, SData) ->
 %%
 %%  Perform a state transition.
 %%
-perform_transition(Trigger, TriggerSrc, InitAttrActions, State) ->
-    % TODO
-    ok.
+perform_transition(Trigger, InitAttrActions, State) ->
+    #state{
+        module = Module,
+        sname = SName,
+        sdata = SData
+    } = State,
+    #trigger{
+        type = TriggerType,
+        source = TriggerSrc,
+        message = TriggerMsg,
+        sync = TriggerSync,
+        reply_fun = From,
+        src_arg = TriggerSrcArg
+    } = Trigger,
+    TriggerArg = case {TriggerSrcArg, TriggerSync} of
+        {true,  true}  -> {TriggerType, TriggerSrc, From, TriggerMsg};
+        {true,  false} -> {TriggerType, TriggerSrc, TriggerMsg};
+        {false, true}  -> {TriggerType, From, TriggerMsg};
+        {false, false} -> {TriggerType, TriggerMsg}
+    end,
+    {TrnMode, Reply, NewSName, NewSData} = case Module:handle_state(SName, TriggerArg, SData) of
+        {same_state,          NSD} -> {same,  noreply,    SName, NSD};
+        {next_state,     NSN, NSD} -> {next,  noreply,    NSN,   NSD};
+        {final_state,    NSN, NSD} -> {final, noreply,    NSN,   NSD};
+        {reply_same,  R,      NSD} -> {same,  {reply, R}, SName, NSD};
+        {reply_next,  R, NSN, NSD} -> {next,  {reply, R}, NSN,   NSD};
+        {reply_final, R, NSN, NSD} -> {final, {reply, R}, NSN,   NSD}
+    end,
+    SDataAfterTrn = case TrnMode of
+        same ->
+            NewSData;
+        next ->
+            {ok, SDataAfterExit} = perform_exit(SName, NewSName, NewSData, State),
+            {ok, SDataAfterEntry} = perform_entry(SName, NewSName, SDataAfterExit, State),
+            SDataAfterEntry;
+        final ->
+            {ok, SDataAfterExit} = perform_exit(SName, NewSName, NewSData, State),
+            SDataAfterExit
+    end,
+    NewState = State#state{
+        sname = NewSName,
+        sdata = SDataAfterTrn
+    },
+    % TODO: Store transition to DB, handle actions..
+    {ok, Reply, NewState}.
+
+
+%%
+%%  Invoke the state exit action.
+%%
+perform_exit([], NextSName, SData, _State) ->
+    {ok, SData};
+
+perform_exit(PrevSName, NextSName, SData, #state{module = Module}) ->
+    case Module:handle_state(PrevSName, {exit, NextSName}, SData) of
+        {ok, NewSData} ->
+            {ok, NewSData}
+    end.
+
+
+%%
+%%  Invoke the state entry action.
+%%
+perform_entry(PrevSName, NextSName, SData, #state{module = Module}) ->
+    case Module:handle_state(NextSName, {entry, PrevSName}, SData) of
+        {ok, NewSData} ->
+            {ok, NewSData}
+    end.
 
 
 %%

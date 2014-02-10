@@ -148,9 +148,16 @@ handle_event(Attribute, _State, fired) ->
         name = Name,
         data = #data{event = Event}
     } = Attribute,
-    Trigger = {timer, Name, Event},
+    Trigger = #trigger{
+        type = timer,
+        source = Name,
+        message = Event,
+        sync = false,
+        reply_fun = undefined,
+        src_arg = true
+    },
     Action = {remove, fired},
-    {trigger, Trigger, Action}. %% TODO: Trigger source should be included into the trigger or not?
+    {trigger, Trigger, Action}.
 
 
 

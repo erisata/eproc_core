@@ -67,22 +67,39 @@
 
 
 %%
-%%  TODO: Documentation.
-%%  TODO: Do something with the timer.
-%%
--type trigger() ::
-    {event, Src :: party(), Message :: term()} |
-    {sync,  Src :: party(), Request :: term(), Response :: term()} |
-    {timer, Name :: term(), Message :: term()} |
-    {admin, Reason :: term()}.
-
-
-%%
 %%  Identifies party and its type that sent the corresponding event.
 %%
 -type event_src() ::
     {inst, inst_id()} |
-    term().
+    {Type :: atom(), Id :: term()}.
+
+
+%%
+%%  Trigger initiates FSM transitions. Event (message) is the core
+%%  attribute of the trigger. Additionally event source, type and
+%%  other attributes are used to define the trigger more preciselly.
+%%
+%%  FSM attribute implementations can define own trigger types.
+%%  For example, the timer trigger is implemented as an attribute trigger.
+%%
+%%  Example triggers:
+%%
+%%      #trigger{type = event, source = {inst, 12364},    message = any,             sync = false},
+%%      #trigger{type = event, source = {connector, api}, message = any,             sync = false},
+%%      #trigger{type = sync,  source = {connector, api}, message = any,             sync = true},
+%%      #trigger{type = timer, source = my_timer,         message = timeout,         sync = false},
+%%      #trigger{type = admin, source = "John Doe",       message = "Problem fixed", sync = false}.
+%%
+%%  TODO: Rename `{inst, inst_id()}` to `{fsm, inst_id()}`.
+%%
+-record(trigger, {
+    type            :: event | sync | timer | admin | atom(),   %% Type of the trigger.
+    source          :: event_src(), %% Party, initiated the trigger, event source, admin name.
+    message         :: term(),      %% Event message / body.
+    sync = false    :: boolean(),               %% True, if the trigger expects an immediate response.
+    reply_fun       :: undefined | function(),  %% Function used to sent response if the trigger is sync.
+    src_arg         :: boolean()                %% If set to true, event source will be passed to an FSM implementation.
+}).
 
 
 %%
@@ -161,7 +178,7 @@
     sdata       :: term(),      %% FSM state data at the end of this transition.
     timestamp   :: timestamp(), %% Start of the transition.
     duration    :: duration(),  %% Duration of the transition (in microseconds).
-    trigger     :: trigger(),   %% Event, initiated the transition.
+    trigger     :: #trigger{},  %% Trigger, initiated the transition.
     attr_last_id    :: integer(),                       %% Last action id.
     attr_actions    :: [#attr_action{}],                %% All attribute actions performed in this transition.
     attrs_active    :: [#attribute{}] | undefined,      %% Active props, keys and timers at the target state, Calculated field.
