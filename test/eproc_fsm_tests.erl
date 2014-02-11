@@ -362,7 +362,7 @@ start_link_opts_restart_test() ->
 %%
 %%  Check if `send_event/*` works with next_state.
 %%
-send_event_next_state_test() ->
+send_event_next_state_inittofinal_test() ->
     ok = meck:new(eproc_store, []),
     ok = meck:new(eproc_fsm__void, [passthrough]),
     ok = meck:expect(eproc_store, load_instance, fun
@@ -376,8 +376,10 @@ send_event_next_state_test() ->
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
     ?assertEqual(ok, eproc_fsm:send_event(PID, done, [{source, test}])),
-    ?assert(eproc_fsm:is_online(PID)),
-    ?assertEqual(3, meck:num_calls(eproc_fsm__void, handle_state, '_')),
+    timer:sleep(100),
+    ?assertEqual(false, eproc_fsm:is_online(PID)),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, [[], {event, done}, '_'])),
+    ?assert(some_DB_updates_should_be_done),
     ?assert(meck:validate([eproc_store,eproc_fsm__void])),
     ok = meck:unload([eproc_store, eproc_fsm__void]),
     ok = unlink_kill(PID).

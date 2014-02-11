@@ -857,10 +857,16 @@ set_state(FsmRef, NewStateName, NewStateData, Reason) ->
 %%
 %%  Checks is process is online.
 %%
-%%  TODO: Add spec.
-%%
+-spec is_online(
+        FsmRef :: fsm_ref() | otp_ref()
+    ) ->
+        boolean().
+
 is_online(FsmRef) ->
-    gen_server:call(FsmRef, {is_online}).
+    case catch gen_server:call(FsmRef, {is_online}) of
+        true                  -> true;
+        {'EXIT', {noproc, _}} -> false
+    end.
 
 
 %%
@@ -977,12 +983,11 @@ handle_call({'eproc_fsm$sync_send_event', Event, EventSrc}, From, State) ->
         src_arg = false
     },
     case perform_transition(Trigger, [], State) of
-        {ok, noreply, NewState} ->
-            {noreply, NewState};
-        {ok, {reply, Reply}, NewState} ->
-            {reply, Reply, NewState};
-        {error, Reason} ->
-            {stop, Reason, State}
+        {cont, noreply,        NewState} -> {noreply, NewState};
+        {cont, {reply, Reply}, NewState} -> {reply, Reply, NewState};
+        {stop, noreply,        NewState} -> {stop, normal, NewState};
+        {stop, {reply, Reply}, NewState} -> {stop, normal, Reply, NewState};
+        {error, Reason}                  -> {stop, Reason, State}
     end.
 
 
@@ -999,10 +1004,9 @@ handle_cast({'eproc_fsm$send_event', Event, EventSrc}, State) ->
         src_arg = false
     },
     case perform_transition(Trigger, [], State) of
-        {ok, noreply, NewState} ->
-            {noreply, NewState};
-        {error, Reason} ->
-            {stop, Reason, State}
+        {cont, noreply, NewState} -> {noreply, NewState};
+        {stop, noreply, NewState} -> {stop, normal, NewState};
+        {error, Reason}           -> {stop, Reason, State}
     end.
 
 
@@ -1027,10 +1031,9 @@ handle_info(Event, State = #state{attrs = Attrs}) ->
             {noreply, State#state{attrs = NewAttrs}};
         {trigger, NewAttrs, Trigger, AttrAction} ->
             case perform_transition(Trigger, [AttrAction], State#state{attrs = NewAttrs}) of
-                {ok, noreply, NewState} ->
-                    {ok, NewState};
-                {error, Reason} ->
-                    {error, Reason}
+                {cont, noreply, NewState} -> {noreply, NewState};
+                {stop, noreply, NewState} -> {stop, normal, NewState};
+                {error, Reason}           -> {error, Reason}
             end;
         unknown ->
             lager:warning("Ignoring unknown event ~p", Event),
@@ -1419,16 +1422,16 @@ perform_transition(Trigger, InitAttrActions, State) ->
         {reply_next,  R, NSN, NSD} -> {next,  {reply, R}, NSN,   NSD};
         {reply_final, R, NSN, NSD} -> {final, {reply, R}, NSN,   NSD}
     end,
-    SDataAfterTrn = case TrnMode of
+    {ProcAction, SDataAfterTrn} = case TrnMode of
         same ->
-            NewSData;
+            {cont, NewSData};
         next ->
             {ok, SDataAfterExit} = perform_exit(SName, NewSName, NewSData, State),
             {ok, SDataAfterEntry} = perform_entry(SName, NewSName, SDataAfterExit, State),
-            SDataAfterEntry;
+            {cont, SDataAfterEntry};
         final ->
             {ok, SDataAfterExit} = perform_exit(SName, NewSName, NewSData, State),
-            SDataAfterExit
+            {stop, SDataAfterExit}
     end,
 
     {ok, AttrActions, LastAttrId, NewAttrs} = eproc_fsm_attr:transition_end(InstId, TrnNr, NewSName, TrnAttrs),
@@ -1455,7 +1458,7 @@ perform_transition(Trigger, InitAttrActions, State) ->
         trn_nr = TrnNr,
         attrs = NewAttrs
     },
-    {ok, Reply, NewState}.
+    {ProcAction, Reply, NewState}.
 
 
 %%
