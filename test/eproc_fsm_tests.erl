@@ -362,7 +362,7 @@ start_link_opts_restart_test() ->
 %%
 %%  Check if `send_event/*` works with next_state.
 %%
-send_event_next_state_inittofinal_test() ->
+send_event_final_state_from_init_test() ->
     ok = meck:new(eproc_store, []),
     ok = meck:new(eproc_fsm__void, [passthrough]),
     ok = meck:expect(eproc_store, load_instance, fun

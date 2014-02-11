@@ -1408,6 +1408,8 @@ perform_transition(Trigger, InitAttrActions, State) ->
     TrnStart = erlang:now(),
     {ok, TrnAttrs} = eproc_fsm_attr:transition_start(InstId, TrnNr, SName, Attrs),
 
+    % TODO: Setup msg registations.
+
     TriggerArg = case {TriggerSrcArg, TriggerSync} of
         {true,  true}  -> {TriggerType, TriggerSrc, From, TriggerMsg};
         {true,  false} -> {TriggerType, TriggerSrc, TriggerMsg};
@@ -1447,6 +1449,7 @@ perform_transition(Trigger, InitAttrActions, State) ->
         attr_actions = InitAttrActions ++ AttrActions,
         attrs_active = undefined,
         suspensions = undefined
+        % TODO: Response msg
     },
     % TODO: Store transition to DB.
     % TODO: Add message.
