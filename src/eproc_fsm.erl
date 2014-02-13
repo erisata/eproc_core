@@ -142,14 +142,6 @@
 -include("eproc.hrl").
 -define(DEFAULT_TIMEOUT, 5000).
 
-%%
-%%  Unit tests.
-%%
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
--endif.
-
-
 
 -type name() :: {via, Registry :: module(), InstId :: inst_id()}.
 -opaque id()  :: integer().
@@ -1393,6 +1385,8 @@ perform_transition(Trigger, InitAttrActions, State) ->
         {reply_next,  R, NSN, NSD} -> {next,  {reply, R}, NSN,   NSD};
         {reply_final, R, NSN, NSD} -> {final, {reply, R}, NSN,   NSD}
     end,
+    ok = check_next_state_name(NewSName),
+
     {ProcAction, SDataAfterTrn} = case TrnMode of
         same ->
             {cont, NewSData};
@@ -1596,10 +1590,10 @@ state_in_scope(_State, _Scope) ->
     false.
 
 
+%%
+%%  Checks if the state name is valid for transition target.
+%%
+check_next_state_name([_|_]) ->
+    ok.
 
-%% =============================================================================
-%%  Unit tests for internal functions.
-%% =============================================================================
 
--ifdef(TEST).
--endif.

@@ -31,7 +31,7 @@ compile-all:
 check: test itest
 
 test: compile
-	$(REBAR) eunit skip_deps=true verbose=1
+	env ERL_AFLAGS='-config test/sys' $(REBAR) eunit skip_deps=true verbose=1
 
 itest: compile
 	$(REBAR) ct apps=$(APP)
