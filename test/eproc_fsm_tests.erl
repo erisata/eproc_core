@@ -563,8 +563,87 @@ send_event_same_state_from_init_test() ->
     ?assert(meck:validate([eproc_store, eproc_fsm__seq])),
     ok = meck:unload([eproc_store, eproc_fsm__seq]).
 
-% same_state, reply_next, reply_same, reply_final.
 
+%%
+%%  Check if `send_event/*` works with same_state from an ordinary state.
+%%
+send_event_same_state_from_ordinary_test() ->
+    ok = meck:new(eproc_store, []),
+    ok = meck:new(eproc_fsm__seq, [passthrough]),
+    ok = meck:expect(eproc_store, load_instance, fun
+        (store, {inst, 100}) ->
+            {ok, #instance{
+                id = 100, group = 200, name = name, module = eproc_fsm__seq,
+                args = {}, opts = [], init = {state, undefined}, status = running,
+                created = erlang:now(), transitions = [#transition{
+                    inst_id = 100, number = 1, sname = [incrementing], sdata = {state, 5},
+                    attr_last_id = 0, attr_actions = [], attrs_active = []
+                }]
+            }}
+    end),
+    ok = meck:expect(eproc_store, add_transition, fun
+        (store, Transition = #transition{inst_id = InstId, number = TrnNr = 2}, [#message{}]) ->
+            #transition{
+                trigger_type = event,
+                trigger_msg  = #msg_ref{id = {InstId, TrnNr, 0}, peer = {test, test}},
+                trigger_resp = undefined,
+                inst_status  = running
+            } = Transition,
+            {ok, TrnNr}
+    end),
+    {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
+    ?assert(eproc_fsm:is_online(PID)),
+    ?assertEqual(ok, eproc_fsm:send_event(PID, skip, [{source, {test, test}}])),
+    timer:sleep(100),
+    ?assertEqual(true, eproc_fsm:is_online(PID)),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {event, skip}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
+    ?assertEqual(1, meck:num_calls(eproc_store, add_transition, '_')),
+    ?assert(meck:validate([eproc_store, eproc_fsm__seq])),
+    ok = meck:unload([eproc_store, eproc_fsm__seq]),
+    ok = unlink_kill(PID).
+
+
+%%
+%%  Check if `send_event/*` craches if reply_* is returned from the state transition.
+%%
+send_event_reply_test() ->
+    ok = meck:new(eproc_store, []),
+    ok = meck:new(eproc_fsm__seq, [passthrough]),
+    ok = meck:expect(eproc_store, load_instance, fun
+        (store, {inst, 100}) ->
+            {ok, #instance{
+                id = 100, group = 200, name = name, module = eproc_fsm__seq,
+                args = {}, opts = [], init = {state, undefined}, status = running,
+                created = erlang:now(), transitions = [#transition{
+                    inst_id = 100, number = 1, sname = [incrementing], sdata = {state, 5},
+                    attr_last_id = 0, attr_actions = [], attrs_active = []
+                }]
+            }}
+    end),
+    ok = meck:expect(eproc_store, add_transition, fun
+        (store, #transition{number = TrnNr}, _Messages) ->
+            {ok, TrnNr}
+    end),
+    ok = meck:expect(eproc_fsm__seq, handle_state, fun
+        ([incrementing], {event, get}, StateData) ->
+            {reply_next, bad, [decrementing], StateData}
+    end),
+    {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
+    ?assertEqual(true, eproc_fsm:is_online(PID)),
+    unlink(PID),
+    ?assertEqual(ok, eproc_fsm:send_event(PID, get, [{source, {test, test}}])),
+    timer:sleep(100),
+    ?assertEqual(false, eproc_fsm:is_online(PID)),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {event, get}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
+    ?assertEqual(0, meck:num_calls(eproc_store, add_transition, '_')),
+    ?assert(meck:validate([eproc_store, eproc_fsm__seq])),
+    ok = meck:unload([eproc_store, eproc_fsm__seq]).
+
+
+
+% reply_next, reply_same, reply_final.
 
 
 % TODO: Check if `send_event/*` works, assert the following:
