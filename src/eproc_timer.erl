@@ -52,7 +52,8 @@
 %%
 %%
 set(Name, After, Event, Scope) ->
-    ok = eproc_fsm:register_message({inst, eproc_fsm:id()}, {timer, Name}, Event, undefined),
+    Now = erlang:now(),
+    ok = eproc_fsm:register_message({inst, eproc_fsm:id()}, {timer, Name}, {msg, Event, Now}, undefined),
     ok = eproc_fsm_attr:action(?MODULE, Name, {timer, After, Event}, Scope).
 
 
@@ -60,8 +61,9 @@ set(Name, After, Event, Scope) ->
 %%
 %%
 set(After, Event, Scope) ->
+    Now = erlang:now(),
     Name = undefined,
-    ok = eproc_fsm:register_message({inst, eproc_fsm:id()}, {timer, Name}, Event, undefined),
+    ok = eproc_fsm:register_message({inst, eproc_fsm:id()}, {timer, Name}, {msg, Event, Now}, undefined),
     ok = eproc_fsm_attr:action(?MODULE, Name, {timer, After, Event}, Scope).
 
 
@@ -69,8 +71,9 @@ set(After, Event, Scope) ->
 %%
 %%
 set(After, Event) ->
+    Now = erlang:now(),
     Name = undefined,
-    ok = eproc_fsm:register_message({inst, eproc_fsm:id()}, {timer, Name}, Event, undefined),
+    ok = eproc_fsm:register_message({inst, eproc_fsm:id()}, {timer, Name}, {msg, Event, Now}, undefined),
     ok = eproc_fsm_attr:action(?MODULE, Name, {timer, After, Event}, next).
 
 
@@ -148,7 +151,7 @@ handle_event(Attribute, _State, fired) ->
         name = Name,
         data = #data{event = Event}
     } = Attribute,
-    Trigger = #trigger{
+    Trigger = #trigger_spec{
         type = timer,
         source = Name,
         message = Event,

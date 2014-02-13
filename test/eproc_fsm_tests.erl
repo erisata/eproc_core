@@ -373,13 +373,35 @@ send_event_final_state_from_init_test() ->
                 created = erlang:now(), transitions = []
             }}
     end),
+    ok = meck:expect(eproc_store, add_transition, fun
+        (store, Transition = #transition{number = TrnNr}, [#message{}]) ->
+            #transition{
+                inst_id      = 100,
+                number       = 1,
+                sname        = [done],
+                sdata        = {state, a},
+                timestamp    = {_, _, _},
+                duration     = Duration,
+                trigger_type = event,
+                trigger_msg  = #msg_ref{id = {100, 1, 0}, peer = {test, test}},
+                trigger_resp = undefined,
+                trn_messages = [],
+                attr_last_id = 0,
+                attr_actions = [],
+                attrs_active = undefined,
+                suspensions  = undefined
+            } = Transition,
+            ?assert(is_integer(Duration)),
+            ?assert(Duration >= 0),
+            {ok, TrnNr}
+    end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
-    ?assertEqual(ok, eproc_fsm:send_event(PID, done, [{source, test}])),
+    ?assertEqual(ok, eproc_fsm:send_event(PID, done, [{source, {test, test}}])),
     timer:sleep(100),
     ?assertEqual(false, eproc_fsm:is_online(PID)),
     ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, [[], {event, done}, '_'])),
-    ?assert(some_DB_updates_should_be_done),
+    ?assertEqual(1, meck:num_calls(eproc_store, add_transition, '_')),
     ?assert(meck:validate([eproc_store,eproc_fsm__void])),
     ok = meck:unload([eproc_store, eproc_fsm__void]),
     ok = unlink_kill(PID).

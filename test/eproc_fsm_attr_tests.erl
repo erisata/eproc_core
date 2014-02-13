@@ -153,8 +153,8 @@ event_test() ->
     meck:expect(Mod, init, fun ([A]) -> {ok, [{A, state}]} end),
     meck:expect(Mod, handle_event, fun
         (#attribute{attr_id = 1}, state, my_event1) -> {handled, state1};
-        (#attribute{attr_id = 1}, state, my_event2) -> {trigger, #trigger{type = trg2}, {update, data2, state2}};
-        (#attribute{attr_id = 1}, state, my_event3) -> {trigger, #trigger{type = trg3}, {remove, reason3}}
+        (#attribute{attr_id = 1}, state, my_event2) -> {trigger, #trigger_spec{type = trg2}, {update, data2, state2}};
+        (#attribute{attr_id = 1}, state, my_event3) -> {trigger, #trigger_spec{type = trg3}, {remove, reason3}}
     end),
     {ok, State} = eproc_fsm_attr:init([], 1, [
         #attribute{attr_id = 1, module = Mod, scope = []}
@@ -165,8 +165,8 @@ event_test() ->
     {ok, Event3} = eproc_fsm_attr:make_event(Mod, 1, my_event3),
     ?assertEqual(unknown, eproc_fsm_attr:event(Event0, State)),
     {handled, _State1}                = eproc_fsm_attr:event(Event1, State),
-    {trigger, _State2, #trigger{type = trg2}, Action2} = eproc_fsm_attr:event(Event2, State),
-    {trigger, _State3, #trigger{type = trg3}, Action3} = eproc_fsm_attr:event(Event3, State),
+    {trigger, _State2, #trigger_spec{type = trg2}, Action2} = eproc_fsm_attr:event(Event2, State),
+    {trigger, _State3, #trigger_spec{type = trg3}, Action3} = eproc_fsm_attr:event(Event3, State),
     ?assertEqual(#attr_action{attr_id = 1, module = Mod, action = {update, [], data2}},       Action2),
     ?assertEqual(#attr_action{attr_id = 1, module = Mod, action = {remove, {user, reason3}}}, Action3),
     ?assertEqual(3, meck:num_calls(Mod, handle_event, '_')),

@@ -902,28 +902,28 @@ reply(To, Reply) ->
 %%  recipient is not FSM, the sending FSM is responsible for storing the event.
 %%
 -spec register_message(
-        EventSrc    :: term(),
-        EventDst    :: term(),
-        Event       :: term(),
-        EventId     :: term() | undefined
+        Src    :: event_src(),
+        Dst    :: event_src(),
+        Req    :: {ref, msg_id()} | {msg, term(), timestamp()},
+        Res    :: {ref, msg_id()} | {msg, term(), timestamp()} | undefined
     ) ->
         {ok, skipped | registered} |
         {error, Reason :: term()}.
 
 %%  Event between FSMs.
-register_message({inst, _SrcInstId}, {inst, DstInstId}, _Event, EventId) when EventId =/= undefined ->
+register_message({inst, _SrcInstId}, Dst = {inst, DstInstId}, Req = {ref, _ReqId}, Res) ->
     Messages = erlang:get('eproc_fsm$messages'),
-    Messages = erlang:put('eproc_fsm$messages', [{ref, DstInstId, EventId} | Messages]),
+    Messages = erlang:put('eproc_fsm$messages', [{msg_reg, Dst, Req, Res} | Messages]),
     {ok, registered};
 
 %%  Source is not FSM and target is FSM.
-register_message(_EventSrc, {inst, _DstInstId}, _Event, EventId) when EventId =/= undefined ->
+register_message(_EventSrc, {inst, _DstInstId}, {ref, _ReqId}, _Res) ->
     {ok, skipped};
 
 %%  Source is FSM and target is not.
-register_message({inst, _SrcInstId}, EventDst, Event, EventId) when EventId =:= undefined ->
+register_message({inst, _SrcInstId}, Dst, Req = {msg, _ReqBody, _ReqDate}, Res) ->
     Messages = erlang:get('eproc_fsm$messages'),
-    Messages = erlang:put('eproc_fsm$messages', [{own, EventDst, Event} | Messages]),
+    Messages = erlang:put('eproc_fsm$messages', [{msg_reg, Dst, Req, Res} | Messages]),
     {ok, registered}.
 
 
@@ -974,7 +974,7 @@ handle_call({is_online}, _From, State) ->
     {reply, true, State};
 
 handle_call({'eproc_fsm$sync_send_event', Event, EventSrc}, From, State) ->
-    Trigger = #trigger{
+    Trigger = #trigger_spec{
         type = sync,
         source = EventSrc,
         message = Event,
@@ -995,7 +995,7 @@ handle_call({'eproc_fsm$sync_send_event', Event, EventSrc}, From, State) ->
 %%  Asynchronous messages.
 %%
 handle_cast({'eproc_fsm$send_event', Event, EventSrc}, State) ->
-    Trigger = #trigger{
+    Trigger = #trigger_spec{
         type = event,
         source = EventSrc,
         message = Event,
@@ -1393,9 +1393,10 @@ perform_transition(Trigger, InitAttrActions, State) ->
         sname = SName,
         sdata = SData,
         trn_nr = LastTrnNr,
-        attrs = Attrs
+        attrs = Attrs,
+        store = Store
     } = State,
-    #trigger{
+    #trigger_spec{
         type = TriggerType,
         source = TriggerSrc,
         message = TriggerMsg,
@@ -1404,11 +1405,10 @@ perform_transition(Trigger, InitAttrActions, State) ->
         src_arg = TriggerSrcArg
     } = Trigger,
 
+    erlang:put('eproc_fsm$messages', []),
     TrnNr = LastTrnNr + 1,
     TrnStart = erlang:now(),
     {ok, TrnAttrs} = eproc_fsm_attr:transition_start(InstId, TrnNr, SName, Attrs),
-
-    % TODO: Setup msg registations.
 
     TriggerArg = case {TriggerSrcArg, TriggerSync} of
         {true,  true}  -> {TriggerType, TriggerSrc, From, TriggerMsg};
@@ -1437,30 +1437,68 @@ perform_transition(Trigger, InitAttrActions, State) ->
     end,
 
     {ok, AttrActions, LastAttrId, NewAttrs} = eproc_fsm_attr:transition_end(InstId, TrnNr, NewSName, TrnAttrs),
+    TrnEnd = erlang:now(),
+
+    %%  Collect all messages.
+    {RegisteredMsgs, RegisteredMsgRefs, InstId, TrnNr, _LastMsgNr} = lists:foldr(
+        fun registered_messages/2,
+        {[], [], InstId, TrnNr, 2},
+        erlang:erase('eproc_fsm$messages')
+    ),
+    RequestMsgId = {InstId, TrnNr, 0},
+    RequestMsgRef = #msg_ref{id = RequestMsgId, peer = TriggerSrc},
+    RequestMsg = #message{
+        id       = RequestMsgId,
+        sender   = TriggerSrc,
+        receiver = {inst, InstId},
+        resp_to  = undefined,
+        date     = TrnStart,
+        body     = TriggerMsg
+    },
+    {TriggerRespMsgRef, TransitionMsgs} = case Reply of
+        noreply ->
+            {undefined, [RequestMsg | RegisteredMsgs]};
+        {reply, ReplyMsg} ->
+            ResponseMsgId = {InstId, TrnNr, 1},
+            ResponseRef = #msg_ref{id = ResponseMsgId, peer = TriggerSrc},
+            ResponseMsg = #message{
+                id       = ResponseMsgId,
+                sender   = {inst, InstId},
+                receiver = TriggerSrc,
+                resp_to  = RequestMsgId,
+                date     = TrnEnd,
+                body     = ReplyMsg
+            },
+            {ResponseRef, [RequestMsg, ResponseMsg | RegisteredMsgs]}
+    end,
+
+    %%  Save transition.
     Transition = #transition{
         inst_id = InstId,
         number = TrnNr,
         sname = NewSName,
         sdata = NewSData,
         timestamp = TrnStart,
-        duration = timer:now_diff(erlang:now(), TrnStart),
-        trigger = Trigger,
+        duration = timer:now_diff(TrnEnd, TrnStart),
+        trigger_type = TriggerType,
+        trigger_msg  = RequestMsgRef,
+        trigger_resp = TriggerRespMsgRef,
+        trn_messages = RegisteredMsgRefs,
         attr_last_id = LastAttrId,
         attr_actions = InitAttrActions ++ AttrActions,
         attrs_active = undefined,
         suspensions = undefined
-        % TODO: Response msg
     },
-    % TODO: Store transition to DB.
-    % TODO: Add message.
-    % TODO: Add response, if exist
+    {ok, TrnNr} = eproc_store:add_transition(Store, Transition, TransitionMsgs),
 
+    %% Ok, save changes in the state.
     NewState = State#state{
         sname = NewSName,
         sdata = SDataAfterTrn,
         trn_nr = TrnNr,
         attrs = NewAttrs
     },
+    % TODO: Call register_message where needed.
     {ProcAction, Reply, NewState}.
 
 
@@ -1485,6 +1523,68 @@ perform_entry(PrevSName, NextSName, SData, #state{module = Module}) ->
         {ok, NewSData} ->
             {ok, NewSData}
     end.
+
+
+%%
+%%  Resolves messages and references that were registered during
+%%  particular transition.
+%%
+registered_messages(
+        {msg_reg, MsgDst, {ref, MsgId}, undefined},
+        {Msgs, Refs, InstId, TrnNr, MsgNr}
+        ) ->
+    NewRef = #msg_ref{id = MsgId, peer = MsgDst},
+    {Msgs, [NewRef | Refs], InstId, TrnNr, MsgNr};
+
+registered_messages(
+        {msg_reg, MsgDst, {ref, MsgReqId}, {ref, MsgResId}},
+        {Msgs, Refs, InstId, TrnNr, MsgNr}
+        ) ->
+    NewReqRef = #msg_ref{id = MsgReqId, peer = MsgDst},
+    NewResRef = #msg_ref{id = MsgResId, peer = MsgDst},
+    {Msgs, [NewReqRef, NewResRef | Refs], InstId, TrnNr, MsgNr};
+
+registered_messages(
+        {msg_reg, MsgDst, {msg, MsgBody, MsgDate}, undefined},
+        {Msgs, Refs, InstId, TrnNr, MsgNr}
+        ) ->
+    MsgId = {InstId, TrnNr, MsgNr},
+    NewRef = #msg_ref{id = MsgId, peer = MsgDst},
+    NewMsg = #message{
+        id       = MsgId,
+        sender   = {inst, InstId},
+        receiver = MsgDst,
+        resp_to  = undefined,
+        date     = MsgDate,
+        body     = MsgBody
+    },
+    {[NewMsg | Msgs], [NewRef | Refs], InstId, TrnNr, MsgNr + 1};
+
+registered_messages(
+        {msg_reg, MsgDst, {msg, MsgReqBody, MsgReqDate}, {msg, MsgResBody, MsgResDate}},
+        {Msgs, Refs, InstId, TrnNr, MsgNr}
+        ) ->
+    MsgReqId = {InstId, TrnNr, MsgNr},
+    MsgResId = {InstId, TrnNr, MsgNr + 1},
+    NewReqRef = #msg_ref{id = MsgReqId, peer = MsgDst},
+    NewResRef = #msg_ref{id = MsgResId, peer = MsgDst},
+    NewReqMsg = #message{
+        id       = MsgReqId,
+        sender   = {inst, InstId},
+        receiver = MsgDst,
+        resp_to  = undefined,
+        date     = MsgReqDate,
+        body     = MsgReqBody
+    },
+    NewResMsg = #message{
+        id       = MsgResId,
+        sender   = MsgDst,
+        receiver = {inst, InstId},
+        resp_to  = MsgReqId,
+        date     = MsgResDate,
+        body     = MsgResBody
+    },
+    {[NewReqMsg, NewResMsg | Msgs], [NewReqRef, NewResRef | Refs], InstId, TrnNr, MsgNr + 2}.
 
 
 %%

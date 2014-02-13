@@ -23,7 +23,7 @@
 -module(eproc_store).
 -compile([{parse_transform, lager_transform}]).
 -export([ref/0, ref/2]).
--export([add_instance/2, add_transition/2, load_instance/2, get_instance/3]).
+-export([add_instance/2, add_transition/3, load_instance/2, get_instance/3]).
 -export_type([ref/0]).
 -include("eproc.hrl").
 
@@ -51,7 +51,8 @@
 
 -callback add_transition(
         StoreArgs   :: term(),
-        Transition  :: #transition{}
+        Transition  :: #transition{},
+        Messages    :: [#message{}]
     ) ->
         {ok, trn_nr()}.
 
@@ -111,9 +112,9 @@ add_instance(StoreRef, Instance) ->
 %%
 %%  TODO: Describe.
 %%
-add_transition(StoreRef, Transition) ->
+add_transition(StoreRef, Transition, Messages) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(StoreRef),
-    StoreMod:add_transition(StoreArgs, Transition).
+    StoreMod:add_transition(StoreArgs, Transition, Messages).
 
 
 

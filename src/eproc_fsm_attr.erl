@@ -121,7 +121,7 @@
     when
         NewAttrState :: term(),
         NewAttrData :: term(),
-        Trigger     :: #trigger{},
+        Trigger     :: #trigger_spec{},
         Action ::
             {update, NewAttrData, NewAttrState} |
             {remove, Reason},
@@ -399,14 +399,14 @@ process_event(AttrCtx, Event) ->
         {handled, NewAttrState} ->
             NewAttrCtx = AttrCtx#attr_ctx{state = NewAttrState},
             {handled, NewAttrCtx};
-        {trigger, Trigger, {remove, Reason}} when is_record(Trigger, trigger) ->
+        {trigger, Trigger, {remove, Reason}} when is_record(Trigger, trigger_spec) ->
             AttrAction = #attr_action{
                 module = Module,
                 attr_id = AttrId,
                 action = {remove, {user, Reason}}
             },
             {trigger, removed, Trigger, AttrAction};
-        {trigger, Trigger, {update, NewAttrData, NewAttrState}} when is_record(Trigger, trigger) ->
+        {trigger, Trigger, {update, NewAttrData, NewAttrState}} when is_record(Trigger, trigger_spec) ->
             NewAttrCtx = AttrCtx#attr_ctx{
                 attr = Attribute#attribute{data = NewAttrData},
                 state = NewAttrState

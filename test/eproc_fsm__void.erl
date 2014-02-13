@@ -66,7 +66,7 @@ done(FsmRef) ->
 %%  Internal data structures.
 %% =============================================================================
 
--record(state, {}).
+-record(state, {some}).
 
 
 

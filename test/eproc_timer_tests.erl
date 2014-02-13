@@ -30,9 +30,9 @@ mocked_set_test() ->
         () -> some
     end),
     ok = meck:expect(eproc_fsm, register_message, fun
-        ({inst, some}, {timer, undefined}, msg1, undefined) -> ok;
-        ({inst, some}, {timer, undefined}, msg2, undefined) -> ok;
-        ({inst, some}, {timer, some},      msg3, undefined) -> ok
+        ({inst, some}, {timer, undefined}, {msg, msg1, {_, _, _}}, undefined) -> ok;
+        ({inst, some}, {timer, undefined}, {msg, msg2, {_, _, _}}, undefined) -> ok;
+        ({inst, some}, {timer, some},      {msg, msg3, {_, _, _}}, undefined) -> ok
     end),
     ok = meck:expect(eproc_fsm_attr, action, fun
         (eproc_timer, undefined, {timer, 1000, msg1}, next) -> ok;
@@ -92,7 +92,7 @@ set_create_test() ->
         () -> some
     end),
     ok = meck:expect(eproc_fsm, register_message, fun
-        ({inst, some}, {timer, undefined}, msg1, undefined) -> ok
+        ({inst, some}, {timer, undefined}, {msg, msg1, {_, _, _}}, undefined) -> ok
     end),
     {ok, State1} = eproc_fsm_attr:init([], 0, []),
     {ok, State2} = eproc_fsm_attr:transition_start(0, 0, [], State1),
@@ -113,7 +113,7 @@ set_update_test() ->
         () -> some
     end),
     ok = meck:expect(eproc_fsm, register_message, fun
-        ({inst, some}, {timer, some}, msg1, undefined) -> ok
+        ({inst, some}, {timer, some}, {msg, msg1, {_, _, _}}, undefined) -> ok
     end),
     {ok, State1} = eproc_fsm_attr:init([], 0, []),
     {ok, State2} = eproc_fsm_attr:transition_start(0, 0, [], State1),
@@ -138,7 +138,7 @@ cancel_test() ->
         () -> some
     end),
     ok = meck:expect(eproc_fsm, register_message, fun
-        ({inst, some}, {timer, some}, msg1, undefined) -> ok
+        ({inst, some}, {timer, some}, {msg, msg1, {_, _, _}}, undefined) -> ok
     end),
     {ok, State1} = eproc_fsm_attr:init([], 0, []),
     {ok, State2} = eproc_fsm_attr:transition_start(0, 0, [], State1),
@@ -163,7 +163,7 @@ remove_test() ->
         () -> some
     end),
     ok = meck:expect(eproc_fsm, register_message, fun
-        ({inst, some}, {timer, some}, msg1, undefined) -> ok
+        ({inst, some}, {timer, some}, {msg, msg1, {_, _, _}}, undefined) -> ok
     end),
     {ok, State1} = eproc_fsm_attr:init([first], 0, []),
     {ok, State2} = eproc_fsm_attr:transition_start(0, 0, [first], State1),
@@ -186,14 +186,14 @@ event_fired_test() ->
         () -> some
     end),
     ok = meck:expect(eproc_fsm, register_message, fun
-        ({inst, some}, {timer, some}, msg1, undefined) -> ok
+        ({inst, some}, {timer, some}, {msg, msg1, {_, _, _}}, undefined) -> ok
     end),
     {ok, State1} = eproc_fsm_attr:init([first], 0, []),
     {ok, State2} = eproc_fsm_attr:transition_start(0, 0, [first], State1),
     ok = eproc_timer:set(some, 100, msg1, next),
     {ok, _Actions3, _LastAttrId3, State3} = eproc_fsm_attr:transition_end(0, 0, [second], State2),
     ok = receive TimerMsg -> ok after 300 -> TimerMsg = undefined end,
-    ?assertMatch({trigger, _State4, #trigger{}, _Action}, eproc_fsm_attr:event(TimerMsg, State3)),
+    ?assertMatch({trigger, _State4, #trigger_spec{}, _Action}, eproc_fsm_attr:event(TimerMsg, State3)),
     ?assertEqual(1, meck:num_calls(eproc_fsm, register_message, '_')),
     ?assert(meck:validate([eproc_fsm])),
     ok = meck:unload([eproc_fsm]).
