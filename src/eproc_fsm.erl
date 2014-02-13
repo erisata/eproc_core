@@ -1491,6 +1491,8 @@ perform_transition(Trigger, InitAttrActions, State) ->
     },
     {ok, TrnNr} = eproc_store:add_transition(Store, Transition, TransitionMsgs),
 
+    % TODO: Call register_message where needed.
+
     %% Ok, save changes in the state.
     NewState = State#state{
         sname = NewSName,
@@ -1498,7 +1500,6 @@ perform_transition(Trigger, InitAttrActions, State) ->
         trn_nr = TrnNr,
         attrs = NewAttrs
     },
-    % TODO: Call register_message where needed.
     {ProcAction, Reply, NewState}.
 
 
