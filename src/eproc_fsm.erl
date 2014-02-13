@@ -750,7 +750,6 @@ sync_send_create_event(Module, Args, Event, Options) ->
 %%       3. The event is sent by an FSM instance. This case is also resolved from the process dictionary.
 %%
 %%  TODO: Options for metadata, event redelivery.
-%%  TODO: invoke register_message here.
 %%
 -spec send_event(
         FsmRef  :: fsm_ref() | otp_ref(),
@@ -769,8 +768,12 @@ send_event(FsmRef, Event, Options) ->
 %%  Simplified version of the `send_event/3`,
 %%  equivalent to `send_event(FsmRef, Event, [])`.
 %%
-%%  TODO: Add spec.
-%%
+-spec send_event(
+        FsmRef  :: fsm_ref() | otp_ref(),
+        Event   :: term()
+    ) ->
+        ok.
+
 send_event(FsmRef, Event) ->
     send_event(FsmRef, Event, []).
 
