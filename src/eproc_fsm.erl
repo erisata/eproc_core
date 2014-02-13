@@ -1386,6 +1386,10 @@ perform_transition(Trigger, InitAttrActions, State) ->
         {reply_final, R, NSN, NSD} -> {final, {reply, R}, NSN,   NSD}
     end,
     ok = check_next_state_name(NewSName),
+    ok = case {TriggerSync, Reply} of
+        {true, {reply, _}} -> ok;
+        {false, noreply} -> ok
+    end,
 
     {ProcAction, SDataAfterTrn} = case TrnMode of
         same ->
