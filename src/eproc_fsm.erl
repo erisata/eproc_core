@@ -1442,6 +1442,10 @@ perform_transition(Trigger, InitAttrActions, State) ->
     end,
 
     %%  Save transition.
+    InstStatus = case ProcAction of
+        cont -> running;
+        stop -> done
+    end,
     Transition = #transition{
         inst_id = InstId,
         number = TrnNr,
@@ -1456,7 +1460,8 @@ perform_transition(Trigger, InitAttrActions, State) ->
         attr_last_id = LastAttrId,
         attr_actions = InitAttrActions ++ AttrActions,
         attrs_active = undefined,
-        suspensions = undefined
+        inst_status  = InstStatus,
+        inst_suspend = undefined
     },
     {ok, TrnNr} = eproc_store:add_transition(Store, Transition, TransitionMsgs),
 

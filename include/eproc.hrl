@@ -223,7 +223,8 @@
     attr_last_id    :: integer(),                       %% Last action id.
     attr_actions    :: [#attr_action{}],                %% All attribute actions performed in this transition.
     attrs_active    :: [#attribute{}] | undefined,      %% Active props, keys and timers at the target state, Calculated field.
-    suspensions     :: #inst_suspension{} | undefined   %% Filled, if the instance was suspended and its state updated.
+    inst_status     :: inst_status(),                   %% Instance status, after the transition.
+    inst_suspend    :: #inst_suspension{} | undefined   %% Filled, if the instance was suspended and its state updated.
 }).
 
 %%

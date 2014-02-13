@@ -360,7 +360,7 @@ start_link_opts_restart_test() ->
 
 
 %%
-%%  Check if `send_event/*` works with next_state.
+%%  Check if `send_event/*` works with final_state.
 %%
 send_event_final_state_from_init_test() ->
     ok = meck:new(eproc_store, []),
@@ -389,7 +389,8 @@ send_event_final_state_from_init_test() ->
                 attr_last_id = 0,
                 attr_actions = [],
                 attrs_active = undefined,
-                suspensions  = undefined
+                inst_status  = done,
+                inst_suspend = undefined
             } = Transition,
             ?assert(is_integer(Duration)),
             ?assert(Duration >= 0),
