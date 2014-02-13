@@ -18,7 +18,7 @@
 %%  Sequence-generating process for testing `eproc_fsm`. Terminates never.
 %%  The states are the following:
 %%
-%%      [] --- next ---> [].
+%%      [] --- reset ---> [serving].
 %%
 
 -module(eproc_fsm__seq).
@@ -48,10 +48,25 @@ start_link(InstId) ->
 
 
 %%
+%%  Business specific functions.
 %%
-%%
+
+reset(InstId) ->
+    eproc_fsm:send_event(InstId, reset).
+
+skip(InstId) ->
+    eproc_fsm:send_event(InstId, skip).
+
 next(InstId) ->
     eproc_fsm:sync_send_event(InstId, next).
+
+last(InstId) ->
+    eproc_fsm:sync_send_event(InstId, last).
+
+close(InstId) ->
+    eproc_fsm:send_event(InstId, close).
+
+
 
 
 
@@ -73,7 +88,7 @@ next(InstId) ->
 %%  FSM init.
 %%
 init({}) ->
-    {ok, #state{seq = 0}}.
+    {ok, #state{seq = undefined}}.
 
 
 %%
@@ -84,10 +99,35 @@ init(_StateName, _StateData) ->
 
 
 %%
+%%  The initial state.
 %%
+handle_state([], {event, reset}, StateData) ->
+    {next_state, [serving], StateData#state{seq = 0}};
+
+
 %%
-handle_state(_, {sync, _From, next}, StateData = #state{seq = Seq}) ->
-    {reply_same, {ok, Seq}, StateData#state{seq = Seq + 1}}.
+%%  The `serving` state.
+%%
+handle_state([serving], {entry, _PrevState}, StateData) ->
+    {ok, StateData};
+
+handle_state([serving], {event, reset}, StateData) ->
+    {next_state, [serving], StateData#state{seq = 0}};
+
+handle_state([serving], {event, skip}, StateData = #state{seq = Seq}) ->
+    {same_state, StateData#state{seq = Seq + 1}};
+
+handle_state([serving], {sync, _From, next}, StateData = #state{seq = Seq}) ->
+    {reply_same, {ok, Seq}, StateData#state{seq = Seq + 1}};
+
+handle_state([serving], {sync, _From, last}, StateData = #state{seq = Seq}) ->
+    {reply_final, {ok, Seq}, [closed], StateData};
+
+handle_state([serving], {event, close}, StateData) ->
+    {final_state, [closed], StateData};
+
+handle_state([serving], {exit, _NextState}, StateData) ->
+    {ok, StateData}.
 
 
 %%

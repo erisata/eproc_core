@@ -360,7 +360,7 @@ start_link_opts_restart_test() ->
 
 
 %%
-%%  Check if `send_event/*` works with final_state.
+%%  Check if `send_event/*` works with final_state from initial state.
 %%
 send_event_final_state_from_init_test() ->
     ok = meck:new(eproc_store, []),
@@ -403,10 +403,47 @@ send_event_final_state_from_init_test() ->
     ?assertEqual(false, eproc_fsm:is_online(PID)),
     ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, [[], {event, done}, '_'])),
     ?assertEqual(1, meck:num_calls(eproc_store, add_transition, '_')),
-    ?assert(meck:validate([eproc_store,eproc_fsm__void])),
+    ?assert(meck:validate([eproc_store, eproc_fsm__void])),
     ok = meck:unload([eproc_store, eproc_fsm__void]),
     ok = unlink_kill(PID).
 
+
+%%
+%%  Check if `send_event/*` works with next_state from initial state.
+%%
+send_event_next_state_from_init_test() ->
+    ok = meck:new(eproc_store, []),
+    ok = meck:new(eproc_fsm__seq, [passthrough]),
+    ok = meck:expect(eproc_store, load_instance, fun
+        (store, {inst, 100}) ->
+            {ok, #instance{
+                id = 100, group = 200, name = name, module = eproc_fsm__seq,
+                args = {}, opts = [], init = {state, undefined}, status = running,
+                created = erlang:now(), transitions = []
+            }}
+    end),
+    ok = meck:expect(eproc_store, add_transition, fun
+        (store, Transition = #transition{inst_id = InstId, number = TrnNr = 1}, [#message{}]) ->
+            #transition{
+                trigger_type = event,
+                trigger_msg  = #msg_ref{id = {InstId, TrnNr, 0}, peer = {test, test}},
+                trigger_resp = undefined,
+                inst_status  = running
+            } = Transition,
+            {ok, TrnNr}
+    end),
+    {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
+    ?assert(eproc_fsm:is_online(PID)),
+    ?assertEqual(ok, eproc_fsm:send_event(PID, reset, [{source, {test, test}}])),
+    timer:sleep(100),
+    ?assertEqual(true, eproc_fsm:is_online(PID)),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[], {event, reset}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[serving], {entry, []}, '_'])),
+    ?assertEqual(2, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
+    ?assertEqual(1, meck:num_calls(eproc_store, add_transition, '_')),
+    ?assert(meck:validate([eproc_store, eproc_fsm__seq])),
+    ok = meck:unload([eproc_store, eproc_fsm__seq]),
+    ok = unlink_kill(PID).
 
 
 % TODO: Check if `send_event/*` works, assert the following:
