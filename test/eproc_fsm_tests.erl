@@ -643,19 +643,17 @@ send_event_reply_test() ->
 
 
 
-% reply_next, reply_same, reply_final.
-
-
-% TODO: Check if `send_event/*` works, assert the following:
+% TODO: Check if `sync_send_event/*` works, assert the following:
 %   * Check if runtime field is passed to transition and not stored to DB.
-%   * Check all transtion responses.
 %   * Check if attributes handled properly.
 %   * Check if event source is determined correctly in all cases.
-%   * Check if transition to [] is not allowed.
+
+% TODO: Check if `sync_send_event/*` works, assert the following:
+%   * Check all transtion responses.
+%   * Check if reply/* works.
 
 
 
-% TODO: Check if sync_send_event/* and reply/* works.
 % TODO: Check if await/* works.
 
 % TODO: Check if send_create_event/* works.
