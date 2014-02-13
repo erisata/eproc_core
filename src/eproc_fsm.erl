@@ -132,8 +132,9 @@
 
 %%
 %%  Type exports.
+%%  TODO: Do we need to export them? Maybe they should be moved to the hrl file?
 %%
--export_type([name/0, id/0, group/0]).
+-export_type([name/0, id/0, group/0, state_event/0, state_name/0, state_scope/0, state_data/0]).
 
 %%
 %%  Internal things...
@@ -153,8 +154,6 @@
 -type name() :: {via, Registry :: module(), InstId :: inst_id()}.
 -opaque id()  :: integer().
 -opaque group() :: integer().
-
--type timer_name() :: term().
 
 %%
 %%  An event, received by the FSM.
@@ -351,7 +350,8 @@
         StateName   :: state_name(),
         Trigger     :: {event, Message} |
                        {sync, From, Message} |
-                       {timer, Timer, Message} |    %% TODO: Derive some generic form.
+                       {timer, Timer, Message} |
+                       %% TODO: Derive some generic form.
                        {exit, NextStateName} |
                        {entry, PrevStateName},
         StateData   :: state_data()
@@ -365,7 +365,7 @@
         {ok, NewStateData}
     when
         From    :: term(),
-        Timer   :: timer_name(),
+        Timer   :: term(),
         Reply   :: term(),
         NewStateData    :: state_data(),
         NextStateName   :: state_name(),
@@ -911,7 +911,7 @@ reply(To, Reply) ->
         {error, Reason :: term()}.
 
 %%  Event between FSMs.
-register_message({inst, _SrcInstId}, Dst = {inst, DstInstId}, Req = {ref, _ReqId}, Res) ->
+register_message({inst, _SrcInstId}, Dst = {inst, _DstInstId}, Req = {ref, _ReqId}, Res) ->
     Messages = erlang:get('eproc_fsm$messages'),
     Messages = erlang:put('eproc_fsm$messages', [{msg_reg, Dst, Req, Res} | Messages]),
     {ok, registered};
@@ -1328,7 +1328,7 @@ create_state(Instance) ->
 %%
 %%  Prepare a state after normal restart or resume with not updated state.
 %%
-reload_state(Instance, Transition) ->
+reload_state(_Instance, Transition) ->
     #transition{
         number = LastTrnNr,
         sname  = LastSName,
@@ -1484,7 +1484,7 @@ perform_transition(Trigger, InitAttrActions, State) ->
 %%
 %%  Invoke the state exit action.
 %%
-perform_exit([], NextSName, SData, _State) ->
+perform_exit([], _NextSName, SData, _State) ->
     {ok, SData};
 
 perform_exit(PrevSName, NextSName, SData, #state{module = Module}) ->

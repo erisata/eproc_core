@@ -23,7 +23,7 @@
 -behaviour(gen_server).
 -compile([{parse_transform, lager_transform}]).
 -export([start_link/1]).
--export([add_instance/2, add_transition/2, load_instance/2, get_instance/3]).
+-export([add_instance/2, add_transition/3, load_instance/2, get_instance/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -include("eproc.hrl").
 
@@ -120,7 +120,7 @@ add_instance(_StoreArgs, Instance = #instance{name = Name, group = Group}) ->
 %%
 %%
 %%
-add_transition(_StoreArgs, _Transition) ->
+add_transition(_StoreArgs, _Transition, _Messages) ->
     {error, not_implemented}.   % TODO
 
 
