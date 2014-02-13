@@ -1340,37 +1340,6 @@ reload_state(Instance, Transition) ->
 
 
 %%
-%%  Prepare a state after resume wuth state updated externally.
-%%  TODO: Implement.
-%%
-%update_state(Instance, Transition, Update, Store) ->
-%    #instance{
-%        id = InstId
-%    } = Instance,
-%    #transition{
-%        number = LastTrnNr,
-%        active = Attrs
-%    } = Transition,
-%    #inst_suspension{
-%        upd_sname = UpdSName,
-%        upd_sdata = UpdSData
-%    } = Update,
-%    NewTrnNr = LastTrnNr + 1,
-%    NewTransition = #transition{
-%        inst_id = InstId,
-%        number = NewTrnNr,
-%        sname = UpdSName,
-%        sdata = UpdSData,
-%        timestamp = eproc:now(),
-%        duration = 0,
-%        trigger = todo % TODO,
-%    },
-%    {ok, NewTrnNr} = eproc_store:add_transition(Store, NewTransition),
-%    {ok, UpgradedSName, UpgradedSData} = upgrade_state(Instance, UpdSName, UpdSData),
-%    {ok, NewTrnNr, UpgradedSName, UpgradedSData, Attrs}.
-
-
-%%
 %%  Perform state upgrade on code change or state reload from db.
 %%
 upgrade_state(#instance{module = Module}, SName, SData) ->
@@ -1455,7 +1424,7 @@ perform_transition(Trigger, InitAttrActions, State) ->
         date     = TrnStart,
         body     = TriggerMsg
     },
-    {TriggerRespMsgRef, TransitionMsgs} = case Reply of
+    {ResponseMsgRef, TransitionMsgs} = case Reply of
         noreply ->
             {undefined, [RequestMsg | RegisteredMsgs]};
         {reply, ReplyMsg} ->
@@ -1482,7 +1451,7 @@ perform_transition(Trigger, InitAttrActions, State) ->
         duration = timer:now_diff(TrnEnd, TrnStart),
         trigger_type = TriggerType,
         trigger_msg  = RequestMsgRef,
-        trigger_resp = TriggerRespMsgRef,
+        trigger_resp = ResponseMsgRef,
         trn_messages = RegisteredMsgRefs,
         attr_last_id = LastAttrId,
         attr_actions = InitAttrActions ++ AttrActions,
@@ -1491,7 +1460,11 @@ perform_transition(Trigger, InitAttrActions, State) ->
     },
     {ok, TrnNr} = eproc_store:add_transition(Store, Transition, TransitionMsgs),
 
-    % TODO: Call register_message where needed.
+    RefForReg = fun
+        (undefined) -> undefined;
+        (#msg_ref{id = I}) -> {ref, I}
+    end,
+    {ok, _} = register_message(TriggerSrc, {inst, InstId}, RefForReg(RequestMsgRef), RefForReg(ResponseMsgRef)),
 
     %% Ok, save changes in the state.
     NewState = State#state{
