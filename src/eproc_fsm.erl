@@ -25,13 +25,13 @@
 %%    * State name supports substates and orthogonal states.
 %%    * Callback `Module:handle_state/3` is used instead of `Module:StateName/2-3`.
 %%      This allows to have substates and orthogonal states.
-%%    * Process configuration is passed as a separate argument to the fsm. TODO: WTF?
 %%    * Has support for state entry and exit actions.
 %%      State entry action is convenient for setting up timers and keys.
 %%    * Has support for scopes. The scopes can be used to manage timers and keys.
 %%    * Supports automatic state persistence.
 %%
-%%  It is recomended to name version explicitly when defining state. It can be done as follows:
+%%  It is recomended to name version explicitly when defining state.
+%%  It can be done as follows:
 %%
 %%      -record(state, {
 %%          version = 1,
@@ -44,8 +44,18 @@
 %%
 %%  New FSM created, started and an initial event received
 %%  :
+%%      On creation of the persistent FSM inialization in performed:
+%%
 %%        * `init(Args)`
+%%
+%%      then process is started, the following callbacks are used to
+%%      possibly upgrade and initialize process runtime state:
+%%
+%%        * `code_change(state, StateName, StateData, undefined)`
 %%        * `init(InitStateName, StateData)`
+%%
+%%      and then the first event is received and the following callbacks invoked:
+%%
 %%        * `handle_state(InitStateName, {event, Message} | {sync, From, Message}, StateData)`
 %%        * `handle_state(NewStateName, {entry, InitStateName}, StateData)`
 %%
@@ -76,22 +86,6 @@
 %%  :
 %%        * `handle_state(StateName, {event, Message} | {sync, From, Message}, StateData)`
 %%        * `handle_state(StateName, {exit, FinalStateName}, StateData)`
-%%
-%%
-%%  Implementation details
-%%  ----------------------
-%%
-%%  Several states are maintained during lifeycle of the process:
-%%    * `starting`  - while FSM initializes itself asynchronously.
-%%    * `running`   - when the FSM is running.
-%%    * `suspended` - when the FSM is suspended paused by an administrator of marked automatically as faulty.
-%%
-%%  FSM can reach the following terminal states:    TODO: Map it with the UML diagram.
-%%    * `{done, success}` - when the FSM was completed successfully.
-%%    * `{done, failure}` - when the FSM was completed by the callback module returning special response TODO.
-%%    * `{term, killed}`  - when the FSM was killed in the `running` or the `paused` state.
-%%    * `{term, failed}`  - when the FSM was terminated in the `faulty` state.
-%%
 %%
 -module(eproc_fsm).
 -behaviour(gen_server).
@@ -343,7 +337,10 @@
         Trigger     :: {event, Message} |
                        {sync, From, Message} |
                        {timer, Timer, Message} |
-                       %% TODO: Derive some generic form.
+                       {Type, Message} |
+                       {Type, From, Message} |
+                       {Type, Source, Message} |
+                       {Type, Source, From, Message} |
                        {exit, NextStateName} |
                        {entry, PrevStateName},
         StateData   :: state_data()
@@ -356,8 +353,11 @@
         {reply_final, Reply, FinalStateName, NewStateData} |
         {ok, NewStateData}
     when
+        Type    :: atom(),
         From    :: term(),
-        Timer   :: term(),
+        Message :: term(),
+        Source  :: event_src(),
+        Timer   :: event_src(),
         Reply   :: term(),
         NewStateData    :: state_data(),
         NextStateName   :: state_name(),
@@ -387,13 +387,19 @@
 %%  when the state can be changed to some new structure. In the case of state changes,
 %%  the callback will be invoked with `state` as a first argument (and `Extra = undefined`).
 %%
-%%  The state changes will be indicated in the following cases: TODO: Review, add RuntimeField.
+%%  The state changes will be indicated in the following cases:
 %%
-%%    * On process startup (when a persistent FSM becomes online).
+%%    * On process start or restart (when a persistent FSM becomes online).
 %%    * On FSM resume (after being suspended).
 %%
 %%  This function will be invoked on hot code upgrade, as usual. In this case
 %%  the function will be invoked as described in `gen_fsm`.
+%%
+%%  When upgrading the state data, runtime state index can be changed (or introduced).
+%%  The new RuntimeField index in the StateData (assumes StateData to be a tuple)
+%%  can be provided by returning it in result of this function. This is meaningfull
+%%  for hot code upgrades, altrough useless for state upgrades on FSM (re)starts
+%%  as `init/2` is called after this callback and will override the runtime field index.
 %%
 -callback code_change(
         OldVsn      :: (Vsn | {down, Vsn} | state),
