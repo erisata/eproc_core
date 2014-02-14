@@ -642,9 +642,43 @@ send_event_reply_test() ->
     ok = meck:unload([eproc_store, eproc_fsm__seq]).
 
 
+%%
+%%  Check if runtime state is not stored to the DB.
+%%
+send_event_save_runtime_test() ->
+    ok = meck:new(eproc_store, []),
+    ok = meck:new(eproc_fsm__void, [passthrough]),
+    ok = meck:expect(eproc_store, ref, fun () -> {ok, store} end),
+    ok = meck:expect(eproc_store, load_instance, fun
+        (store, {inst, I = 1000}) ->
+            {ok, #instance{
+                id = I, group = 2000, name = name, module = eproc_fsm__void,
+                args = {a}, opts = [], init = {state, a, this_is_empty}, status = running,
+                created = erlang:now(), transitions = []
+            }}
+    end),
+    ok = meck:expect(eproc_fsm__void, init, fun
+        ([], {state, a, this_is_empty}) ->
+            {ok, 3, not_empty_at_runtime}
+    end),
+    ok = meck:expect(eproc_store, add_transition, fun
+        (store, #transition{number = TrnNr, sdata = {state, a, this_is_empty}}, [#message{}]) ->
+            {ok, TrnNr}
+    end),
+    {ok, PID} = eproc_fsm:start_link({inst, 1000}, []),
+    ?assert(eproc_fsm:is_online(PID)),
+    ?assertEqual(ok, eproc_fsm:send_event(PID, done, [{source, {test, test}}])),
+    timer:sleep(100),
+    ?assertEqual(false, eproc_fsm:is_online(PID)),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, '_')),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, [[], {event, done}, {state, a, not_empty_at_runtime}])),
+    ?assertEqual(1, meck:num_calls(eproc_store, add_transition, '_')),
+    ?assert(meck:validate([eproc_store, eproc_fsm__void])),
+    ok = meck:unload([eproc_store, eproc_fsm__void]),
+    ok = unlink_kill(PID).
 
-% TODO: Check if `sync_send_event/*` works, assert the following:
-%   * Check if runtime field is passed to transition and not stored to DB.
+
+% TODO: Check if `send_event/*` works, assert the following:
 %   * Check if attributes handled properly.
 %   * Check if event source is determined correctly in all cases.
 

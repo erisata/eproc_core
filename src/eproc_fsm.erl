@@ -801,8 +801,13 @@ send_event(FsmRef, Event) ->
 %%  :   Maximal time in milliseconds for the synchronous call.
 %%      5000 (5 seconds) is the default.
 %%
-%%  TODO: Add spec.
-%%
+-spec sync_send_event(
+        FsmRef  :: fsm_ref() | otp_ref(),
+        Event   :: term(),
+        Options :: proplist()
+    ) ->
+        ok.
+
 sync_send_event(FsmRef, Event, Options) ->
     {ok, EventSrc} = resolve_event_src(Options),
     {ok, Timeout}  = resolve_timeout(Options),
@@ -814,8 +819,12 @@ sync_send_event(FsmRef, Event, Options) ->
 %%  Simplified version of the `sync_send_event/3`,
 %%  equivalent to `sync_send_event(FsmRef, Event, [])`.
 %%
-%%  TODO: Add spec.
-%%
+-spec sync_send_event(
+        FsmRef  :: fsm_ref() | otp_ref(),
+        Event   :: term()
+    ) ->
+        ok.
+
 sync_send_event(FsmRef, Event) ->
     sync_send_event(FsmRef, Event, []).
 
@@ -860,6 +869,7 @@ set_state(FsmRef, NewStateName, NewStateData, Reason) ->
 is_online(FsmRef) ->
     case catch gen_server:call(FsmRef, {is_online}) of
         true                  -> true;
+        {'EXIT', {normal, _}} -> false;
         {'EXIT', {noproc, _}} -> false
     end.
 
@@ -1357,6 +1367,8 @@ perform_transition(Trigger, InitAttrActions, State) ->
         sname = SName,
         sdata = SData,
         trn_nr = LastTrnNr,
+        rt_field = RuntimeField,
+        rt_default = RuntimeDefault,
         attrs = Attrs,
         store = Store
     } = State,
@@ -1451,7 +1463,7 @@ perform_transition(Trigger, InitAttrActions, State) ->
         inst_id = InstId,
         number = TrnNr,
         sname = NewSName,
-        sdata = NewSData,
+        sdata = cleanup_runtime_data(SDataAfterTrn, RuntimeField, RuntimeDefault),
         timestamp = TrnStart,
         duration = timer:now_diff(TrnEnd, TrnStart),
         trigger_type = TriggerType,
@@ -1565,6 +1577,16 @@ registered_messages(
         body     = MsgResBody
     },
     {[NewReqMsg, NewResMsg | Msgs], [NewReqRef, NewResRef | Refs], InstId, TrnNr, MsgNr + 2}.
+
+
+%%
+%%  Cleanup runtime state before storing state to the DB.
+%%
+cleanup_runtime_data(Data, undefined, _RuntimeDefault) ->
+    Data;
+
+cleanup_runtime_data(Data, RuntimeField, RuntimeDefault) when is_integer(RuntimeField), is_tuple(Data) ->
+    erlang:setelement(RuntimeField, Data, RuntimeDefault).
 
 
 %%
