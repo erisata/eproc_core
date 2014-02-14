@@ -1400,7 +1400,7 @@ perform_transition(Trigger, InitAttrActions, State) ->
         {reply_next,  R, NSN, NSD} -> {next,  {reply, R}, NSN,   NSD};
         {reply_final, R, NSN, NSD} -> {final, {reply, R}, NSN,   NSD}
     end,
-    ok = check_next_state_name(NewSName),
+    ok = check_next_state(NewSName),
     ok = case {TriggerSync, Reply} of
         {true, {reply, _}} -> ok;
         {false, noreply} -> ok
@@ -1620,9 +1620,25 @@ state_in_scope(_State, _Scope) ->
 
 
 %%
+%%  Checks if state name has valid structure.
+%%
+check_state([]) ->
+    ok;
+
+check_state([BaseState | SubStates]) when is_atom(BaseState); is_binary(BaseState); is_integer(BaseState) ->
+    check_state(SubStates);
+
+check_state([BaseState]) when is_tuple(BaseState) ->
+    [StateName | StateRegions] = tuple_to_list(BaseState),
+    ok = check_state([StateName]),
+    [ok = check_state(S) || S <- StateRegions],
+    ok.
+
+
+%%
 %%  Checks if the state name is valid for transition target.
 %%
-check_next_state_name([_|_]) ->
-    ok.
+check_next_state([_|_] = State) ->
+    check_state(State).
 
 
