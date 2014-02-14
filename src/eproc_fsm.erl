@@ -896,6 +896,7 @@ is_online(FsmRef) ->
         {error, Reason :: term()}.
 
 reply(To, Reply) ->
+    noreply = erlang:put('eproc_fsm$reply', {reply, Reply}),
     To(Reply).
 
 
@@ -1382,6 +1383,7 @@ perform_transition(Trigger, InitAttrActions, State) ->
     } = Trigger,
 
     erlang:put('eproc_fsm$messages', []),
+    erlang:put('eproc_fsm$reply', noreply),
     TrnNr = LastTrnNr + 1,
     TrnStart = erlang:now(),
     {ok, TrnAttrs} = eproc_fsm_attr:transition_start(InstId, TrnNr, SName, Attrs),
@@ -1392,7 +1394,7 @@ perform_transition(Trigger, InitAttrActions, State) ->
         {false, true}  -> {TriggerType, From, TriggerMsg};
         {false, false} -> {TriggerType, TriggerMsg}
     end,
-    {TrnMode, Reply, NewSName, NewSData} = case Module:handle_state(SName, TriggerArg, SData) of
+    {TrnMode, TransitionReply, NewSName, NewSData} = case Module:handle_state(SName, TriggerArg, SData) of
         {same_state,          NSD} -> {same,  noreply,    SName, NSD};
         {next_state,     NSN, NSD} -> {next,  noreply,    NSN,   NSD};
         {final_state,    NSN, NSD} -> {final, noreply,    NSN,   NSD};
@@ -1401,9 +1403,12 @@ perform_transition(Trigger, InitAttrActions, State) ->
         {reply_final, R, NSN, NSD} -> {final, {reply, R}, NSN,   NSD}
     end,
     ok = check_next_state(NewSName),
-    ok = case {TriggerSync, Reply} of
-        {true, {reply, _}} -> ok;
-        {false, noreply} -> ok
+
+    ExplicitReply = erlang:erase('eproc_fsm$reply'),
+    {ok, Reply} = case {TriggerSync, TransitionReply, ExplicitReply} of
+        {true,  {reply, TR}, noreply    } -> {ok, {reply, TR}};
+        {true,  noreply,     {reply, ER}} -> {ok, {reply, ER}};
+        {false, noreply,     noreply    } -> {ok, noreply}
     end,
 
     {ProcAction, SDataAfterTrn} = case TrnMode of
@@ -1491,7 +1496,7 @@ perform_transition(Trigger, InitAttrActions, State) ->
         trn_nr = TrnNr,
         attrs = NewAttrs
     },
-    {ProcAction, Reply, NewState}.
+    {ProcAction, TransitionReply, NewState}.
 
 
 %%
