@@ -681,6 +681,7 @@ send_event_save_runtime_test() ->
 % TODO: Check if `send_event/*` works, assert the following:
 %   * Check if attributes handled properly.
 %   * Check if event source is determined correctly in all cases.
+%   * Check if process is unregistered from the restart manager.
 
 
 
@@ -852,14 +853,9 @@ sync_send_event_reply_test() ->
     ok = unlink_kill(PID).
 
 
-
-% TODO: Check if `sync_send_event/*` works, assert the following:
-%   * Check all transtion responses.
-%   * Check if reply/* works.
-
-
-
 % TODO: Check if await/* works.
+
+% TODO: Test handling of crashes in callbacks in sync and async calls.
 
 % TODO: Check if send_create_event/* works.
 % TODO: Check if sync_send_create_event/* works.
@@ -869,4 +865,3 @@ sync_send_event_reply_test() ->
 % TODO: Check if set_state/* works.
 
 % TODO: Check if register_message/* works.
-% TODO: Check if is_online/* works.
