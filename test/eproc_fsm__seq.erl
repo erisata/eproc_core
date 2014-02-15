@@ -24,7 +24,7 @@
 -module(eproc_fsm__seq).
 -behaviour(eproc_fsm).
 -compile([{parse_transform, lager_transform}]).
--export([create/0, start_link/1, reset/1, skip/1, close/1, next/1, get/1, last/1]).
+-export([create/0, start_link/1, reset/1, skip/1, close/1, next/1, get/1, last/1, flip/1]).
 -export([init/1, init/2, handle_state/3, terminate/3, code_change/4, format_status/2]).
 -include("eproc.hrl").
 

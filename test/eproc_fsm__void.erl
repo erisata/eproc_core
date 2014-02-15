@@ -23,7 +23,7 @@
 -module(eproc_fsm__void).
 -behaviour(eproc_fsm).
 -compile([{parse_transform, lager_transform}]).
--export([create/0, start_link/1, done/1]).
+-export([create/0, create/1, start_link/1, done/1]).
 -export([init/1, init/2, handle_state/3, terminate/3, code_change/4, format_status/2]).
 -include("eproc.hrl").
 

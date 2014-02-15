@@ -114,7 +114,9 @@
 %%  APIs for related eproc modules.
 %%
 -export([
-    state_in_scope/2,
+    is_state_in_scope/2,
+    is_state_valid/1,
+    is_next_state_valid/1,
     register_message/4
 ]).
 
@@ -662,6 +664,78 @@ name() ->
         undefined -> {error, not_fsm};
         Name      -> {ok, Name}
     end.
+
+
+%%
+%%  Checks, if a state is in specified scope.
+%%
+-spec is_state_in_scope(state_name(), state_scope()) -> boolean().
+
+is_state_in_scope(State, Scope) when State =:= Scope; Scope =:= []; Scope =:= '_' ->
+    true;
+
+is_state_in_scope([BaseState | SubStates], [BaseScope | SubScopes]) when BaseState =:= BaseScope; BaseScope =:= '_' ->
+    is_state_in_scope(SubStates, SubScopes);
+
+is_state_in_scope([BaseState | SubStates], [BaseScope | SubScopes]) when element(1, BaseState) =:= BaseScope ->
+    is_state_in_scope(SubStates, SubScopes);
+
+is_state_in_scope([BaseState | _SubStates], [BaseScope | _SubScopes]) when is_tuple(BaseState), is_tuple(BaseScope) ->
+    [StateName | StateRegions] = tuple_to_list(BaseState),
+    [ScopeName | ScopeRegions] = tuple_to_list(BaseScope),
+    RegionCheck = fun
+        (_, false) -> false;
+        ({St, Sc}, true) -> is_state_in_scope(St, Sc)
+    end,
+    NamesEqual = StateName =:= ScopeName,
+    SizesEqual = tuple_size(BaseState) =:= tuple_size(BaseScope),
+    case NamesEqual and SizesEqual of
+        true -> lists:foldl(RegionCheck, true, lists:zip(StateRegions, ScopeRegions));
+        false -> false
+    end;
+
+is_state_in_scope(_State, _Scope) ->
+    false.
+
+
+%%
+%%  Checks if state name has valid structure.
+%%
+-spec is_state_valid(state_name()) -> boolean().
+
+is_state_valid([]) ->
+    true;
+
+is_state_valid([BaseState | SubStates]) when is_atom(BaseState); is_binary(BaseState); is_integer(BaseState) ->
+    is_state_valid(SubStates);
+
+is_state_valid([BaseState]) when is_tuple(BaseState) ->
+    [StateName | StateRegions] = tuple_to_list(BaseState),
+    case is_state_valid([StateName]) of
+        true ->
+            RegionsCheckFun = fun
+                (_, false) -> false;
+                (S, true) -> is_state_valid(S)
+            end,
+            lists:foldl(RegionsCheckFun, true, StateRegions);
+        false ->
+            false
+    end;
+
+is_state_valid(_State) ->
+    false.
+
+
+%%
+%%  Checks if the state name is valid for transition target.
+%%
+-spec is_next_state_valid(state_name()) -> boolean().
+
+is_next_state_valid([_|_] = State) ->
+    is_state_valid(State);
+
+is_next_state_valid(_State) ->
+    false.
 
 
 %%
@@ -1448,7 +1522,7 @@ perform_transition(Trigger, InitAttrActions, State) ->
         {reply_next,  R, NSN, NSD} -> {next,  {reply, R}, NSN,   NSD};
         {reply_final, R, NSN, NSD} -> {final, {reply, R}, NSN,   NSD}
     end,
-    ok = check_next_state(NewSName),
+    true = is_next_state_valid(NewSName),
 
     ExplicitReply = erlang:erase('eproc_fsm$reply'),
     {ok, Reply} = case {TriggerSync, TransitionReply, ExplicitReply} of
@@ -1639,58 +1713,6 @@ cleanup_runtime_data(Data, undefined, _RuntimeDefault) ->
 cleanup_runtime_data(Data, RuntimeField, RuntimeDefault) when is_integer(RuntimeField), is_tuple(Data) ->
     erlang:setelement(RuntimeField, Data, RuntimeDefault).
 
-
-%%
-%%  Checks, if a state is in specified scope.
-%%
-state_in_scope(State, Scope) when State =:= Scope; Scope =:= []; Scope =:= '_' ->
-    true;
-
-state_in_scope([BaseState | SubStates], [BaseScope | SubScopes]) when BaseState =:= BaseScope; BaseScope =:= '_' ->
-    state_in_scope(SubStates, SubScopes);
-
-state_in_scope([BaseState | SubStates], [BaseScope | SubScopes]) when element(1, BaseState) =:= BaseScope ->
-    state_in_scope(SubStates, SubScopes);
-
-state_in_scope([BaseState | _SubStates], [BaseScope | _SubScopes]) when is_tuple(BaseState), is_tuple(BaseScope) ->
-    [StateName | StateRegions] = tuple_to_list(BaseState),
-    [ScopeName | ScopeRegions] = tuple_to_list(BaseScope),
-    RegionCheck = fun
-        (_, false) -> false;
-        ({St, Sc}, true) -> state_in_scope(St, Sc)
-    end,
-    NamesEqual = StateName =:= ScopeName,
-    SizesEqual = tuple_size(BaseState) =:= tuple_size(BaseScope),
-    case NamesEqual and SizesEqual of
-        true -> lists:foldl(RegionCheck, true, lists:zip(StateRegions, ScopeRegions));
-        false -> false
-    end;
-
-state_in_scope(_State, _Scope) ->
-    false.
-
-
-%%
-%%  Checks if state name has valid structure.
-%%
-check_state([]) ->
-    ok;
-
-check_state([BaseState | SubStates]) when is_atom(BaseState); is_binary(BaseState); is_integer(BaseState) ->
-    check_state(SubStates);
-
-check_state([BaseState]) when is_tuple(BaseState) ->
-    [StateName | StateRegions] = tuple_to_list(BaseState),
-    ok = check_state([StateName]),
-    [ok = check_state(S) || S <- StateRegions],
-    ok.
-
-
-%%
-%%  Checks if the state name is valid for transition target.
-%%
-check_next_state([_|_] = State) ->
-    check_state(State).
 
 
 %% =============================================================================

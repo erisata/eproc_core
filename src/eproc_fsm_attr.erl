@@ -371,7 +371,7 @@ perform_update(AttrCtx, Action, Scope, {_InstId, TrnNr, NextSName}) ->
 perform_cleanup(AttrCtx, {SName, AttrCtxs, Actions}) ->
     #attr_ctx{attr = Attr, state = State} = AttrCtx,
     #attribute{attr_id = AttrId, module = Module, scope = Scope} = Attr,
-    case eproc_fsm:state_in_scope(SName, Scope) of
+    case eproc_fsm:is_state_in_scope(SName, Scope) of
         true ->
             {SName, [AttrCtx | AttrCtxs], Actions};
         false ->

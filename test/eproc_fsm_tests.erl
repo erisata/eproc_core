@@ -37,28 +37,43 @@ unlink_kill(PID) ->
 %%
 state_in_scope_test_() ->
     [
-        ?_assert(true =:= eproc_fsm:state_in_scope([], [])),
-        ?_assert(true =:= eproc_fsm:state_in_scope([a], [])),
-        ?_assert(true =:= eproc_fsm:state_in_scope([a], [a])),
-        ?_assert(true =:= eproc_fsm:state_in_scope([a, b], [a])),
-        ?_assert(true =:= eproc_fsm:state_in_scope([a, b], [a, b])),
-        ?_assert(true =:= eproc_fsm:state_in_scope([a, b], ['_', b])),
-        ?_assert(true =:= eproc_fsm:state_in_scope([{a, [b], [c]}], [a])),
-        ?_assert(true =:= eproc_fsm:state_in_scope([{a, [b], [c]}], [{a, [], []}])),
-        ?_assert(true =:= eproc_fsm:state_in_scope([{a, [b], [c]}], [{a, '_', '_'}])),
-        ?_assert(true =:= eproc_fsm:state_in_scope([{a, [b], [c]}], [{a, [b], '_'}])),
-        ?_assert(false =:= eproc_fsm:state_in_scope([], [a])),
-        ?_assert(false =:= eproc_fsm:state_in_scope([a], [b])),
-        ?_assert(false =:= eproc_fsm:state_in_scope([{a, [b], [c]}], [b])),
-        ?_assert(false =:= eproc_fsm:state_in_scope([{a, [b], [c]}], [{b}])),
-        ?_assert(false =:= eproc_fsm:state_in_scope([{a, [b], [c]}], [{b, []}])),
-        ?_assert(false =:= eproc_fsm:state_in_scope([{a, [b], [c]}], [{b, [], []}])),
-        ?_assert(false =:= eproc_fsm:state_in_scope([{a, [b], [c]}], [{a, [c], []}]))
+        ?_assert(true =:= eproc_fsm:is_state_in_scope([], [])),
+        ?_assert(true =:= eproc_fsm:is_state_in_scope([a], [])),
+        ?_assert(true =:= eproc_fsm:is_state_in_scope([a], [a])),
+        ?_assert(true =:= eproc_fsm:is_state_in_scope([a, b], [a])),
+        ?_assert(true =:= eproc_fsm:is_state_in_scope([a, b], [a, b])),
+        ?_assert(true =:= eproc_fsm:is_state_in_scope([a, b], ['_', b])),
+        ?_assert(true =:= eproc_fsm:is_state_in_scope([{a, [b], [c]}], [a])),
+        ?_assert(true =:= eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{a, [], []}])),
+        ?_assert(true =:= eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{a, '_', '_'}])),
+        ?_assert(true =:= eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{a, [b], '_'}])),
+        ?_assert(false =:= eproc_fsm:is_state_in_scope([], [a])),
+        ?_assert(false =:= eproc_fsm:is_state_in_scope([a], [b])),
+        ?_assert(false =:= eproc_fsm:is_state_in_scope([{a, [b], [c]}], [b])),
+        ?_assert(false =:= eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{b}])),
+        ?_assert(false =:= eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{b, []}])),
+        ?_assert(false =:= eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{b, [], []}])),
+        ?_assert(false =:= eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{a, [c], []}]))
     ].
 
 
-%% TODO: Check if `check_state/1` works.
-%% TODO: Check if `check_next_state/1` works.
+is_state_valid_test_() ->
+    [
+        ?_assert(true =:= eproc_fsm:is_state_valid([])),
+        ?_assert(true =:= eproc_fsm:is_state_valid([a, <<"b">>, 1])),
+        ?_assert(true =:= eproc_fsm:is_state_valid([z, {a, [b, c], []}])),
+        ?_assert(false =:= eproc_fsm:is_state_valid([{a, [b], [c]}, z])),
+        ?_assert(false =:= eproc_fsm:is_state_valid({a, []})),
+        ?_assert(false =:= eproc_fsm:is_state_valid([1.2])),
+        ?_assert(false =:= eproc_fsm:is_state_valid(1))
+    ].
+
+is_next_state_valid_test_() ->
+    [
+        ?_assert(true =:=  eproc_fsm:is_next_state_valid([a, b, c])),
+        ?_assert(false =:= eproc_fsm:is_next_state_valid([])),
+        ?_assert(false =:= eproc_fsm:is_next_state_valid(123))
+    ].
 
 
 %%
