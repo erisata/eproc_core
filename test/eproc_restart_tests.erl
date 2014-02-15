@@ -145,11 +145,11 @@ test_cleanup(_PID) ->
     Opts = [{delay, {const, 1}}, {fail, {11, 100}}],   %% 11 times / 0.1 second
     Resp1 = lists:foldl(fun (_, _) -> eproc_restart:restarted(Key, Opts) end, fail, lists:seq(0, 10)),
     Resp2 = lists:foldl(fun (_, _) -> eproc_restart:restarted(Key, Opts) end, fail, lists:seq(0, 10)),
-    ok = eproc_restart:cleanup(Key),
+    ok = eproc_restart:cleanup(Key, Opts),
     Resp3 = lists:foldl(fun (_, _) -> eproc_restart:restarted(Key, Opts) end, fail, lists:seq(0, 10)),
     Resp4 = lists:foldl(fun (_, _) -> eproc_restart:restarted(Key, Opts) end, fail, lists:seq(0, 10)),
-    ok = eproc_restart:cleanup(Key),
-    ok = eproc_restart:cleanup(Key),
+    ok = eproc_restart:cleanup(Key, Opts),
+    ok = eproc_restart:cleanup(Key, Opts),
     [
         ?_assertEqual(ok,   Resp1),
         ?_assertEqual(fail, Resp2),

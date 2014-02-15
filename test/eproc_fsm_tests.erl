@@ -563,7 +563,7 @@ send_event_same_state_from_init_test() ->
             }}
     end),
     ok = meck:expect(eproc_store, add_transition, fun
-        (store, Transition = #transition{number = TrnNr}, _Messages) ->
+        (store, #transition{number = TrnNr}, _Messages) ->
             {ok, TrnNr}
     end),
     ok = meck:expect(eproc_fsm__seq, handle_state, fun
@@ -737,10 +737,49 @@ send_event_handle_attrs_test() ->
     ok = unlink_kill(PID).
 
 
-
-% TODO: Check if `send_event/*` works, assert the following:
-%   * Check if process is unregistered from the restart manager.
-
+%%
+%%  Check if FSM is unregistered from the restart manager on a normal
+%%  shutdown and is not unregistered on a crash.
+%%
+send_event_restart_test() ->
+    ok = meck:new(eproc_store, []),
+    ok = meck:new(eproc_restart, [passthrough]),
+    ok = meck:new(eproc_fsm__void, [passthrough]),
+    ok = meck:expect(eproc_store, load_instance, fun
+        (store, {inst, IID}) ->
+            {ok, #instance{
+                id = IID, group = 200, name = name, module = eproc_fsm__void,
+                args = {a}, opts = [], init = {state, IID}, status = running,
+                created = erlang:now(), transitions = []
+            }}
+    end),
+    ok = meck:expect(eproc_store, add_transition, fun
+        (store, #transition{number = TrnNr}, [#message{}]) ->
+            {ok, TrnNr}
+    end),
+    ok = meck:expect(eproc_fsm__void, handle_state, fun
+        ([], {event, done}, {state, 100}) ->
+            meck:exception(error, some_error);
+        ([], {event, done}, StateData = {state, 200}) ->
+            {final_state, [done], StateData}
+    end),
+    {ok, PID1} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
+    {ok, PID2} = eproc_fsm:start_link({inst, 200}, [{store, store}]),
+    ?assert(eproc_fsm:is_online(PID1)),
+    ?assert(eproc_fsm:is_online(PID2)),
+    unlink(PID1),
+    unlink(PID2),
+    ?assertEqual(ok, eproc_fsm:send_event(PID1, done, [{source, {test, test}}])),
+    ?assertEqual(ok, eproc_fsm:send_event(PID2, done, [{source, {test, test}}])),
+    timer:sleep(100),
+    ?assertEqual(false, eproc_fsm:is_online(PID1)),
+    ?assertEqual(false, eproc_fsm:is_online(PID2)),
+    ?assertEqual(0, meck:num_calls(eproc_restart, cleanup, [{eproc_fsm, 100}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_restart, cleanup, [{eproc_fsm, 200}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_restart, cleanup, '_')),
+    ?assert(meck:validate([eproc_store, eproc_restart, eproc_fsm__void])),
+    ok = meck:unload([eproc_store, eproc_restart, eproc_fsm__void]),
+    ok = unlink_kill([PID1, PID2]).
 
 
 %%

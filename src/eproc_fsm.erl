@@ -1060,7 +1060,8 @@ register_message({inst, _SrcInstId}, Dst, Req = {msg, _ReqBody, _ReqDate}, Res) 
     trn_nr      :: trn_nr(),        %% Number of the last processed transition.
     attrs       :: term(),          %% State for the `eproc_fsm_attr` module.
     registry    :: registry_ref(),  %% A registry reference.
-    store       :: store_ref()      %% A store reference.
+    store       :: store_ref(),     %% A store reference.
+    restart     :: list()           %% Restart options.
 }).
 
 
@@ -1076,7 +1077,8 @@ register_message({inst, _SrcInstId}, Dst, Req = {msg, _ReqBody, _ReqDate}, Res) 
 init({FsmRef, StartOptions}) ->
     State = #state{
         store    = resolve_store(StartOptions),
-        registry = resolve_registry(StartOptions)
+        registry = resolve_registry(StartOptions),
+        restart  = proplists:get_value(restart, StartOptions, [])
     },
     self() ! {'eproc_fsm$start', FsmRef, StartOptions},
     {ok, State}.
@@ -1100,9 +1102,9 @@ handle_call({'eproc_fsm$sync_send_event', Event, EventSrc}, From, State) ->
     case perform_transition(Trigger, [], State) of
         {cont, noreply,        NewState} -> {noreply, NewState};
         {cont, {reply, Reply}, NewState} -> {reply, Reply, NewState};
-        {stop, noreply,        NewState} -> {stop, normal, NewState};
-        {stop, {reply, Reply}, NewState} -> {stop, normal, Reply, NewState};
-        {error, Reason}                  -> {stop, Reason, State}
+        {stop, noreply,        NewState} -> shutdown(NewState);
+        {stop, {reply, Reply}, NewState} -> shutdown(Reply, NewState);
+        {error, Reason}                  -> {stop, {error, Reason}, State}
     end.
 
 
@@ -1120,8 +1122,8 @@ handle_cast({'eproc_fsm$send_event', Event, EventSrc}, State) ->
     },
     case perform_transition(Trigger, [], State) of
         {cont, noreply, NewState} -> {noreply, NewState};
-        {stop, noreply, NewState} -> {stop, normal, NewState};
-        {error, Reason}           -> {stop, Reason, State}
+        {stop, noreply, NewState} -> shutdown(NewState);
+        {error, Reason}           -> {stop, {error, Reason}, State}
     end.
 
 
@@ -1130,11 +1132,8 @@ handle_cast({'eproc_fsm$send_event', Event, EventSrc}, State) ->
 %%
 handle_info({'eproc_fsm$start', FsmRef, StartOptions}, State) ->
     case handle_start(FsmRef, StartOptions, State) of
-        {online, NewState} ->
-            {noreply, NewState};
-        {offline, InstId} ->
-            eproc_restart:cleanup({?MODULE, InstId}),
-            {stop, normal, State}
+        {online, NewState} -> {noreply, NewState};
+        {offline, InstId}  -> shutdown(State#state{inst_id = InstId})
     end;
 
 %%
@@ -1147,8 +1146,8 @@ handle_info(Event, State = #state{attrs = Attrs}) ->
         {trigger, NewAttrs, Trigger, AttrAction} ->
             case perform_transition(Trigger, [AttrAction], State#state{attrs = NewAttrs}) of
                 {cont, noreply, NewState} -> {noreply, NewState};
-                {stop, noreply, NewState} -> {stop, normal, NewState};
-                {error, Reason}           -> {error, Reason}
+                {stop, noreply, NewState} -> shutdown(NewState);
+                {error, Reason}           -> {stop, {error, Reason}, State#state{attrs = NewAttrs}}
             end;
         unknown ->
             Trigger = #trigger_spec{
@@ -1161,8 +1160,8 @@ handle_info(Event, State = #state{attrs = Attrs}) ->
             },
             case perform_transition(Trigger, [], State) of
                 {cont, noreply, NewState} -> {noreply, NewState};
-                {stop, noreply, NewState} -> {stop, normal, NewState};
-                {error, Reason}           -> {stop, Reason, State}
+                {stop, noreply, NewState} -> shutdown(NewState);
+                {error, Reason}           -> {stop, {error, Reason}, State}
             end
     end.
 
@@ -1194,6 +1193,22 @@ create_start_link(Module, Args, Options, Timeout) ->
     {ok, InstId} = create(Module, Args, OptsWithGroup),
     ok = eproc_registry:start_instance(undefined, InstId, [{timeout, Timeout}]),
     {ok, InstId}.
+
+
+%%
+%%  Shutdown the FSM.
+%%
+shutdown(State = #state{inst_id = InstId, restart = RestartOpts}) ->
+    eproc_restart:cleanup({?MODULE, InstId}, RestartOpts),
+    {stop, normal, State}.
+
+
+%%
+%%  Shutdown the FSM with a reply msg.
+%%
+shutdown(Reply, State = #state{inst_id = InstId, restart = RestartOpts}) ->
+    eproc_restart:cleanup({?MODULE, InstId}, RestartOpts),
+    {stop, normal, Reply, State}.
 
 
 %%
@@ -1335,10 +1350,9 @@ handle_create(Module, Args, CreateOpts, CustomOpts) ->
 %%
 %%  Loads the instance and starts it if needed.
 %%
-handle_start(FsmRef, StartOptions, State = #state{store = Store}) ->
+handle_start(FsmRef, StartOptions, State = #state{store = Store, restart = RestartOpts}) ->
     case eproc_store:load_instance(Store, FsmRef) of
         {ok, Instance = #instance{id = InstId, status = running}} ->
-            RestartOpts = proplists:get_value(restart, StartOptions, []),
             case eproc_restart:restarted({?MODULE, InstId}, RestartOpts) of
                 ok ->
                     {ok, NewState} = start_loaded(Instance, StartOptions, State),

@@ -21,7 +21,7 @@
 %%
 -module(eproc_restart).
 -behaviour(gen_server).
--export([start_link/0, restarted/2, cleanup/1]).
+-export([start_link/0, restarted/2, cleanup/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 
@@ -66,18 +66,23 @@ start_link() ->
         ok | fail.
 
 restarted(Key, Opts) ->
-    restarted(Key, proplists:get_value(delay, Opts, none), Opts).
+    restarted(Key, resolve_delay_opt(Opts), Opts).
 
 
 %%
 %%  Used to cleanup info of a managed process. This function should be used
 %%  before stopping the process in a normal (managed) way.
 %%
--spec cleanup(term()) -> ok.
+-spec cleanup(Key :: term(), Opts :: list()) -> ok.
 
-cleanup(Key) ->
-    true = ets:delete(eproc_restart, Key),
-    ok.
+cleanup(Key, Opts) ->
+    case resolve_delay_opt(Opts) of
+        none ->
+            ok;
+        _ ->
+            true = ets:delete(eproc_restart, Key),
+            ok
+    end.
 
 
 
@@ -143,6 +148,13 @@ code_change(_OldVsn, State, _Extra) ->
 %% =============================================================================
 %%  Internal functions.
 %% =============================================================================
+
+
+%%
+%%  Returns the delay option.
+%%
+resolve_delay_opt(Opts) ->
+    proplists:get_value(delay, Opts, none).
 
 
 %%
