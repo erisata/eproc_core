@@ -678,8 +678,48 @@ send_event_save_runtime_test() ->
     ok = unlink_kill(PID).
 
 
+%%
+%%  Check if `send_event/*` handles attributes correctly.
+%%
+send_event_handle_attrs_test() ->
+    ok = meck:new(eproc_store, []),
+    ok = meck:new(eproc_fsm_attr, [passthrough]),
+    ok = meck:new(eproc_fsm__seq, [passthrough]),
+    ok = meck:expect(eproc_store, load_instance, fun
+        (store, {inst, 100}) ->
+            {ok, #instance{
+                id = 100, group = 200, name = name, module = eproc_fsm__seq,
+                args = {}, opts = [], init = {state, undefined}, status = running,
+                created = erlang:now(), transitions = [#transition{
+                    inst_id = 100, number = 1, sname = [incrementing], sdata = {state, 5},
+                    attr_last_id = 0, attr_actions = [], attrs_active = []
+                }]
+            }}
+    end),
+    ok = meck:expect(eproc_store, add_transition, fun
+        (store, Transition = #transition{inst_id = InstId, number = TrnNr = 2}, [#message{}]) ->
+            #transition{
+                trigger_type = event,
+                trigger_msg  = #msg_ref{id = {InstId, TrnNr, 0}, peer = {test, test}},
+                trigger_resp = undefined,
+                inst_status  = running
+            } = Transition,
+            {ok, TrnNr}
+    end),
+    {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
+    ?assert(eproc_fsm:is_online(PID)),
+    ?assertEqual(ok, eproc_fsm:send_event(PID, flip, [{source, {test, test}}])),
+    timer:sleep(100),
+    ?assertEqual(true, eproc_fsm:is_online(PID)),
+    ?assertEqual(1, meck:num_calls(eproc_fsm_attr, transition_start, '_')),
+    ?assertEqual(1, meck:num_calls(eproc_fsm_attr, transition_end, '_')),
+    ?assert(meck:validate([eproc_store, eproc_fsm_attr, eproc_fsm__seq])),
+    ok = meck:unload([eproc_store, eproc_fsm_attr, eproc_fsm__seq]),
+    ok = unlink_kill(PID).
+
+
+
 % TODO: Check if `send_event/*` works, assert the following:
-%   * Check if attributes handled properly.
 %   * Check if event source is determined correctly in all cases.
 %   * Check if process is unregistered from the restart manager.
 
@@ -851,6 +891,52 @@ sync_send_event_reply_test() ->
     ?assert(meck:validate([eproc_store, eproc_fsm__seq])),
     ok = meck:unload([eproc_store, eproc_fsm__seq]),
     ok = unlink_kill(PID).
+
+
+%%
+%%  Check if unknown messages are forwarded to the callback module.
+%%
+unknown_message_test() ->
+    ok = meck:new(eproc_store, []),
+    ok = meck:new(eproc_fsm__seq, [passthrough]),
+    ok = meck:expect(eproc_store, load_instance, fun
+        (store, {inst, 100}) ->
+            {ok, #instance{
+                id = 100, group = 200, name = name, module = eproc_fsm__seq,
+                args = {}, opts = [], init = {state, undefined}, status = running,
+                created = erlang:now(), transitions = [#transition{
+                    inst_id = 100, number = 1, sname = [incrementing], sdata = {state, 5},
+                    attr_last_id = 0, attr_actions = [], attrs_active = []
+                }]
+            }}
+    end),
+    ok = meck:expect(eproc_store, add_transition, fun
+        (store, Transition = #transition{inst_id = InstId, number = TrnNr = 2}, [#message{}]) ->
+            #transition{
+                trigger_type = info,
+                trigger_msg  = #msg_ref{id = {InstId, TrnNr, 0}, peer = undefined},
+                trigger_resp = undefined,
+                inst_status  = running
+            } = Transition,
+            {ok, TrnNr}
+    end),
+    ok = meck:expect(eproc_fsm__seq, handle_state, fun
+        ([incrementing], {info, some_unknown_message}, StateData) ->
+            {same_state, StateData}
+    end),
+    {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
+    ?assert(eproc_fsm:is_online(PID)),
+    PID ! some_unknown_message,
+    timer:sleep(100),
+    ?assertEqual(true, eproc_fsm:is_online(PID)),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {info, some_unknown_message}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
+    ?assertEqual(1, meck:num_calls(eproc_store, add_transition, '_')),
+    ?assert(meck:validate([eproc_store, eproc_fsm__seq])),
+    ok = meck:unload([eproc_store, eproc_fsm__seq]),
+    ok = unlink_kill(PID).
+
+
 
 
 % TODO: Check if await/* works.
