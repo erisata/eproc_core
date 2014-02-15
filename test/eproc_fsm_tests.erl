@@ -57,6 +57,10 @@ state_in_scope_test_() ->
     ].
 
 
+%% TODO: Check if `check_state/1` works.
+%% TODO: Check if `check_next_state/1` works.
+
+
 %%
 %%  Test for eproc_fsm:create(Module, Args, Options)
 %%
@@ -720,7 +724,6 @@ send_event_handle_attrs_test() ->
 
 
 % TODO: Check if `send_event/*` works, assert the following:
-%   * Check if event source is determined correctly in all cases.
 %   * Check if process is unregistered from the restart manager.
 
 

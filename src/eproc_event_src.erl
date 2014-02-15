@@ -24,7 +24,7 @@
 %%  corresponding instance.
 %%
 -module(eproc_event_src).
--export([set_source/1, source/0]).
+-export([set_source/1, source/0, remove/0]).
 -include("eproc.hrl").
 
 
@@ -50,5 +50,15 @@ set_source(Source) ->
 
 source() ->
     erlang:get('eproc_event_src$source').
+
+
+%%
+%%  Remove the source description for this process.
+%%
+-spec remove() -> ok.
+
+remove() ->
+    erlang:erase('eproc_event_src$source'),
+    ok.
 
 

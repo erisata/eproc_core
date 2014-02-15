@@ -126,9 +126,16 @@
 
 %%
 %%  Type exports.
-%%  TODO: Do we need to export them? Maybe they should be moved to the hrl file?
 %%
 -export_type([name/0, id/0, group/0, state_event/0, state_name/0, state_scope/0, state_data/0]).
+
+%%
+%%  Tests for private functions.
+%%
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 
 %%
 %%  Internal things...
@@ -1686,3 +1693,41 @@ check_next_state([_|_] = State) ->
     check_state(State).
 
 
+%% =============================================================================
+%%  Unit tests for private functions.
+%% =============================================================================
+-ifdef(TEST).
+
+%%
+%%  Unit tests for resolve_event_src/1.
+%%
+resolve_event_src_test_() -> [
+    fun () ->
+        ?assertEqual({ok, undefined}, resolve_event_src([]))
+    end,
+    fun () ->
+        erlang:put('eproc_fsm$id', 145),
+        ?assertEqual({ok, {inst, 145}}, resolve_event_src([])),
+        erlang:erase('eproc_fsm$id')
+    end,
+    fun () ->
+        eproc_event_src:set_source({some, source}),
+        ?assertEqual({ok, {some, source}}, resolve_event_src([])),
+        eproc_event_src:remove()
+    end,
+    fun () ->
+        erlang:put('eproc_fsm$id', 146),
+        eproc_event_src:set_source({some, source2}),
+        ?assertEqual({ok, {some, source2}}, resolve_event_src([])),
+        eproc_event_src:remove(),
+        erlang:erase('eproc_fsm$id')
+    end,
+    fun () ->
+        erlang:put('eproc_fsm$id', 146),
+        eproc_event_src:set_source({some, source2}),
+        ?assertEqual({ok, {explicit, srt}}, resolve_event_src([{source, {explicit, srt}}])),
+        eproc_event_src:remove(),
+        erlang:erase('eproc_fsm$id')
+    end].
+
+-endif.

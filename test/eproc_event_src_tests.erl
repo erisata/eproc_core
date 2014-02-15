@@ -21,12 +21,14 @@
 
 
 %%
-%%  Check if init works.
+%%  Check if all the functions work.
 %%
 source_test() ->
     erlang:erase('eproc_event_src$source'),
     ?assertEqual(undefined, eproc_event_src:source()),
     ?assertEqual(ok, eproc_event_src:set_source(some)),
-    ?assertEqual(some, eproc_event_src:source()).
+    ?assertEqual(some, eproc_event_src:source()),
+    ?assertEqual(ok, eproc_event_src:remove()),
+    ?assertEqual(undefined, eproc_event_src:source()).
 
 
