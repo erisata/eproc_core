@@ -54,7 +54,7 @@ start_link(_Args) ->
 %%  Starts new `eproc_fsm` instance.
 %%
 start_instance(_RegistryArgs, InstId, StartOpts) ->
-    {ok, _PID} = eproc_fsm_sup:start_instance(InstId, StartOpts),
+    {ok, _PID} = eproc_fsm_sup:start_instance(InstId, StartOpts),   %% TODO: Use this function directly?
     ok.
 
 

@@ -132,14 +132,6 @@
 -export_type([name/0, id/0, group/0, state_event/0, state_name/0, state_scope/0, state_data/0]).
 
 %%
-%%  Tests for private functions.
-%%
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
--endif.
-
-
-%%
 %%  Internal things...
 %%
 -include("eproc.hrl").
@@ -739,8 +731,12 @@ is_next_state_valid(_State) ->
 
 
 %%
+%%  TODO: work on supervisor and registry before this.
+%%  TODO: Minimize use of router, and network calls.
+%%  TODO: State dependencies here, e.g. registry.
+%%
 %%  Use this function in the `eproc_fsm` callback module implementation to start
-%%  the FSM asynchronously.
+%%  the FSM asynchronously. TODO: Rewrite.
 %%
 %%  This function awaits for the FSM to be initialized. I.e. it is guaranteed,
 %%  that the name and the keys, if were provided, are registered before this
@@ -756,8 +752,6 @@ is_next_state_valid(_State) ->
 %%  :   stands for the initial event of the FSM, i.e. event that created the FSM.
 %%      This event is used for invoking state transition callbacks for the transition
 %%      from the `initial` state.
-%%  `From`
-%%  :   is passed to the `send_event/2` function (see its description for more details).
 %%  `Options`
 %%  :   Options, that can be specified when starting the FSM. They are listed bellow.
 %%
@@ -1733,6 +1727,7 @@ cleanup_runtime_data(Data, RuntimeField, RuntimeDefault) when is_integer(Runtime
 %%  Unit tests for private functions.
 %% =============================================================================
 -ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
 
 %%
 %%  Unit tests for resolve_event_src/1.

@@ -22,7 +22,6 @@
         kernel,
         stdlib,
         sasl,
-        gproc,
         lager
     ]}
 ]}.

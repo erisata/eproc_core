@@ -17,6 +17,9 @@
 %%
 %%  Supervises FSM instances.
 %%
+%%  TODO: Load all online instances on startup.
+%%
+%%
 -module(eproc_fsm_sup).
 -behaviour(supervisor).
 -compile([{parse_transform, lager_transform}]).
