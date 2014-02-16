@@ -13,7 +13,6 @@
 #| See the License for the specific language governing permissions and
 #| limitations under the License.
 #\--------------------------------------------------------------------
-APP=eproc_core
 REBAR=rebar
 
 
@@ -23,7 +22,7 @@ deps:
 	$(REBAR) get-deps
 
 compile:
-	$(REBAR) compile apps=$(APP)
+	$(REBAR) compile skip_deps=true
 
 compile-all:
 	$(REBAR) compile
@@ -34,10 +33,10 @@ test: compile
 	env ERL_AFLAGS='-config test/sys' $(REBAR) eunit skip_deps=true verbose=1
 
 itest: compile
-	$(REBAR) ct apps=$(APP)
+	$(REBAR) ct skip_deps=true
 
 clean:
-	$(REBAR) clean apps=$(APP)
+	$(REBAR) clean skip_deps=true
 
 clean-all:
 	$(REBAR) clean
