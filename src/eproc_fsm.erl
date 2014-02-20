@@ -136,6 +136,10 @@
 %%
 -include("eproc.hrl").
 -define(DEFAULT_TIMEOUT, 5000).
+-define(LIMIT_OPTS, [max_transitions, max_errors, max_sent_msgs]).
+-define(CREATE_OPTS, [group, name, store, start_mfa | ?LIMIT_OPTS]).
+-define(START_OPTS, [restart, register, timeout, store, registry]).
+-define(SEND_OPTS, [source, start_mfa, timeout]).
 
 
 -type name() :: {via, Registry :: module(), InstId :: inst_id()}.
@@ -504,9 +508,18 @@
 %%  `{store, store_ref()}`
 %%  :   Reference of a store, in which the instance should be created.
 %%      If not provided, default store is used.
-%%
-%%  TODO: Add various runtime limits here.
-%%  TODO: Add StartMFA.
+%%  `{start_mfa, {Module, Function, Args}}`
+%%  :   Indicates a function, that should be called to start the FSM.
+%%      This option is used by `eproc_registry`.
+%%  `{max_transitions, integer() | infinity}` - TODO
+%%  :   Maximal allowed number of transitions.
+%%      When this limit will be reached, the FSM will be suspended.
+%%  `{max_errors, integer() | infinity}` - TODO
+%%  :   Maximal allowed number of errors in the FSM.
+%%      When this limit will be reached, the FSM will be suspended.
+%%  `{max_sent_msgs, integer() | infinity}` - TODO
+%%  :   Maximal allowed number of messages sent by the FSM.
+%%      When this limit will be reached, the FSM will be suspended.
 %%
 -spec create(
         Module  :: module(),
@@ -517,7 +530,7 @@
         {error, already_created}.
 
 create(Module, Args, Options) ->
-    {KnownOpts, UnknownOpts} = proplists:split(Options, [group, name, store]),
+    {KnownOpts, UnknownOpts} = proplists:split(Options, ?CREATE_OPTS),
     {ok, InstId} = handle_create(Module, Args, lists:append(KnownOpts), UnknownOpts),
     {ok, {inst, InstId}}.
 
@@ -781,14 +794,41 @@ is_next_state_valid(_State) ->
         {error, timeout} |
         {error, term()}.
 
+%%
+%%  Create and start FSM.
+%%
+%create_start_link(Module, Args, Options, Timeout) ->
+%    OptsWithGroup = resolve_create_opts(group, Options),
+%    {ok, InstId} = create(Module, Args, OptsWithGroup),
+%    ok = eproc_registry:start_instance(undefined, InstId, [{timeout, Timeout}]),
+%    {ok, InstId}.
+
 send_create_event(Module, Args, Event, Options) ->
-    {ok, Timeout} = resolve_timeout(Options),
-    {ok, InstId} = create_start_link(Module, Args, Options, Timeout),
-    % TODO: The following is the second remote sync in the case of riak.
-    %       Await - is probably the third. Move it somehow to the remote part.
-    ok = send_event({inst, InstId}, Event),
-    ok = await_for_created(Options, Timeout),
-    {ok, InstId}.
+    {ok, SendOptions, _} = split_options(?SEND_OPTS, Options),
+    {ok, StartOptions, _} = split_options(?START_OPTS, Options),
+    {ok, CreateOptions, _} = split_options(?CREATE_OPTS, Options),
+    {ok, _, UnknownOptions} = split_options(?SEND_OPTS ++ ?START_OPTS ++ ?CREATE_OPTS, Options),
+    %%
+    %%  Create the FSM
+    CreateOptionsWithGroup = resolve_create_opts(group, CreateOptions),
+    {ok, FsmRef} = create(Module, Args, CreateOptionsWithGroup ++ UnknownOptions),
+    %%
+    %%  Send an event to it, start it if needed.
+    %%  TODO: Can we make it independent of Registry?
+    %%
+    Registry = resolve_registry(Options),
+    StartLinkMFA = {?MODULE, start_link, [FsmRef, StartOptions]},
+    {ok, NewFsmRef} = eproc_registry:make_new_fsm_ref(Registry, FsmRef, StartLinkMFA),
+    {ok, PID} = send_event(NewFsmRef, SendOptions),
+
+    %   {ok, Timeout} = resolve_timeout(Options),
+    %
+    %   {ok, InstId} = create_start_link(Module, Args, Options, Timeout),
+    %   % TODO: The following is the second remote sync in the case of riak.
+    %   %       Await - is probably the third. Move it somehow to the remote part.
+    %   ok = send_event({inst, InstId}, Event),
+    %   ok = await_for_created(Options, Timeout),
+    {ok, FsmRef}.
 
 
 
@@ -809,15 +849,16 @@ send_create_event(Module, Args, Event, Options) ->
         {error, term()}.
 
 sync_send_create_event(Module, Args, Event, Options) ->
-    {ok, Timeout} = resolve_timeout(Options),
-    {ok, InstId} = create_start_link(Module, Args, Options, Timeout),
-    % TODO: The following is the second remote sync in the case of riak.
-    %       Move it somehow to the remote part.
-    {ok, Response} = case proplists:is_defined(timeout, Options) of
-        false -> sync_send_event({inst, InstId}, Event);
-        true  -> sync_send_event({inst, InstId}, Event, Timeout)
-    end,
-    {ok, InstId, Response}.
+    %   {ok, Timeout} = resolve_timeout(Options),
+    %   {ok, InstId} = create_start_link(Module, Args, Options, Timeout),
+    %   % TODO: The following is the second remote sync in the case of riak.
+    %   %       Move it somehow to the remote part.
+    %   {ok, Response} = case proplists:is_defined(timeout, Options) of
+    %       false -> sync_send_event({inst, InstId}, Event);
+    %       true  -> sync_send_event({inst, InstId}, Event, Timeout)
+    %   end,
+    %   {ok, InstId, Response}.
+    to_be_implemented.  % TODO
 
 
 %%
@@ -1180,16 +1221,6 @@ code_change(_OldVsn, State, _Extra) ->
 %% =============================================================================
 
 %%
-%%  Create and start FSM.
-%%
-create_start_link(Module, Args, Options, Timeout) ->
-    OptsWithGroup = resolve_create_opts(group, Options),
-    {ok, InstId} = create(Module, Args, OptsWithGroup),
-    ok = eproc_registry:start_instance(undefined, InstId, [{timeout, Timeout}]),
-    {ok, InstId}.
-
-
-%%
 %%  Shutdown the FSM.
 %%
 shutdown(State = #state{inst_id = InstId, restart = RestartOpts}) ->
@@ -1217,7 +1248,7 @@ resolve_timeout(Options) ->
 %%
 %%
 resolve_start_link_opts(Options) ->
-    {StartOptions, ProcessOptions} = proplists:split(Options, [restart, register, store, registry]),
+    {StartOptions, ProcessOptions} = proplists:split(Options, ?START_OPTS),
     {ok, lists:append(StartOptions), ProcessOptions}.
 
 
@@ -1720,6 +1751,14 @@ cleanup_runtime_data(Data, undefined, _RuntimeDefault) ->
 
 cleanup_runtime_data(Data, RuntimeField, RuntimeDefault) when is_integer(RuntimeField), is_tuple(Data) ->
     erlang:setelement(RuntimeField, Data, RuntimeDefault).
+
+
+%%
+%%  Splits a proplist to known and unknown options.
+%%
+split_options(Keys, Options) ->
+    {KnownOpts, UnknownOpts} = proplists:split(Options, Keys),
+    {ok, KnownOpts, UnknownOpts}.
 
 
 

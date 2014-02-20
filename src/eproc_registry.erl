@@ -22,13 +22,24 @@
 %%   3. Await for specific FSM.
 %%   4. Send message to a FSM.
 %%
+%%  TODO: Implement the `supervisor` behaviour, so this module can be used `{via, ...}`.
+%%
+%%    * `register_name/2`
+%%    * `unregister_name/1`
+%%    * `send/2`
+%%
+%%
 -module(eproc_registry).
 -compile([{parse_transform, lager_transform}]).
 -export([ref/0, ref/2]).
 -export([
     start_instance/3, await/3,
     register_inst/2, register_name/3, register_keys/3,
-    send_event/3
+    send_event/3,
+    make_new_fsm_ref/3, make_fsm_ref/2
+]).
+-export([
+    register_name/2, unregister_name/1, send/2
 ]).
 -export_type([ref/0]).
 -include("eproc.hrl").
@@ -199,6 +210,90 @@ send_event(Registry, FsmRef, Message) ->
     {ok, {RegistryMod, RegistryArgs}} = resolve_ref(Registry),
     RegistryMod:send_event(RegistryArgs, FsmRef, Message).
 
+
+%%
+%%  Creates a reference that points to a process, that should be started
+%%  prior to sending a message to it. The reference can be passed to any
+%%  process as a registry reference (uses `{via, Mudule, Name}`).
+%%  I.e. you can use it as:
+%%
+%%      {ok, Ref} = eproc_registry:make_new_fsm_ref(Registry, FsmRef, StartLinkMFA),
+%%      Response = gen_server:call(Ref, Message).
+%%
+%%  Here registry is a reference obtained using `eproc_registry:ref/1-2`,
+%%  FsmRef is an FSM reference, usually returned from the `eproc_fsm:create/3`
+%%  and StartLinkMFA is `{Module, Function, Args}` used to start and link
+%%  the FSM.
+%%
+-spec make_new_fsm_ref(
+        Registry        :: registry_ref(),
+        FsmRef          :: fsm_ref(),
+        StartLinkMFA    :: {FsmModule :: module(), FsmStartFunction :: atom(), FsmStartArgs :: list()}
+    ) ->
+        {ok, Ref}
+    when
+        Ref :: {via,
+            RegistryModule :: module(),
+            {new, RegistryArgs :: term(), FsmRef :: fsm_ref(), StartLinkMFA :: tuple()}
+        }.
+
+make_new_fsm_ref(Registry, FsmRef, StartLinkMFA) ->
+    {ok, {RegistryMod, RegistryArgs}} = resolve_ref(Registry),
+    {ok, {via, RegistryMod, {new, RegistryArgs, FsmRef, StartLinkMFA}}}.
+
+
+%%
+%%  Creates a reference that points to an already started FSM.
+%%  The reference is in `{via, Mudule, Name}` form so it can
+%%  be passed to any process as an OTP process name.
+%%
+%%  This function is similar to `make_new_fsm_ref/3` except it refers
+%%  to an already started process. The later reference a process
+%%  that should be started before using it.
+%%
+-spec make_fsm_ref(
+        Registry        :: registry_ref(),
+        FsmRef          :: fsm_ref()
+    ) ->
+        {ok, Ref}
+    when
+        Ref :: {via,
+            RegistryModule :: module(),
+            {fsm, RegistryArgs :: term(), FsmRef :: fsm_ref()}
+        }.
+make_fsm_ref(Registry, FsmRef) ->
+    {ok, {RegistryMod, RegistryArgs}} = resolve_ref(Registry),
+    {ok, {via, RegistryMod, {fsm, RegistryArgs, FsmRef}}}.
+
+
+
+%% =============================================================================
+%%  Callbacks for `supervisor`.
+%% =============================================================================
+%%
+%%  TODO: Should they be implemented by the target module?
+%%
+
+%%
+%%  TODO: Implement.
+%%
+register_name(Name, Pid) ->
+    no.
+
+
+%%
+%%  TODO: Implement.
+%%
+unregister_name(Name) ->
+    ok.
+
+
+%%
+%%  TODO: Implement.
+%%
+send(Name, Message) ->
+    Pid = undefined,
+    Pid.
 
 
 %% =============================================================================
