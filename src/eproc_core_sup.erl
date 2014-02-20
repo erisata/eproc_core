@@ -56,14 +56,9 @@ init({}) ->
         permanent, 10000, worker, [eproc_restart]
     },
 
-    RegistrySpec = case eproc_core_app:registry_cfg() of
-        {ok, {RegistryMod, RegistryArgs}} ->
-            [{registry,
-                {RegistryMod, start_link, [RegistryArgs]},
-                permanent, 10000, worker, [RegistryMod, eproc_registry]
-            }];
-        undefined ->
-            []
+    {ok, RegistrySpec} = case eproc_registry:ref() of
+        {ok, Registry} -> eproc_registry:supervisor_child_specs(Registry);
+        undefined -> {ok, []}
     end,
 
     {ok, {{one_for_all, 100, 10},

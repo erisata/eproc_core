@@ -33,7 +33,7 @@
 %%
 -module(eproc_registry).
 -compile([{parse_transform, lager_transform}]).
--export([ref/0, ref/2]).
+-export([supervisor_child_specs/1, ref/0, ref/2]).
 -export([make_new_fsm_ref/3, make_fsm_ref/2, register_fsm/3]).
 -export_type([ref/0, registry_fsm_ref/0]).
 -include("eproc.hrl").
@@ -63,6 +63,14 @@
 %%  Callback definitions.
 %% =============================================================================
 
+%%
+%%  This callback should return a list of supervisor child specifications
+%%  used to start the registry.
+%%
+-callback supervisor_child_specs(
+        RegistryArgs    :: term()
+    ) ->
+        {ok, list()}.
 
 %%
 %%  This callback is used to register FSM with its standard references.
@@ -115,6 +123,17 @@
 %% =============================================================================
 %%  Public API.
 %% =============================================================================
+
+%%
+%%  Returns supervisor child specifications, that should be used to
+%%  start the registry.
+%%
+-spec supervisor_child_specs(Registry :: registry_ref()) -> {ok, list()}.
+
+supervisor_child_specs(Registry) ->
+    {ok, {RegistryMod, RegistryArgs}} = resolve_ref(Registry),
+    RegistryMod:supervisor_child_specs(RegistryArgs).
+
 
 %%
 %%  Returns the default registry reference.
