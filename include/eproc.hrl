@@ -34,6 +34,12 @@
     {global, atom()} |
     {via, module(), term()}.
 
+-type otp_name() ::
+    {local, atom()} |
+    {global, atom()} |
+    {via, module(), term()}.
+
+
 -type inst_id()         :: eproc_fsm:id().
 -type fsm_ref()         :: {inst, inst_id()} | {name, term()}.  % TODO: Key should not be used in runtime registration: {key, term()}.
 -type inst_name()       :: term().

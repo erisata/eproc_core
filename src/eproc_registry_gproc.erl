@@ -22,11 +22,15 @@
 -behaviour(eproc_registry).
 -behaviour(gen_server).
 -compile([{parse_transform, lager_transform}]).
--export([start_link/0]).
+-export([start_link/1]).
 -export([supervisor_child_specs/1, register_fsm/3]).
 -export([register_name/2, unregister_name/1, whereis_name/1, send/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -include("eproc.hrl").
+
+-define(SUP_DEF, 'eproc_registry_gproc$sup_def').
+-define(SUP_CST, 'eproc_registry_gproc$sup_cst').
+-define(MANAGER, 'eproc_registry_gproc$manager').
 
 -define(BY_INST(I), {n, l, {eproc_inst, I}}).
 -define(BY_NAME(N), {n, l, {eproc_name, N}}).
@@ -40,8 +44,8 @@
 %%
 %%  Start the registry.
 %%
-start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, {}, []).
+start_link(Name) ->
+    gen_server:start_link(Name, ?MODULE, {}, []).
 
 
 
@@ -53,8 +57,12 @@ start_link() ->
 %%  Returns supervisor child specifications for starting the registry.
 %%
 supervisor_child_specs(_RegistryArgs) ->
-    Spec = {?MODULE, {?MODULE, start_link, []}, permanent, 10000, worker, [?MODULE]},
-    {ok, [Spec]}.
+    Reg = ?MODULE,
+    Sup = eproc_fsm_sup,
+    DefSpec = {{Reg, sup_def}, {Sup, start_link, [{local, ?SUP_DEF}, default]}, permanent, 10000, supervisor, [Sup]},
+    CstSpec = {{Reg, sup_cst}, {Sup, start_link, [{local, ?SUP_CST}, custom]},  permanent, 10000, supervisor, [Sup]},
+    MgrSpec = {{Reg, manager}, {Reg, start_link, [{local, ?MANAGER}]},          permanent, 10000, worker,     [Reg]},
+    {ok, [DefSpec, CstSpec, MgrSpec]}.
 
 
 %%
@@ -189,8 +197,10 @@ gproc_key({name, Name}) ->
 %%
 %%  Starts new FSM.
 %%
-start_fsm(FsmRef, StartLinkMFA) ->
-    Pid = todo, % TODO
-    {ok, Pid}.
+start_fsm(FsmRef, {eproc_fsm, start_link, StartLinkArgs}) ->
+    {ok, _Pid} = eproc_fsm_sup:start_fsm(?SUP_DEF, default, FsmRef, StartLinkArgs);
+
+start_fsm(FsmRef, StartLinkMFA = {M, F, A}) when is_atom(M), is_atom(F), is_list(A) ->
+    {ok, _Pid} = eproc_fsm_sup:start_fsm(?SUP_CST, custom, FsmRef, StartLinkMFA).
 
 
