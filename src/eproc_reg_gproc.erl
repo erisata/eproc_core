@@ -34,7 +34,6 @@
 
 -define(BY_INST(I), {n, l, {eproc_inst, I}}).
 -define(BY_NAME(N), {n, l, {eproc_name, N}}).
--define(BY_KEY(K),  {p, l, {eproc_key,  K}}).
 
 
 %% =============================================================================
