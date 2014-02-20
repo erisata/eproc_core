@@ -110,6 +110,15 @@
 
 %%
 %%  This callback is from the OTP Process Registry behaviour.
+%%  See `global:whereis_name/1` for more details.
+%%
+-callback whereis_name(
+        Name    :: registry_fsm_ref()
+    ) ->
+        Pid :: pid() | undefined.
+
+%%
+%%  This callback is from the OTP Process Registry behaviour.
 %%  See `global:send/2` for more details.
 %%
 -callback send(
