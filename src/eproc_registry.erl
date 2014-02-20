@@ -28,7 +28,8 @@
 %%  for using it as an OTP Process Registry. These callbacks are `register_name/2`,
 %%  `unregister_name/1` and `send/2`. I.e. the modules implementing this behaviour
 %%  can be used with all the standard OTP behaviours to register and reference
-%%  a process using `{via, Module, Name}` as a process name.
+%%  a process using `{via, Module, Name}` as a process name. Only `send/2` callback
+%%  is used currently by `eproc_core`.
 %%
 -module(eproc_registry).
 -compile([{parse_transform, lager_transform}]).

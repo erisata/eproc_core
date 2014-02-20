@@ -745,7 +745,6 @@ is_next_state_valid(_State) ->
 
 %%
 %%  TODO: work on supervisor and registry before this.
-%%  TODO: Minimize use of router, and network calls.
 %%  TODO: State dependencies here, e.g. registry.
 %%
 %%  Use this function in the `eproc_fsm` callback module implementation to start
@@ -788,46 +787,26 @@ is_next_state_valid(_State) ->
         Args    :: term(),
         Event   :: state_event(),
         Options :: proplist()
-        ) ->
-        {ok, inst_id()} |
+    ) ->
+        {ok, fsm_ref()} |
         {error, already_created} |
         {error, timeout} |
         {error, term()}.
 
-%%
-%%  Create and start FSM.
-%%
-%create_start_link(Module, Args, Options, Timeout) ->
-%    OptsWithGroup = resolve_create_opts(group, Options),
-%    {ok, InstId} = create(Module, Args, OptsWithGroup),
-%    ok = eproc_registry:start_instance(undefined, InstId, [{timeout, Timeout}]),
-%    {ok, InstId}.
-
 send_create_event(Module, Args, Event, Options) ->
+    %% TODO: Solve this Options mess.
     {ok, SendOptions, _} = split_options(?SEND_OPTS, Options),
     {ok, StartOptions, _} = split_options(?START_OPTS, Options),
     {ok, CreateOptions, _} = split_options(?CREATE_OPTS, Options),
     {ok, _, UnknownOptions} = split_options(?SEND_OPTS ++ ?START_OPTS ++ ?CREATE_OPTS, Options),
-    %%
-    %%  Create the FSM
+
     CreateOptionsWithGroup = resolve_create_opts(group, CreateOptions),
     {ok, FsmRef} = create(Module, Args, CreateOptionsWithGroup ++ UnknownOptions),
-    %%
-    %%  Send an event to it, start it if needed.
-    %%  TODO: Can we make it independent of Registry?
-    %%
+
     Registry = resolve_registry(Options),
     StartLinkMFA = {?MODULE, start_link, [FsmRef, StartOptions]},
     {ok, NewFsmRef} = eproc_registry:make_new_fsm_ref(Registry, FsmRef, StartLinkMFA),
-    {ok, PID} = send_event(NewFsmRef, SendOptions),
-
-    %   {ok, Timeout} = resolve_timeout(Options),
-    %
-    %   {ok, InstId} = create_start_link(Module, Args, Options, Timeout),
-    %   % TODO: The following is the second remote sync in the case of riak.
-    %   %       Await - is probably the third. Move it somehow to the remote part.
-    %   ok = send_event({inst, InstId}, Event),
-    %   ok = await_for_created(Options, Timeout),
+    ok = send_event(NewFsmRef, SendOptions),
     {ok, FsmRef}.
 
 
@@ -843,7 +822,7 @@ send_create_event(Module, Args, Event, Options) ->
         Event   :: state_event(),
         Options :: proplist()
     ) ->
-        {ok, inst_id(), Reply :: term()} |
+        {ok, fsm_ref(), Reply :: term()} |
         {error, already_created} |
         {error, timeout} |
         {error, term()}.
