@@ -15,19 +15,20 @@
 %\--------------------------------------------------------------------
 
 %%
-%%  Interface module for a registry. The registry is responsible for:
+%%  Interface module for an FSM instance registry.
+%%  The registry is responsible for:
 %%
-%%   1. Supervising running FSMs.   TODO: Is registry a correct place for the FSM supervisor?
-%%   2. Locating FSMs by an instance id, a name or a key.
-%%   3. Await for specific FSM.
-%%   4. Send message to a FSM.
+%%   1. Starting all running FSMs on application startup.
+%%   2. Starting newly created FSMs on first event send.
+%%   3. Supervising all running FSMs.
+%%   4. Locating FSMs by an instance id or a name.
+%%   5. Send message to an FSM.
 %%
-%%  TODO: Implement the "OTP Process Registry" behaviour, so this module can be used `{via, ...}`.
-%%
-%%    * `register_name/2`
-%%    * `unregister_name/1`
-%%    * `send/2`
-%%
+%%  Modules implementing this behaviour are also implementing all callbacks needed
+%%  for using it as an OTP Process Registry. These callbacks are `register_name/2`,
+%%  `unregister_name/1` and `send/2`. I.e. the modules implementing this behaviour
+%%  can be used with all the standard OTP behaviours to register and reference
+%%  a process using `{via, Module, Name}` as a process name.
 %%
 -module(eproc_registry).
 -compile([{parse_transform, lager_transform}]).
@@ -76,7 +77,7 @@
 
 
 %% =============================================================================
-%%  Callback definitions for use as OTP Process Registry.
+%%  Callback definitions required by the OTP Process Registry.
 %% =============================================================================
 
 %%
