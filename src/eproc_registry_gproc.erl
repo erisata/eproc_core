@@ -15,8 +15,8 @@
 %\--------------------------------------------------------------------
 
 %%
-%%  GProc based registry.
-%%  Can be used for tests or single node deploymens.
+%%  GProc based registry. This registry is not dedesigned to work
+%%  in clusters. It can be used for tests or single node deploymens.
 %%
 -module(eproc_registry_gproc).
 -behaviour(eproc_registry).

@@ -22,7 +22,7 @@
 %%   3. Await for specific FSM.
 %%   4. Send message to a FSM.
 %%
-%%  TODO: Implement the `supervisor` behaviour, so this module can be used `{via, ...}`.
+%%  TODO: Implement the "OTP Process Registry" behaviour, so this module can be used `{via, ...}`.
 %%
 %%    * `register_name/2`
 %%    * `unregister_name/1`
@@ -32,19 +32,29 @@
 -module(eproc_registry).
 -compile([{parse_transform, lager_transform}]).
 -export([ref/0, ref/2]).
--export([
-    start_instance/3, await/3,
-    register_inst/2, register_name/3, register_keys/3,
-    send_event/3,
-    make_new_fsm_ref/3, make_fsm_ref/2
-]).
--export([
-    register_name/2, unregister_name/1, send/2
-]).
--export_type([ref/0]).
+-export([make_new_fsm_ref/3, make_fsm_ref/2, register_fsm/3]).
+-export_type([ref/0, registry_fsm_ref/0]).
 -include("eproc.hrl").
 
+%%
+%%  Reference to a registry. I.e. identifies a registry.
+%%
 -opaque ref() :: {Callback :: module(), Args :: term()}.
+
+%%
+%%  Module, Function, Arguments tuple, used to reference FSM start/link function.
+%%
+-type start_link_mfa() :: {FsmModule :: module(), FsmStartFunction :: atom(), FsmStartArgs :: list()}.
+
+%%
+%%  Reference to a FSM, handled by this process registry.
+%%  This structire is passed to the callbacks defined by the OTP process
+%%  registry: `register_name/2`, `unregister_name/1, `send/2`.
+%%
+-opaque registry_fsm_ref() ::
+    {fsm, RegistryArgs :: term(), FsmRef :: fsm_ref()} |
+    {new, RegistryArgs :: term(), FsmRef :: fsm_ref(), StartLinkMFA :: start_link_mfa()}.
+
 
 
 %% =============================================================================
@@ -53,86 +63,56 @@
 
 
 %%
+%%  This callback is used to register FSM with its standard references.
+%%  See `register_fsm/3` for more details.
 %%
-%%
--callback start_link(
-        RegistryArgs    :: term()
-    ) ->
-        {ok, pid()} |
-        {error, term()} |
-        ignore.
-
-
-%%
-%%
-%%
--callback start_instance(
+-callback register_fsm(
         RegistryArgs    :: term(),
         InstId          :: inst_id(),
-        StartOpts       :: term()
+        Refs            :: [fsm_ref()]
     ) ->
-    ok.
+        ok.
 
 
-%%
-%%
-%%
--callback await(
-        RegistryArgs    :: term(),
-        FsmRef          :: fsm_ref(),
-        Timeout         :: integer()
-    ) ->
-    ok | {error, timeout}.
 
+%% =============================================================================
+%%  Callback definitions for use as OTP Process Registry.
+%% =============================================================================
 
 %%
-%%
-%%
--callback register_inst(
-        RegistryArgs    :: term(),
-        InstId          :: inst_id()
-    ) ->
-    ok.
-
-
-%%
-%%
+%%  This callback is from the OTP Process Registry behaviour.
+%%  See `global:register_name/1` for more details.
 %%
 -callback register_name(
-        RegistryArgs    :: term(),
-        InstId          :: inst_id(),
-        Name            :: term()
+        Name    :: registry_fsm_ref(),
+        Pid     :: pid()
     ) ->
-    ok.
+        yes | no.
 
-
 %%
+%%  This callback is from the OTP Process Registry behaviour.
+%%  See `global:unregister_name/1` for more details.
 %%
-%%
--callback register_keys(
-        RegistryArgs    :: term(),
-        InstId          :: inst_id(),
-        Keys            :: [term()]
+-callback unregister_name(
+        Name    :: registry_fsm_ref()
     ) ->
-    ok.
+        ok.
 
-
 %%
+%%  This callback is from the OTP Process Registry behaviour.
+%%  See `global:send/2` for more details.
 %%
-%%
--callback send_event(
-        RegistryArgs    :: term(),
-        FsmRef          :: fsm_ref(),
-        Message         :: term()
+-callback send(
+        Name    :: registry_fsm_ref(),
+        Msg     :: term()
     ) ->
-    ok.
+        Pid :: pid().
 
 
 
 %% =============================================================================
 %%  Public API.
 %% =============================================================================
-
 
 %%
 %%  Returns the default registry reference.
@@ -158,60 +138,6 @@ ref(Module, Args) ->
 
 
 %%
-%%
-%%
-start_instance(Registry, InstId, StartOpts) ->
-    {ok, {RegistryMod, RegistryArgs}} = resolve_ref(Registry),
-    RegistryMod:start_instance(RegistryArgs, InstId, StartOpts).
-
-
-%%
-%%
-%%
-await(Registry, FsmRef, Timeout) ->
-    {ok, {RegistryMod, RegistryArgs}} = resolve_ref(Registry),
-    RegistryMod:await(RegistryArgs, FsmRef, Timeout).
-
-
-%%
-%%
-%%
-register_inst(Registry, InstId) ->
-    {ok, {RegistryMod, RegistryArgs}} = resolve_ref(Registry),
-    RegistryMod:register_inst(RegistryArgs, InstId).
-
-
-%%
-%%
-%%
-register_name(_Registry, _InstId, undefined) ->
-    ok;
-
-register_name(Registry, InstId, Name) ->
-    {ok, {RegistryMod, RegistryArgs}} = resolve_ref(Registry),
-    RegistryMod:register_name(RegistryArgs, InstId, Name).
-
-
-%%
-%%
-%%
-register_keys(_Registry, _InstId, []) ->
-    ok;
-
-register_keys(Registry, InstId, Keys) when is_list(Keys) ->
-    {ok, {RegistryMod, RegistryArgs}} = resolve_ref(Registry),
-    RegistryMod:register_keys(RegistryArgs, InstId, Keys).
-
-
-%%
-%%
-%%
-send_event(Registry, FsmRef, Message) ->
-    {ok, {RegistryMod, RegistryArgs}} = resolve_ref(Registry),
-    RegistryMod:send_event(RegistryArgs, FsmRef, Message).
-
-
-%%
 %%  Creates a reference that points to a process, that should be started
 %%  prior to sending a message to it. The reference can be passed to any
 %%  process as a registry reference (uses `{via, Mudule, Name}`).
@@ -232,10 +158,7 @@ send_event(Registry, FsmRef, Message) ->
     ) ->
         {ok, Ref}
     when
-        Ref :: {via,
-            RegistryModule :: module(),
-            {new, RegistryArgs :: term(), FsmRef :: fsm_ref(), StartLinkMFA :: tuple()}
-        }.
+        Ref :: {via, RegistryModule :: module(), RegistryFsmRef :: registry_fsm_ref()}.
 
 make_new_fsm_ref(Registry, FsmRef, StartLinkMFA) ->
     {ok, {RegistryMod, RegistryArgs}} = resolve_ref(Registry),
@@ -257,49 +180,37 @@ make_new_fsm_ref(Registry, FsmRef, StartLinkMFA) ->
     ) ->
         {ok, Ref}
     when
-        Ref :: {via,
-            RegistryModule :: module(),
-            {fsm, RegistryArgs :: term(), FsmRef :: fsm_ref()}
-        }.
+        Ref :: {via, RegistryModule :: module(), RegistryFsmRef :: registry_fsm_ref()}.
+
 make_fsm_ref(Registry, FsmRef) ->
     {ok, {RegistryMod, RegistryArgs}} = resolve_ref(Registry),
     {ok, {via, RegistryMod, {fsm, RegistryArgs, FsmRef}}}.
 
 
+%%
+%%  Register FSM with the specified references. For now those
+%%  references can be instance id, instance name or both of them.
+%%  This function should be called from the process of the FSM.
+%%
+-spec register_fsm(
+        Registry    :: registry_ref(),
+        InstId      :: inst_id(),
+        Refs        :: [fsm_ref()]
+    ) ->
+        ok.
 
-%% =============================================================================
-%%  Callbacks for `supervisor`.
-%% =============================================================================
-%%
-%%  TODO: Should they be implemented by the target module?
-%%
+register_fsm(_Registry, _InstId, []) ->
+    ok;
 
-%%
-%%  TODO: Implement.
-%%
-register_name(Name, Pid) ->
-    no.
+register_fsm(Registry, InstId, Refs) ->
+    {ok, {RegistryMod, RegistryArgs}} = resolve_ref(Registry),
+    RegistryMod:register_fsm(RegistryArgs, InstId, Refs).
 
-
-%%
-%%  TODO: Implement.
-%%
-unregister_name(Name) ->
-    ok.
-
-
-%%
-%%  TODO: Implement.
-%%
-send(Name, Message) ->
-    Pid = undefined,
-    Pid.
 
 
 %% =============================================================================
 %%  Internal functions.
 %% =============================================================================
-
 
 %%
 %%  Resolve the provided (optional) registry reference.

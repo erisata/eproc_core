@@ -1466,17 +1466,11 @@ call_init_runtime(SName, SData, Module) ->
 %%
 register_online(#instance{id = InstId, name = Name}, Registry, StartOptions) ->
     case proplists:get_value(register, StartOptions) of
-        undefined ->
-            ok;
-        none ->
-            ok;
-        id ->
-            eproc_registry:register_inst(Registry, InstId);
-        name ->
-            eproc_registry:register_name(Registry, InstId, Name);
-        both ->
-            eproc_registry:register_inst(Registry, InstId),
-            eproc_registry:register_name(Registry, InstId, Name)
+        undefined -> ok;
+        none -> ok;
+        id   -> eproc_registry:register_fsm(Registry, InstId, [{inst, InstId}]);
+        name -> eproc_registry:register_fsm(Registry, InstId, [{name, Name}]);
+        both -> eproc_registry:register_fsm(Registry, InstId, [{inst, InstId}, {name, Name}])
     end.
 
 

@@ -312,15 +312,8 @@ start_link_opts_register_test() ->
     ok = meck:expect(eproc_registry, ref, fun
         () -> {ok, reg2}
     end),
-    ok = meck:expect(eproc_registry, register_inst, fun
-        (reg1, 1001) -> ok;
-        (reg1, 1003) -> ok;
-        (reg2, 1004) -> ok
-    end),
-    ok = meck:expect(eproc_registry, register_name, fun
-        (reg1, 1002, name2) -> ok;
-        (reg1, 1003, name3) -> ok;
-        (reg2, 1004, name4) -> ok
+    ok = meck:expect(eproc_registry, register_fsm, fun
+        (_RegistryArgs, _InstId, _Refs) -> ok
     end),
     {ok, PID0a} = eproc_fsm:start_link({inst, 1000}, [{register, none}]), % Registry will be not used.
     {ok, PID0b} = eproc_fsm:start_link({inst, 1000}, [{register, none}, {registry, reg1}]),
@@ -334,12 +327,11 @@ start_link_opts_register_test() ->
     ?assert(eproc_fsm:is_online(PID2)),
     ?assert(eproc_fsm:is_online(PID3)),
     ?assert(eproc_fsm:is_online(PID4)),
-    ?assertEqual(1, meck:num_calls(eproc_registry, register_inst, [reg1, 1001])),
-    ?assertEqual(1, meck:num_calls(eproc_registry, register_inst, [reg1, 1003])),
-    ?assertEqual(1, meck:num_calls(eproc_registry, register_inst, [reg2, 1004])),
-    ?assertEqual(1, meck:num_calls(eproc_registry, register_name, [reg1, 1002, name2])),
-    ?assertEqual(1, meck:num_calls(eproc_registry, register_name, [reg1, 1003, name3])),
-    ?assertEqual(1, meck:num_calls(eproc_registry, register_name, [reg2, 1004, name4])),
+    ?assertEqual(1, meck:num_calls(eproc_registry, register_fsm, [reg1, 1001, [{inst, 1001}]])),
+    ?assertEqual(1, meck:num_calls(eproc_registry, register_fsm, [reg1, 1002, [{name, name2}]])),
+    ?assertEqual(1, meck:num_calls(eproc_registry, register_fsm, [reg1, 1003, [{inst, 1003}, {name, name3}]])),
+    ?assertEqual(1, meck:num_calls(eproc_registry, register_fsm, [reg2, 1004, [{inst, 1004}, {name, name4}]])),
+    ?assertEqual(4, meck:num_calls(eproc_registry, register_fsm, '_')),
     ?assertEqual(1, meck:num_calls(eproc_registry, ref, [])),
     ?assert(meck:validate([eproc_store, eproc_registry, eproc_fsm__void])),
     ok = meck:unload([eproc_store, eproc_registry, eproc_fsm__void]),
