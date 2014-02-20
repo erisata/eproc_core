@@ -23,7 +23,7 @@
 -module(eproc_store).
 -compile([{parse_transform, lager_transform}]).
 -export([ref/0, ref/2]).
--export([add_instance/2, add_transition/3, load_instance/2, get_instance/3]).
+-export([add_instance/2, add_transition/3, load_instance/2, load_running/2, get_instance/3]).
 -export_type([ref/0]).
 -include("eproc.hrl").
 
@@ -63,6 +63,16 @@
     ) ->
         {ok, #instance{}} |
         {error, not_found}.
+
+
+-callback load_running(
+        StoreArgs       :: term(),
+        PartitionPred   :: fun((inst_id(), inst_group()) -> boolean())
+    ) ->
+        {ok, [{FsmRef, StartLinkFMA}]}
+    when
+        FsmRef :: fsm_ref(),
+        StartLinkFMA :: {Module :: module(), Function :: atom(), Args :: list()}.
 
 
 -callback get_instance(
@@ -127,6 +137,16 @@ add_transition(StoreRef, Transition, Messages) ->
 load_instance(StoreRef, InstId) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(StoreRef),
     StoreMod:load_instance(StoreArgs, InstId).
+
+
+%%
+%%  Load all running FSMs. This function is used by a registry to get
+%%  all FSMs to be restarted. Predicate PartitionPred can be used to
+%%  filter FSMs.
+%%
+load_running(StoreRef, PartitionPred) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(StoreRef),
+    StoreMod:load_running(StoreArgs, PartitionPred).
 
 
 %%

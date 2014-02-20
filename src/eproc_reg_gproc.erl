@@ -18,7 +18,7 @@
 %%  GProc based registry. This registry is not dedesigned to work
 %%  in clusters. It can be used for tests or single node deploymens.
 %%
--module(eproc_registry_gproc).
+-module(eproc_reg_gproc).
 -behaviour(eproc_registry).
 -behaviour(gen_server).
 -compile([{parse_transform, lager_transform}]).
@@ -28,9 +28,9 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -include("eproc.hrl").
 
--define(SUP_DEF, 'eproc_registry_gproc$sup_def').
--define(SUP_CST, 'eproc_registry_gproc$sup_cst').
--define(MANAGER, 'eproc_registry_gproc$manager').
+-define(SUP_DEF, 'eproc_reg_gproc$sup_def').
+-define(SUP_CST, 'eproc_reg_gproc$sup_cst').
+-define(MANAGER, 'eproc_reg_gproc$manager').
 
 -define(BY_INST(I), {n, l, {eproc_inst, I}}).
 -define(BY_NAME(N), {n, l, {eproc_name, N}}).
@@ -137,7 +137,7 @@ send({new, _RegistryArgs, FsmRef, StartLinkMFA}, Message) ->
 %%  Initialization.
 %%
 init({}) ->
-    self() ! 'eproc_registry_gproc$load',
+    self() ! 'eproc_reg_gproc$load',
     {ok, #state{}}.
 
 
@@ -158,8 +158,8 @@ handle_cast(_Message, State) ->
 %%
 %%  Loads all FSM instances asynchronously.
 %%
-handle_info('eproc_registry_gproc$load', State) ->
-    % TODO: Start loading all instances.
+handle_info('eproc_reg_gproc$load', State) ->
+    ok = start_all(),
     {noreply, State}.
 
 
@@ -202,5 +202,20 @@ start_fsm(FsmRef, {eproc_fsm, start_link, StartLinkArgs}) ->
 
 start_fsm(FsmRef, StartLinkMFA = {M, F, A}) when is_atom(M), is_atom(F), is_list(A) ->
     {ok, _Pid} = eproc_fsm_sup:start_fsm(?SUP_CST, custom, FsmRef, StartLinkMFA).
+
+
+%%
+%%  Restarts all running FSMs.
+%%
+start_all() ->
+    PartitionPred = fun (_InstId, _GroupId) ->
+        true
+    end,
+    StartFsmFun = fun ({FsmRef, StartLinkMFA}) ->
+        {ok, _Pid} = start_fsm(FsmRef, StartLinkMFA)
+    end,
+    {ok, Store} = eproc_store:ref(),
+    {ok, Fsms} = eproc_store:load_running(Store, PartitionPred),
+    ok = lists:foreach(StartFsmFun, Fsms).
 
 
