@@ -986,17 +986,27 @@ unknown_message_test() ->
     ok = unlink_kill(PID).
 
 
+%%
+%%  TODO: Check if send_create_event/* works.
+%%
+send_create_event_test() ->
+    ?assert(todo).
 
 
-% TODO: Check if await/* works.
+%%
+%%  TODO: Check if sync_send_create_event/* works.
+%%
+sync_send_create_event_test() ->
+    ?assert(todo).
 
-% TODO: Test handling of crashes in callbacks in sync and async calls.
 
-% TODO: Check if send_create_event/* works.
-% TODO: Check if sync_send_create_event/* works.
+
 % TODO: Check if kill/* works.
 % TODO: Check if suspend/* works.
 % TODO: Check if resume/* works.
 % TODO: Check if set_state/* works.
 
 % TODO: Check if register_message/* works.
+
+% TODO: Test handling of crashes in callbacks in sync and async calls.
+

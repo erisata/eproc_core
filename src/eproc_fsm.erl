@@ -95,7 +95,7 @@
 %%  Client-side functions.
 %%
 -export([
-    create/3, start_link/3, start_link/2, await/2, id/0, group/0, name/0,
+    create/3, start_link/3, start_link/2, id/0, group/0, name/0,
     send_create_event/4, sync_send_create_event/4,
     send_event/3, send_event/2,
     sync_send_event/3, sync_send_event/2,
@@ -136,10 +136,6 @@
 %%
 -include("eproc.hrl").
 -define(DEFAULT_TIMEOUT, 5000).
--define(LIMIT_OPTS, [max_transitions, max_errors, max_sent_msgs]).
--define(CREATE_OPTS, [group, name, store, start_mfa | ?LIMIT_OPTS]).
--define(START_OPTS, [restart, register, timeout, store, registry]).
--define(SEND_OPTS, [source, start_mfa, timeout]).
 
 
 -type name() :: {via, Registry :: module(), InstId :: inst_id()}.
@@ -530,8 +526,8 @@
         {error, already_created}.
 
 create(Module, Args, Options) ->
-    {KnownOpts, UnknownOpts} = proplists:split(Options, ?CREATE_OPTS),
-    {ok, InstId} = handle_create(Module, Args, lists:append(KnownOpts), UnknownOpts),
+    {ok, CreateOpts, [], [], CommonOpts, UnknownOpts} = split_options(Options),
+    {ok, InstId} = handle_create(Module, Args, lists:append(CreateOpts, CommonOpts), UnknownOpts),
     {ok, {inst, InstId}}.
 
 
@@ -540,8 +536,8 @@ create(Module, Args, Options) ->
 %%
 %%  As part of initialization procedure, the FSM registers itself to the
 %%  registry. Registration by InstId is done synchronously and registrations
-%%  by Name and Keys are done asynchronously. One can use `await/2` to
-%%  synchronize with the FSM. Name is registered after all keys are registered.
+%%  by Name and Keys are done asynchronously. One can use `is_online/1` to
+%%  synchronize with the FSM.
 %%
 %%  This function should be considered as a low-level API. The functions
 %%  `send_create_event/*` and `sync_send_create_event/*` should be used
@@ -607,32 +603,6 @@ start_link(FsmName, FsmRef, Options) ->
 start_link(FsmRef, Options) ->
     {ok, StartOptions, ProcessOptions} = resolve_start_link_opts(Options),
     gen_server:start_link(?MODULE, {FsmRef, StartOptions}, ProcessOptions).
-
-
-%%
-%%  Awaits for the specified FSM by an instance id, a name or a key.
-%%
-%%  This function should be considered as a low-level API. The functions
-%%  `send_create_event/*` and `sync_send_create_event/*` should be used
-%%  in an ordinary case.
-%%
-%%  Parameters:
-%%
-%%  `FsmRef`
-%%  :   An id, a name or a key to await.
-%%  `Timeout`
-%%  :   Number of milliseconds to await.
-%%
-%%  TODO: Should it work without a registry?
-%%
--spec await(
-        FsmRef :: fsm_ref(),
-        Timeout :: integer()
-        ) ->
-        ok | {error, timeout} | {error, term()}.
-
-await(FsmRef, Timeout) ->
-    eproc_registry:await(undefined, FsmRef, Timeout).
 
 
 %%
@@ -744,14 +714,15 @@ is_next_state_valid(_State) ->
 
 
 %%
-%%  TODO: State dependencies here, e.g. registry.
+%%  Creates new FSM, starts it and sends first message to it. The startup is
+%%  performed synchonously, therefore FSM instance id and name are registered
+%%  before this function exits, if FSM was requested to register them.
+%%  Nevertheless, the initial message is processed asynchronously.
 %%
-%%  Use this function in the `eproc_fsm` callback module implementation to start
-%%  the FSM asynchronously. TODO: Rewrite.
-%%
-%%  This function awaits for the FSM to be initialized. I.e. it is guaranteed,
-%%  that the name and the keys, if were provided, are registered before this
-%%  function exits. Nevertheless, the initial message is processes asynchronously.
+%%  This function should be used instead of calling `create/3`, `start_link/2-3`
+%%  and first `send_event/2-3` in most cases, when using FSM with the `eproc_registry`.
+%%  When the FSM used standalone, this function can be less usefull, because it
+%%  depends on `eproc_registry`.
 %%
 %%  Parameters are the following:
 %%
@@ -762,24 +733,11 @@ is_next_state_valid(_State) ->
 %%  `Event`
 %%  :   stands for the initial event of the FSM, i.e. event that created the FSM.
 %%      This event is used for invoking state transition callbacks for the transition
-%%      from the `initial` state.
+%%      from the initial ([]) state.
 %%  `Options`
-%%  :   Options, that can be specified when starting the FSM. They are listed bellow.
-%%
-%%  Available options:
-%%
-%%  `{timeout, Timeout}`
-%%  :   Timeout to await for the FSM to be started.
-%%  `{group, Group}`
-%%  :   can be used to prevent derining group from the parent process
-%%      or to specify group for a process created based on external message.
-%%      For more details see description of `create/3` function.
-%%  All options handled by `create/3`
-%%  :   All the options are passed to the `create/3` function.
-%%
-%%  Group is derived from the `From` parameter unless it was explicitly specified
-%%  in the `Options` parameter. In that case, the group will be ingerited from the
-%%  syncer FSM or new group will be created if mesage is from an external source.
+%%  :   can contain all options that are supported by the `create/3`, `start_link/2-3`
+%%      and `send_event/2-3` functions. Additionally, group is derived from the context
+%%      and passed to the `create/3`, if it was not supplied explicitly.
 %%
 -spec send_create_event(
         Module  :: module(),
@@ -793,31 +751,17 @@ is_next_state_valid(_State) ->
         {error, term()}.
 
 send_create_event(Module, Args, Event, Options) ->
-    %% TODO: Solve this Options mess.
-    %% TODO: Create categorize_options/1 function.
-    %% TODO: Change resolve_create_opts/2 to resolve_create_opts/1.
-    %% TODO: Create resolve_start_opts/1, handle timeouts here.
-    %% TODO: Create resolve_send_opts/1, handle timeouts here.
-    {ok, SendOptions, _} = split_options(?SEND_OPTS, Options),
-    {ok, StartOptions, _} = split_options(?START_OPTS, Options),
-    {ok, CreateOptions, _} = split_options(?CREATE_OPTS, Options),
-    {ok, _, UnknownOptions} = split_options(?SEND_OPTS ++ ?START_OPTS ++ ?CREATE_OPTS, Options),
-
-    CreateOptionsWithGroup = resolve_create_opts(group, CreateOptions),
-    {ok, FsmRef} = create(Module, Args, CreateOptionsWithGroup ++ UnknownOptions),
-
-    Registry = resolve_registry(Options),
-    StartLinkMFA = {?MODULE, start_link, [FsmRef, StartOptions]},
-    {ok, NewFsmRef} = eproc_registry:make_new_fsm_ref(Registry, FsmRef, StartLinkMFA),
-    ok = send_event(NewFsmRef, SendOptions),
+    {ok, FsmRef, NewFsmRef, AllSendOpts} = create_prepare_send(Module, Args, Options),
+    ok = send_event(NewFsmRef, Event, AllSendOpts),
     {ok, FsmRef}.
 
 
 
 %%
-%%  Use this function in the `eproc_fsm` callback module implementation to start
-%%  the FSM chronously. All the parameters and the options are the same as for the
-%%  `send_create_event/5` function (see its description for more details).
+%%  Creates new FSM, starts it and sends first message synchonously to it. All the
+%%  parameters and behaviour are similar to ones, described for `send_create_event/4`,
+%%  except that first event is send synchonously, i.e. `sync_send_event/2-3` is used
+%%  instead of `send_event/2-3`.
 %%
 -spec sync_send_create_event(
         Module  :: module(),
@@ -831,16 +775,9 @@ send_create_event(Module, Args, Event, Options) ->
         {error, term()}.
 
 sync_send_create_event(Module, Args, Event, Options) ->
-    %   {ok, Timeout} = resolve_timeout(Options),
-    %   {ok, InstId} = create_start_link(Module, Args, Options, Timeout),
-    %   % TODO: The following is the second remote sync in the case of riak.
-    %   %       Move it somehow to the remote part.
-    %   {ok, Response} = case proplists:is_defined(timeout, Options) of
-    %       false -> sync_send_event({inst, InstId}, Event);
-    %       true  -> sync_send_event({inst, InstId}, Event, Timeout)
-    %   end,
-    %   {ok, InstId, Response}.
-    to_be_implemented.  % TODO
+    {ok, FsmRef, NewFsmRef, AllSendOpts} = create_prepare_send(Module, Args, Options),
+    Reply = sync_send_event(NewFsmRef, Event, AllSendOpts),
+    {ok, FsmRef, Reply}.
 
 
 %%
@@ -932,7 +869,7 @@ send_event(FsmRef, Event) ->
         Event   :: term(),
         Options :: proplist()
     ) ->
-        ok.
+        Reply :: term().
 
 sync_send_event(FsmRef, Event, Options) ->
     {ok, EventSrc} = resolve_event_src(Options),
@@ -985,7 +922,9 @@ set_state(FsmRef, NewStateName, NewStateData, Reason) ->
 
 
 %%
-%%  Checks is process is online.
+%%  Checks is process is online. This function makes a synchronous call to
+%%  the FSM process, so it can be used for sinchronizing with the FSM.
+%%  E.g. for waiting for asynchronous initialization to complete.
 %%
 -spec is_online(
         FsmRef :: fsm_ref() | otp_ref()
@@ -1230,8 +1169,8 @@ resolve_timeout(Options) ->
 %%
 %%
 resolve_start_link_opts(Options) ->
-    {StartOptions, ProcessOptions} = proplists:split(Options, ?START_OPTS),
-    {ok, lists:append(StartOptions), ProcessOptions}.
+    {ok, [], StartOpts, [], CommonOpts, UnknownOpts} = split_options(Options),
+    {ok, lists:append(StartOpts, CommonOpts), UnknownOpts}.
 
 
 %%
@@ -1313,19 +1252,6 @@ resolve_registry(StartOptions) ->
             end;
         {_, Registry} ->
             Registry
-    end.
-
-
-%%
-%%  Awaits for the newly created FSM.
-%%
-await_for_created(Options, Timeout) ->
-    Name = proplists:get_value(name, Options, undefined),
-    Keys = proplists:get_value(keys, Options, []),
-    case {Name, lists:reverse(Keys)} of
-        {undefined, []}         -> ok;
-        {undefined, [Key | _]}  -> await({key, Key}, Timeout);
-        {Name, _}               -> await({name, Name}, Timeout)
     end.
 
 
@@ -1730,11 +1656,65 @@ cleanup_runtime_data(Data, RuntimeField, RuntimeDefault) when is_integer(Runtime
 
 
 %%
-%%  Splits a proplist to known and unknown options.
+%%  Splits a proplist to create, start, send, common and unknown options.
 %%
-split_options(Keys, Options) ->
-    {KnownOpts, UnknownOpts} = proplists:split(Options, Keys),
-    {ok, KnownOpts, UnknownOpts}.
+split_options(Options) ->
+    {Create, Start, Send, Common, Unknown} = lists:foldr(
+        fun split_options/2,
+        {[], [], [], [], []},
+        Options
+    ),
+    {ok, Create, Start, Send, Common, Unknown}.
+
+
+split_options(Prop = {N, _}, {Create, Start, Send, Common, Unknown}) when
+        N =:= group;
+        N =:= name;
+        N =:= start_mfa;
+        N =:= max_transitions;
+        N =:= max_errors;
+        N =:= max_sent_msgs
+        ->
+    {[Prop | Create], Start, Send, Common, Unknown};
+
+split_options(Prop = {N, _}, {Create, Start, Send, Common, Unknown}) when
+        N =:= restart;
+        N =:= register
+        ->
+    {Create, [Prop | Start], Send, Common, Unknown};
+
+split_options(Prop = {N, _}, {Create, Start, Send, Common, Unknown}) when
+        N =:= source
+        ->
+    {Create, Start, [Prop | Send], Common, Unknown};
+
+split_options(Prop = {N, _}, {Create, Start, Send, Common, Unknown}) when
+        N =:= timeout;
+        N =:= store;
+        N =:= registry
+        ->
+    {Create, Start, Send, [Prop | Common], Unknown};
+
+split_options(Prop = {_, _}, {Create, Start, Send, Common, Unknown}) ->
+    {Create, Start, Send, Common, [Prop | Unknown]}.
+
+
+%%
+%%  Creates an FSM, prepares info for sending first event.
+%%
+create_prepare_send(Module, Args, Options) ->
+    {ok, CreateOpts, StartOpts, SendOpts, CommonOpts, UnknownOpts} = split_options(Options),
+
+    CreateOptsWithGroup = resolve_create_opts(group, CreateOpts),
+    AllCreateOpts = lists:append([CreateOptsWithGroup, CommonOpts, UnknownOpts]),
+    {ok, FsmRef} = create(Module, Args, AllCreateOpts),
+
+    AllStartOpts = lists:append(StartOpts, CommonOpts),
+    AllSendOpts = lists:append(SendOpts, CommonOpts),
+    Registry = resolve_registry(CommonOpts),
+    StartLinkMFA = {?MODULE, start_link, [FsmRef, AllStartOpts]},
+    {ok, NewFsmRef} = eproc_registry:make_new_fsm_ref(Registry, FsmRef, StartLinkMFA),
+    {ok, FsmRef, NewFsmRef, AllSendOpts}.
 
 
 
@@ -1776,4 +1756,28 @@ resolve_event_src_test_() -> [
         erlang:erase('eproc_fsm$id')
     end].
 
+%%
+%%  Unit tests for split_options/1.
+%%
+split_options_test_() -> [
+    ?_assertMatch(
+        {ok, [], [], [], [], []},
+        split_options([])
+    ),
+    ?_assertMatch(
+        {ok,
+            [{group, x}, {name, x}, {start_mfa, x}, {max_transitions, x}, {max_errors, x}, {max_sent_msgs, x}],
+            [{restart, x}, {register, x}],
+            [{source, x}],
+            [{timeout, x}, {store, x}, {registry, x}],
+            [{some, y}]
+        },
+        split_options([
+            {group, x}, {name, x}, {start_mfa, x}, {max_transitions, x}, {max_errors, x}, {max_sent_msgs, x},
+            {restart, x}, {register, x}, {source, x}, {timeout, x}, {store, x}, {registry, x}, {some, y}
+        ])
+    )].
+
 -endif.
+
+
