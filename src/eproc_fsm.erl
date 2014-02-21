@@ -744,7 +744,6 @@ is_next_state_valid(_State) ->
 
 
 %%
-%%  TODO: work on supervisor and registry before this.
 %%  TODO: State dependencies here, e.g. registry.
 %%
 %%  Use this function in the `eproc_fsm` callback module implementation to start
@@ -795,6 +794,10 @@ is_next_state_valid(_State) ->
 
 send_create_event(Module, Args, Event, Options) ->
     %% TODO: Solve this Options mess.
+    %% TODO: Create categorize_options/1 function.
+    %% TODO: Change resolve_create_opts/2 to resolve_create_opts/1.
+    %% TODO: Create resolve_start_opts/1, handle timeouts here.
+    %% TODO: Create resolve_send_opts/1, handle timeouts here.
     {ok, SendOptions, _} = split_options(?SEND_OPTS, Options),
     {ok, StartOptions, _} = split_options(?START_OPTS, Options),
     {ok, CreateOptions, _} = split_options(?CREATE_OPTS, Options),
