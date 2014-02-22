@@ -20,7 +20,7 @@
 %%
 -module(eproc_store_TCK).
 -export([all/0]).
--export([test_add_instance/1]).
+-export([test_single_instance/1]).
 -include_lib("common_test/include/ct.hrl").
 -include("eproc.hrl").
 
@@ -29,7 +29,7 @@
 %%
 %%
 all() ->
-    [test_add_instance].
+    [test_single_instance].
 
 %%
 %%
@@ -44,9 +44,25 @@ store(Config) ->
 %% =============================================================================
 
 %%
+%%  TODO: Check if the following scenario works:
 %%
+%%    * get and non-existing instance.
+%%    * Add instance.
+%%    * Add Another instance with name.
+%%    * Add Another instance with same name.
+%%    * Get instance.
+%%    * Load instance.
+%%    * Suspend.
+%%    * Resume.
+%%    * Add transition.
+%%    * Add transition.
+%%    * Suspend.
+%%    * Resume.
+%%    * Suspend.
+%%    * Resume.
+%%    * Suspend.
 %%
-test_add_instance(Config) ->
+test_single_instance(Config) ->
     {ok, InstId} = eproc_store:add_instance(store(Config), #instance{
         id = anything,
         group = new
