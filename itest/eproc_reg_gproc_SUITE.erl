@@ -15,19 +15,27 @@
 %\--------------------------------------------------------------------
 
 %%
-%%  See also `itest/eproc_reg_gproc_SUITE.erl`.
+%%  Testcases for `eproc_reg_gproc` - a GProc based registry.
 %%
--module(eproc_reg_gproc_tests).
--compile([{parse_transform, lager_transform}]).
+-module(eproc_reg_gproc_SUITE).
+-export([all/0]).
+-include_lib("common_test/include/ct.hrl").
 -include("eproc.hrl").
--include_lib("eunit/include/eunit.hrl").
 
 
 %%
-%%  Check if supervisor specs are returned.
 %%
-supervisor_child_specs_test() ->
-    {ok, Specs} = eproc_reg_gproc:supervisor_child_specs([]),
-    ?assert(is_list(Specs)).
+%%
+all() ->
+    [].
+
+
+
+%% =============================================================================
+%%  Testcases.
+%% =============================================================================
+
+% TODO: Tests
+
 
 
