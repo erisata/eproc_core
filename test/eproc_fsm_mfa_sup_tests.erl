@@ -21,14 +21,26 @@
 
 
 %%
-%%  TODO: Check the following:
+%%  Check if supervisor can be started and child FSM created.
 %%
-%%    * Start supervisor in both modes.
-%%    * add child in both modes.
-%%    * Add suplicate child.
-%%    * Add child with wrong mode.
-%%
-todo_test() ->
-    ?assert(todo).
+start_fsm_test() ->
+    TestPid = self(),
+    ok = meck:new(some_fsm, [non_strict]),
+    ok = meck:expect(some_fsm, some_function, fun
+        ({inst, 425}, [some], other_args, '$fsm_ref') ->
+            {ok, TestPid}
+    end),
+    {ok, Sup} = eproc_fsm_mfa_sup:start_link({local, eproc_fsm_mfa_sup_tests}),
+    {ok, Fsm} = eproc_fsm_mfa_sup:start_fsm(
+        eproc_fsm_mfa_sup_tests, {inst, 425},
+        {some_fsm, some_function, [{inst, 425}, [some], other_args, '$fsm_ref']}
+    ),
+    ?assertEqual(Fsm, TestPid),
+    ?assertEqual(1, meck:num_calls(some_fsm, some_function, '_')),
+    ?assert(unlink(Sup)),    %% Supervisor <-> FSM.
+    ?assert(unlink(Sup)),    %% Supervisor <-> Test.
+    exit(Sup, kill),
+    ?assert(meck:validate([some_fsm])),
+    ok = meck:unload([some_fsm]).
 
 
