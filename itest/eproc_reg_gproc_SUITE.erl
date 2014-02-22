@@ -18,16 +18,41 @@
 %%  Testcases for `eproc_reg_gproc` - a GProc based registry.
 %%
 -module(eproc_reg_gproc_SUITE).
--export([all/0]).
+-export([all/0, init_per_suite/1, end_per_suite/1]).
+-export([
+    test_register_fsm/1
+]).
 -include_lib("common_test/include/ct.hrl").
 -include("eproc.hrl").
 
 
 %%
-%%
+%%  CT API.
 %%
 all() ->
-    [].
+    [test_register_fsm].
+
+
+%%
+%%  CT API, initialization.
+%%
+init_per_suite(Config) ->
+    {ok, _} = application:ensure_all_started(gproc),
+    {ok, Registry} = eproc_registry:ref(eproc_reg_gproc, []),
+    [{registry, Registry} | Config].
+
+%%
+%%  CT API, cleanup.
+%%
+end_per_suite(_Config) ->
+    ok = application:stop(gproc).
+
+
+%%
+%%  Helper function.
+%%
+registry(Config) ->
+    proplists:get_value(registry, Config).
 
 
 
@@ -35,7 +60,37 @@ all() ->
 %%  Testcases.
 %% =============================================================================
 
-% TODO: Tests
+%%
+%%  Check if register_fsm works. Also check if the registered PID can be
+%%  resolved using `whereis_name/2` and message can be sent to it using `send/2`.
+%%
+test_register_fsm(Config) ->
+    Registry = registry(Config),
+    ok = eproc_registry:register_fsm(Registry, {inst, 1}, []),
+    ok = eproc_registry:register_fsm(Registry, {inst, 1}, [{inst, 1}, {name, n}]),
+    {ok, Inst1Ref = {via, eproc_reg_gproc, Inst1Id}} = eproc_registry:make_fsm_ref(Registry, {inst, 1}),
+    {ok, Inst2Ref = {via, eproc_reg_gproc, Inst2Id}} = eproc_registry:make_fsm_ref(Registry, {inst, 2}),
+    {ok, NameNRef = {via, eproc_reg_gproc, NameNId}} = eproc_registry:make_fsm_ref(Registry, {name, n}),
+    TestPid = self(),
+    TestPid     = eproc_reg_gproc:whereis_name(Inst1Id),
+    undefined   = eproc_reg_gproc:whereis_name(Inst2Id),
+    TestPid     = eproc_reg_gproc:whereis_name(NameNId),
+    undefined   = eproc_reg_gproc:whereis_name(some),
+    eproc_reg_gproc:send(Inst1Id, msg1),
+    eproc_reg_gproc:send(NameNId, msg3),
+    case catch eproc_reg_gproc:send(Inst2Id, msg2) of
+        {'EXIT', _} -> ok
+    end,
+    ok = receive msg1 -> ok    after 100 -> error end,
+    ok = receive msg3 -> ok    after 100 -> error end,
+    ok = receive msg2 -> error after 100 -> ok    end,
+    ok.
 
+
+%%
+%%  TODO: Start all the processes (including supervisors).
+%%  TODO: Check if instances loaded on startup.
+%%  TODO: Check if instance can be started using `whereis_name/2` and `send/2`.
+%%
 
 

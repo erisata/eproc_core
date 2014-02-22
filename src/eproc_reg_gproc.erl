@@ -102,7 +102,10 @@ whereis_name({fsm, _RegistryArgs, FsmRef}) ->
 
 whereis_name({new, _RegistryArgs, FsmRef, StartSpec}) ->
     {ok, Pid} = start_fsm(FsmRef, StartSpec),
-    Pid.
+    Pid;
+
+whereis_name(_UnknownRefType) ->
+    undefined.
 
 
 %%
