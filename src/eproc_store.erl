@@ -69,10 +69,7 @@
         StoreArgs       :: term(),
         PartitionPred   :: fun((inst_id(), inst_group()) -> boolean())
     ) ->
-        {ok, [{FsmRef, StartLinkFMA}]}
-    when
-        FsmRef :: fsm_ref(),
-        StartLinkFMA :: {Module :: module(), Function :: atom(), Args :: list()}.
+        {ok, [{FsmRef :: fsm_ref(), StartSpec :: fsm_start_spec()}]}.
 
 
 -callback get_instance(

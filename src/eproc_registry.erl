@@ -44,18 +44,13 @@
 -opaque ref() :: {Callback :: module(), Args :: term()}.
 
 %%
-%%  Module, Function, Arguments tuple, used to reference FSM start/link function.
-%%
--type start_link_mfa() :: {FsmModule :: module(), FsmStartFunction :: atom(), FsmStartArgs :: list()}.
-
-%%
 %%  Reference to a FSM, handled by this process registry.
 %%  This structire is passed to the callbacks defined by the OTP process
 %%  registry: `register_name/2`, `unregister_name/1, `send/2`.
 %%
 -opaque registry_fsm_ref() ::
     {fsm, RegistryArgs :: term(), FsmRef :: fsm_ref()} |
-    {new, RegistryArgs :: term(), FsmRef :: fsm_ref(), StartLinkMFA :: start_link_mfa()}.
+    {new, RegistryArgs :: term(), FsmRef :: fsm_ref(), StartSpec :: fsm_start_spec()}.
 
 
 
@@ -173,26 +168,25 @@ ref(Module, Args) ->
 %%  process as a registry reference (uses `{via, Mudule, Name}`).
 %%  I.e. you can use it as:
 %%
-%%      {ok, Ref} = eproc_registry:make_new_fsm_ref(Registry, FsmRef, StartLinkMFA),
+%%      {ok, Ref} = eproc_registry:make_new_fsm_ref(Registry, FsmRef, StartSpec),
 %%      Response = gen_server:call(Ref, Message).
 %%
 %%  Here registry is a reference obtained using `eproc_registry:ref/1-2`,
 %%  FsmRef is an FSM reference, usually returned from the `eproc_fsm:create/3`
-%%  and StartLinkMFA is `{Module, Function, Args}` used to start and link
-%%  the FSM.
+%%  and StartSpec tells, how to start and link the FSM.
 %%
 -spec make_new_fsm_ref(
-        Registry        :: registry_ref(),
-        FsmRef          :: fsm_ref(),
-        StartLinkMFA    :: {FsmModule :: module(), FsmStartFunction :: atom(), FsmStartArgs :: list()}
+        Registry    :: registry_ref(),
+        FsmRef      :: fsm_ref(),
+        StartSpec   :: fsm_start_spec()
     ) ->
         {ok, Ref}
     when
         Ref :: {via, RegistryModule :: module(), RegistryFsmRef :: registry_fsm_ref()}.
 
-make_new_fsm_ref(Registry, FsmRef, StartLinkMFA) ->
+make_new_fsm_ref(Registry, FsmRef = {inst, _}, StartSpec) ->
     {ok, {RegistryMod, RegistryArgs}} = resolve_ref(Registry),
-    {ok, {via, RegistryMod, {new, RegistryArgs, FsmRef, StartLinkMFA}}}.
+    {ok, {via, RegistryMod, {new, RegistryArgs, FsmRef, StartSpec}}}.
 
 
 %%

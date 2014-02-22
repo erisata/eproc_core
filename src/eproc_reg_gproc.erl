@@ -29,7 +29,7 @@
 -include("eproc.hrl").
 
 -define(SUP_DEF, 'eproc_reg_gproc$sup_def').
--define(SUP_CST, 'eproc_reg_gproc$sup_cst').
+-define(SUP_MFA, 'eproc_reg_gproc$sup_mfa').
 -define(MANAGER, 'eproc_reg_gproc$manager').
 
 -define(BY_INST(I), {n, l, {eproc_inst, I}}).
@@ -57,11 +57,12 @@ start_link(Name) ->
 %%
 supervisor_child_specs(_RegistryArgs) ->
     Reg = ?MODULE,
-    Sup = eproc_fsm_sup,
-    DefSpec = {{Reg, sup_def}, {Sup, start_link, [{local, ?SUP_DEF}, default]}, permanent, 10000, supervisor, [Sup]},
-    CstSpec = {{Reg, sup_cst}, {Sup, start_link, [{local, ?SUP_CST}, custom]},  permanent, 10000, supervisor, [Sup]},
-    MgrSpec = {{Reg, manager}, {Reg, start_link, [{local, ?MANAGER}]},          permanent, 10000, worker,     [Reg]},
-    {ok, [DefSpec, CstSpec, MgrSpec]}.
+    SupDef = eproc_fsm_def_sup,
+    SupMfa = eproc_fsm_mfa_sup,
+    DefSpec = {{Reg, sup_def}, {SupDef, start_link, [{local, ?SUP_DEF}]}, permanent, 10000, supervisor, [SupDef]},
+    MfaSpec = {{Reg, sup_mfa}, {SupMfa, start_link, [{local, ?SUP_MFA}]}, permanent, 10000, supervisor, [SupMfa]},
+    MgrSpec = {{Reg, manager}, {Reg,    start_link, [{local, ?MANAGER}]}, permanent, 10000, worker,     [Reg]},
+    {ok, [DefSpec, MfaSpec, MgrSpec]}.
 
 
 %%
@@ -99,8 +100,8 @@ unregister_name(_Name) ->
 whereis_name({fsm, _RegistryArgs, FsmRef}) ->
     gproc:whereis_name(gproc_key(FsmRef));
 
-whereis_name({new, _RegistryArgs, FsmRef, StartLinkMFA}) ->
-    {ok, Pid} = start_fsm(FsmRef, StartLinkMFA),
+whereis_name({new, _RegistryArgs, FsmRef, StartSpec}) ->
+    {ok, Pid} = start_fsm(FsmRef, StartSpec),
     Pid.
 
 
@@ -113,8 +114,8 @@ send(Pid, Message) when is_pid(Pid) ->
 send({fsm, _RegistryArgs, FsmRef}, Message) ->
     gproc:send(gproc_key(FsmRef), Message);
 
-send({new, _RegistryArgs, FsmRef, StartLinkMFA}, Message) ->
-    {ok, Pid} = start_fsm(FsmRef, StartLinkMFA),
+send({new, _RegistryArgs, FsmRef, StartSpec}, Message) ->
+    {ok, Pid} = start_fsm(FsmRef, StartSpec),
     Pid ! Message.
 
 
@@ -196,11 +197,11 @@ gproc_key({name, Name}) ->
 %%
 %%  Starts new FSM.
 %%
-start_fsm(FsmRef, {eproc_fsm, start_link, StartLinkArgs}) ->
-    {ok, _Pid} = eproc_fsm_sup:start_fsm(?SUP_DEF, default, FsmRef, StartLinkArgs);
-
-start_fsm(FsmRef, StartLinkMFA = {M, F, A}) when is_atom(M), is_atom(F), is_list(A) ->
-    {ok, _Pid} = eproc_fsm_sup:start_fsm(?SUP_CST, custom, FsmRef, StartLinkMFA).
+start_fsm(FsmRef, StartSpec) ->
+    {ok, _Pid} = case eproc_fsm:resolve_start_spec(FsmRef, StartSpec) of
+        {start_link_args, Args} -> eproc_fsm_def_sup:start_fsm(?SUP_DEF, Args);
+        {start_link_mfa,  MFA}  -> eproc_fsm_mfa_sup:start_fsm(?SUP_MFA, FsmRef, MFA)
+    end.
 
 
 %%
@@ -210,8 +211,8 @@ start_all() ->
     PartitionPred = fun (_InstId, _GroupId) ->
         true
     end,
-    StartFsmFun = fun ({FsmRef, StartLinkMFA}) ->
-        {ok, _Pid} = start_fsm(FsmRef, StartLinkMFA)
+    StartFsmFun = fun ({FsmRef, StartSpec}) ->
+        {ok, _Pid} = start_fsm(FsmRef, StartSpec)
     end,
     {ok, Store} = eproc_store:ref(),
     {ok, Fsms} = eproc_store:load_running(Store, PartitionPred),

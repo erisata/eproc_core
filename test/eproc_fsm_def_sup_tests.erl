@@ -14,7 +14,7 @@
 %| limitations under the License.
 %\--------------------------------------------------------------------
 
--module(eproc_fsm_sup_tests).
+-module(eproc_fsm_def_sup_tests).
 -compile([{parse_transform, lager_transform}]).
 -include("eproc.hrl").
 -include_lib("eunit/include/eunit.hrl").

@@ -15,23 +15,16 @@
 %\--------------------------------------------------------------------
 
 %%
-%%  Supervises FSM instances. This is default implementation for
-%%  the FSM supervisor, altrough registry implementations can have own.
+%%  Default supervisor for FSM instances. It uses `simple_one_for_one`
+%%  supervisor for managing the FSM processes. This is default implementation
+%%  for the FSM supervisor, altrough registry implementations can have own.
 %%
-%%  This supervisor can work in two modes, altrough when started in
-%%  particular mode, can only work in that mode.
-%%
-%%    * `default` mode uses `simple_one_for_one` supervisor;
-%%    * `custom` mode uses `one_for_one` supervisor.
-%%
--module(eproc_fsm_sup).
+-module(eproc_fsm_def_sup).
 -behaviour(supervisor).
 -compile([{parse_transform, lager_transform}]).
--export([start_link/2, start_fsm/4]).
+-export([start_link/1, start_fsm/2]).
 -export([init/1]).
 -include("eproc.hrl").
-
--type mode() :: default | custom.
 
 
 %% =============================================================================
@@ -42,32 +35,26 @@
 %%  Start this supervisor.
 %%
 -spec start_link(
-        Name :: otp_name(),
-        Mode :: mode()
+        Name :: otp_name()
     ) ->
         pid() | {error, term()} | term().
 
-start_link(Name, Mode) ->
-    supervisor:start_link(Name, ?MODULE, {Mode}).
+start_link(Name) ->
+    supervisor:start_link(Name, ?MODULE, {}).
 
 
 %%
-%%  Starts new `eproc_fsm` instance using the default `eproc_fsm:start_link/2` function.
+%%  Starts new `eproc_fsm` instance using the `eproc_fsm:start_link/2` function.
 %%
 -spec start_fsm(
-        Supervisor  :: otp_ref(),
-        Mode        :: mode(),
-        FsmRef      :: fsm_ref(),
-        StartSpec   :: list() | {module(), atom(), list()}
+        Supervisor      :: otp_ref(),
+        StartLinkArgs   :: list()
     ) ->
         {ok, pid()}.
 
-start_fsm(Supervisor, default, _FsmRef, StartLinkArgs) when is_list(StartLinkArgs) ->
-    {ok, _Pid} = supervisor:start_child(Supervisor, StartLinkArgs);
+start_fsm(Supervisor, StartLinkArgs) when is_list(StartLinkArgs) ->
+    {ok, _Pid} = supervisor:start_child(Supervisor, StartLinkArgs).
 
-start_fsm(Supervisor, custom, FsmRef, StartLinkMFA = {Module, _, _}) ->
-    Spec = {FsmRef, StartLinkMFA, transient, 10000, worker, [eproc_fsm, Module]},
-    {ok, _Pid} = supervisor:start_child(Supervisor, Spec).
 
 
 %% =============================================================================
@@ -77,11 +64,9 @@ start_fsm(Supervisor, custom, FsmRef, StartLinkMFA = {Module, _, _}) ->
 %%
 %%  Supervisor configuration.
 %%
-init({default}) ->
+init({}) ->
     {ok, {{simple_one_for_one, 100, 10}, [
         {eproc_fsm, {eproc_fsm, start_link, []}, transient, 10000, worker, [eproc_fsm]}
-    ]}};
-
-init({custom}) ->
-    {ok, {{one_for_one, 100, 10}, [
     ]}}.
+
+

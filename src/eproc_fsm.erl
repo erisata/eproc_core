@@ -40,7 +40,7 @@
 %%
 %%
 %%  How `eproc_fsm` callbacks are invoked in different scenarios
-%%  ------------------------------------------------------------
+%%  ------------------------------------
 %%
 %%  New FSM created, started and an initial event received
 %%  :
@@ -87,12 +87,54 @@
 %%        * `handle_state(StateName, {event, Message} | {sync, From, Message}, StateData)`
 %%        * `handle_state(StateName, {exit, FinalStateName}, StateData)`
 %%
+%%
+%%  Dependencies
+%%  ------------------------------------
+%%
+%%  This section lists modules, that can be used together with this module.
+%%  All of them are optional and are references using options. Some functions
+%%  require specific dependencies, but these functions are more for convenience.
+%%
+%%  `eproc_registry`
+%%  :   can be used as a process registry, a supervisor and a process loader.
+%%      This component is used via options: `start_spec` from the create options,
+%%      `register` from the start options and `registry` from the common options.
+%%      Functions `send_create_event/3` and `sync_send_create_event/4` can only
+%%      be called if FSM used with the registry.
+%%
+%%  `eproc_restart`
+%%  :   can be used to limit FSM restarts. This component is only used if
+%%      start option `restart` is provided with the corresponding value.
+%%
+%%
+%%  Common FSM options
+%%  ------------------------------------
+%%
+%%  The following are the options, that can be provided for most of the
+%%  functions in this module. Meaning of these options is the same in all cases.
+%%  Description of each function states, which of these options are used in that
+%%  function and other will be ignored.
+%%
+%%  `{store, StoreRef}`
+%%  :   a store to be used by the FSM. If this option not provided, a store
+%%      specified in the `eproc_core` application environment is used.
+%%
+%%  `{registry, StoreRef}`
+%%  :   a registry to be used by the instance. If this option not provided, a registry
+%%      specified in the `eproc_core` application environment is used. `eproc_core` can
+%%      have no registry specified. In that case the registry will not be used.
+%%
+%%  `{timeout, Timeout}`
+%%  :   Timeout for the function, 5000 (5 seconds) is the default.
+%%
+%%
 -module(eproc_fsm).
 -behaviour(gen_server).
 -compile([{parse_transform, lager_transform}]).
 
 %%
-%%  Client-side functions.
+%%  Functions to be used by FSM implementations on the client-side.
+%%  I.e. they should be used in API functions of the specific FSM.
 %%
 -export([
     create/3, start_link/3, start_link/2, id/0, group/0, name/0,
@@ -103,23 +145,23 @@
 ]).
 
 %%
-%%  Process-side functions.
+%%  Functions to be used by the specific FSM implementations
+%%  in the callback (process-side) functions.
 %%
 -export([
     reply/2
 ]).
 
-
 %%
-%%  APIs for related eproc modules.
+%%  APIs for related `eproc` modules.
 %%
 -export([
     is_state_in_scope/2,
     is_state_valid/1,
     is_next_state_valid/1,
-    register_message/4
+    register_message/4,
+    resolve_start_spec/2
 ]).
-
 
 %%
 %%  Callbacks for `gen_server`.
@@ -129,7 +171,7 @@
 %%
 %%  Type exports.
 %%
--export_type([name/0, id/0, group/0, state_event/0, state_name/0, state_scope/0, state_data/0]).
+-export_type([name/0, id/0, group/0, state_event/0, state_name/0, state_scope/0, state_data/0, start_spec/0]).
 
 %%
 %%  Internal things...
@@ -214,6 +256,15 @@
 %%  #state{} record in the user module.
 %%
 -type state_data() :: term().
+
+
+%%
+%%  FSM start specification.
+%%  See `create/3` for more details.
+%%
+-opaque start_spec()  ::
+    {default, StartOpts :: list()} |
+    {mfa, {Module :: module(), Function :: atom(), Args :: list()}}.
 
 
 %% =============================================================================
@@ -486,33 +537,50 @@
 %%      is similar to the Args parameter in `gen_fsm` and other OTP behaviours.
 %%  `Options`
 %%  :   Proplist with options for the persistent FSM. The list can have
-%%      options used by this module (listed bellows) as well as unknown
-%%      options that can be used as a metadata for the FSM.
+%%      common FSM options, FSM create options (listed bellow) as well as
+%%      unknown options that can be used as a metadata for the FSM.
+%%      Only the `store` option is supported from the Common FSM Options. Other
+%%      common FSM options can be provided but will be ignored in this function.
 %%
 %%  On success, this function returns instance id of the newly created FSM.
 %%  It can be used then to start the instance and to reference it.
 %%
-%%  Options known by this function:
+%%  FSM create options are the following:
 %%
 %%  `{group, group() | new}`
 %%  :   Its a group ID to which the FSM should be assigned or atom `new`
 %%      indicating that new group should be created for this FSM.
+%%
 %%  `{name, Name}`
 %%  :   Name of the FSM. It uniquelly identifies the FSM.
 %%      Name is valid for the entire FSM lifecycle, including
 %%      the `completed` state.
-%%  `{store, store_ref()}`
-%%  :   Reference of a store, in which the instance should be created.
-%%      If not provided, default store is used.
-%%  `{start_mfa, {Module, Function, Args}}`
-%%  :   Indicates a function, that should be called to start the FSM.
-%%      This option is used by `eproc_registry`.
+%%
+%%  `{start_spec, StartSpec :: start_spec()}` - TODO
+%%  :   Tells, how the FSM should be started. Default is `{default, []}`.
+%%      This option is used by `eproc_registry` therefore will be ignored,
+%%      if the FSM will be used stand-alone, without the registry.
+%%      Possible values for the StartSpec are:
+%%
+%%        * If StartSpec is in form `{default, StartOpts}` the FSM will
+%%          be started using the default `eproc_fsm:start_link/2` function
+%%          with StartOpts as a second parameter.
+%%
+%%        * If `{mfa, {Module, Function, Args}}` is specified as the StartSpec,
+%%          the FSM will be started by calling the provided `Module:Function/?`
+%%          with arguments `Args`. The Args list is preprocessed before passing
+%%          it to the start function by replacing each occurence on `'$fsm_ref'`
+%%          with the actual FSM reference (`{inst, InstId}`). It should be needed
+%%          to call `eproc_fsm:start_link/2` later on.
+%%
 %%  `{max_transitions, integer() | infinity}` - TODO
 %%  :   Maximal allowed number of transitions.
 %%      When this limit will be reached, the FSM will be suspended.
+%%
 %%  `{max_errors, integer() | infinity}` - TODO
 %%  :   Maximal allowed number of errors in the FSM.
 %%      When this limit will be reached, the FSM will be suspended.
+%%
 %%  `{max_sent_msgs, integer() | infinity}` - TODO
 %%  :   Maximal allowed number of messages sent by the FSM.
 %%      When this limit will be reached, the FSM will be suspended.
@@ -735,8 +803,9 @@ is_next_state_valid(_State) ->
 %%      This event is used for invoking state transition callbacks for the transition
 %%      from the initial ([]) state.
 %%  `Options`
-%%  :   can contain all options that are supported by the `create/3`, `start_link/2-3`
-%%      and `send_event/2-3` functions. Additionally, group is derived from the context
+%%  :   can contain all options that are supported by the `create/3` and
+%%      `send_event/2-3` functions. Options for `start_link/2-3` can be passed
+%%      via `start_spec` option. Additionally, group is derived from the context
 %%      and passed to the `create/3`, if it was not supplied explicitly.
 %%
 -spec send_create_event(
@@ -998,6 +1067,29 @@ register_message({inst, _SrcInstId}, Dst, Req = {msg, _ReqBody, _ReqDate}, Res) 
     {ok, registered}.
 
 
+%%
+%%  Converts FSM start specification to a list of arguments
+%%  for a `eproc_fsm:start_link/2-3` function or an MFA.
+%%
+-spec resolve_start_spec(
+        FsmRef      :: fsm_ref(),
+        StartSpec   :: start_spec()
+    ) ->
+        {start_link_args, Args :: list()} |
+        {start_link_mfa, {Module :: module(), Function :: atom(), Args :: list()}}.
+
+resolve_start_spec(FsmRef, {default, StartOpts}) when is_list(StartOpts) ->
+    {start_link_args, [FsmRef, StartOpts]};
+
+resolve_start_spec(FsmRef, {mfa, {Module, Function, Args}}) when is_atom(Module), is_atom(Function), is_list(Args) ->
+    FsmRefMapFun = fun
+        ('$fsm_ref') -> FsmRef;
+        (Other) -> Other
+    end,
+    ResolvedArgs = lists:map(FsmRefMapFun, Args),
+    {start_link_mfa, {Module, Function, ResolvedArgs}}.
+
+
 
 %% =============================================================================
 %%  Internal state of the module.
@@ -1174,21 +1266,28 @@ resolve_start_link_opts(Options) ->
 
 
 %%
-%%  Resolves FSM create options.
+%%  Resolves group id and adds it to the options, if it was missing.
+%%  Group is taken from the context of the calling process
+%%  if not provided in the options explicitly. If the calling
+%%  process is not FSM, new group will be created.
 %%
-%%    * Group is taken from the context of the calling process
-%%      if not provided in the options explicitly. If the calling
-%%      process is not FSM, new group will be created.
-%%
-resolve_create_opts(group, CreateOptions) ->
-    case proplists:is_defined(group, CreateOptions) of
-        true -> [];
+resolve_append_group(CreateOpts) ->
+    case proplists:is_defined(group, CreateOpts) of
+        true -> CreateOpts;
         false ->
             case group() of
-                {ok, Group} -> [{group, Group}];
-                {error, not_fsm} -> [{group, new}]
+                {ok, Group} -> [{group, Group} | CreateOpts];
+                {error, not_fsm} -> [{group, new} | CreateOpts]
             end
     end.
+
+
+%%
+%%  Gets start specs from the FSM create options.
+%%
+resolve_start_spec(CreateOpts) ->
+    StartSpec = proplists:get_value(start_spec, CreateOpts, {default, []}),
+    {ok, StartSpec}.
 
 
 %%
@@ -1670,7 +1769,7 @@ split_options(Options) ->
 split_options(Prop = {N, _}, {Create, Start, Send, Common, Unknown}) when
         N =:= group;
         N =:= name;
-        N =:= start_mfa;
+        N =:= start_spec;
         N =:= max_transitions;
         N =:= max_errors;
         N =:= max_sent_msgs
@@ -1703,17 +1802,16 @@ split_options(Prop = {_, _}, {Create, Start, Send, Common, Unknown}) ->
 %%  Creates an FSM, prepares info for sending first event.
 %%
 create_prepare_send(Module, Args, Options) ->
-    {ok, CreateOpts, StartOpts, SendOpts, CommonOpts, UnknownOpts} = split_options(Options),
+    {ok, CreateOpts, [], SendOpts, CommonOpts, UnknownOpts} = split_options(Options),
 
-    CreateOptsWithGroup = resolve_create_opts(group, CreateOpts),
+    CreateOptsWithGroup = resolve_append_group(CreateOpts),
     AllCreateOpts = lists:append([CreateOptsWithGroup, CommonOpts, UnknownOpts]),
     {ok, FsmRef} = create(Module, Args, AllCreateOpts),
 
-    AllStartOpts = lists:append(StartOpts, CommonOpts),
-    AllSendOpts = lists:append(SendOpts, CommonOpts),
     Registry = resolve_registry(CommonOpts),
-    StartLinkMFA = {?MODULE, start_link, [FsmRef, AllStartOpts]},
-    {ok, NewFsmRef} = eproc_registry:make_new_fsm_ref(Registry, FsmRef, StartLinkMFA),
+    AllSendOpts = lists:append(SendOpts, CommonOpts),
+    {ok, StartSpec} = resolve_start_spec(CreateOpts),
+    {ok, NewFsmRef} = eproc_registry:make_new_fsm_ref(Registry, FsmRef, StartSpec),
     {ok, FsmRef, NewFsmRef, AllSendOpts}.
 
 
@@ -1766,14 +1864,14 @@ split_options_test_() -> [
     ),
     ?_assertMatch(
         {ok,
-            [{group, x}, {name, x}, {start_mfa, x}, {max_transitions, x}, {max_errors, x}, {max_sent_msgs, x}],
+            [{group, x}, {name, x}, {start_spec, x}, {max_transitions, x}, {max_errors, x}, {max_sent_msgs, x}],
             [{restart, x}, {register, x}],
             [{source, x}],
             [{timeout, x}, {store, x}, {registry, x}],
             [{some, y}]
         },
         split_options([
-            {group, x}, {name, x}, {start_mfa, x}, {max_transitions, x}, {max_errors, x}, {max_sent_msgs, x},
+            {group, x}, {name, x}, {start_spec, x}, {max_transitions, x}, {max_errors, x}, {max_sent_msgs, x},
             {restart, x}, {register, x}, {source, x}, {timeout, x}, {store, x}, {registry, x}, {some, y}
         ])
     )].

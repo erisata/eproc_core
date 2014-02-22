@@ -988,6 +988,7 @@ unknown_message_test() ->
 
 %%
 %%  TODO: Check if send_create_event/* works.
+%%  TODO: Check start_mfa.
 %%
 send_create_event_test() ->
     ?assert(todo).
@@ -1007,6 +1008,7 @@ sync_send_create_event_test() ->
 % TODO: Check if set_state/* works.
 
 % TODO: Check if register_message/* works.
+% TODO: Check if resolve_start_spec/* works.
 
 % TODO: Test handling of crashes in callbacks in sync and async calls.
 

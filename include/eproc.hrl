@@ -41,7 +41,8 @@
 
 
 -type inst_id()         :: eproc_fsm:id().
--type fsm_ref()         :: {inst, inst_id()} | {name, term()}.  % TODO: Key should not be used in runtime registration: {key, term()}.
+-type fsm_ref()         :: {inst, inst_id()} | {name, term()}.
+-type fsm_start_spec()  :: eproc_fsm:start_spec().
 -type inst_name()       :: term().
 -type inst_group()      :: eproc_fsm:group().
 -type inst_status()     :: running | suspended | done | failed | killed.
