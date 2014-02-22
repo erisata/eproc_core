@@ -22,7 +22,7 @@
 %%
 -module(eproc_store).
 -compile([{parse_transform, lager_transform}]).
--export([ref/0, ref/2]).
+-export([ref/0, ref/2, supervisor_child_specs/1]).
 -export([add_instance/2, add_transition/3, load_instance/2, load_running/2, get_instance/3]).
 -export_type([ref/0]).
 -include("eproc.hrl").
@@ -34,12 +34,14 @@
 %%  Callback definitions.
 %% =============================================================================
 
--callback start_link(
+%%
+%%  This callback should return a list of supervisor child specifications
+%%  used to start the store.
+%%
+-callback supervisor_child_specs(
         StoreArgs   :: term()
     ) ->
-        {ok, pid()} |
-        {error, term()} |
-        ignore.
+        {ok, list()}.
 
 
 -callback add_instance(
@@ -86,6 +88,16 @@
 %%  Public API.
 %% =============================================================================
 
+%%
+%%  Returns supervisor child specifications, that should be used to
+%%  start the store.
+%%
+-spec supervisor_child_specs(Store :: store_ref()) -> {ok, list()}.
+
+supervisor_child_specs(Store) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
+    StoreMod:supervisor_child_specs(StoreArgs).
+
 
 %%
 %%  Returns the default store reference.
@@ -111,16 +123,16 @@ ref(Module, Args) ->
 %%  Stores new persistent instance, generates id for it,
 %%  assigns a group and a name if not provided.
 %%
-add_instance(StoreRef, Instance) ->
-    {ok, {StoreMod, StoreArgs}} = resolve_ref(StoreRef),
+add_instance(Store, Instance) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
     StoreMod:add_instance(StoreArgs, Instance).
 
 
 %%
 %%  TODO: Describe.
 %%
-add_transition(StoreRef, Transition, Messages) ->
-    {ok, {StoreMod, StoreArgs}} = resolve_ref(StoreRef),
+add_transition(Store, Transition, Messages) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
     StoreMod:add_transition(StoreArgs, Transition, Messages).
 
 
@@ -131,8 +143,8 @@ add_transition(StoreRef, Transition, Messages) ->
 %%  The transition, if returned, stands for the current state of the FSM.
 %%  The transition is also filled with the active props, keys and timers.
 %%
-load_instance(StoreRef, InstId) ->
-    {ok, {StoreMod, StoreArgs}} = resolve_ref(StoreRef),
+load_instance(Store, InstId) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
     StoreMod:load_instance(StoreArgs, InstId).
 
 
@@ -141,8 +153,8 @@ load_instance(StoreRef, InstId) ->
 %%  all FSMs to be restarted. Predicate PartitionPred can be used to
 %%  filter FSMs.
 %%
-load_running(StoreRef, PartitionPred) ->
-    {ok, {StoreMod, StoreArgs}} = resolve_ref(StoreRef),
+load_running(Store, PartitionPred) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
     StoreMod:load_running(StoreArgs, PartitionPred).
 
 
@@ -150,8 +162,8 @@ load_running(StoreRef, PartitionPred) ->
 %%  This function returns an instance with single (or zero) transitions.
 %%  If instance not found or other error returns {error, Reason}.
 %%
-get_instance(StoreRef, InstId, Query) ->
-    {ok, {StoreMod, StoreArgs}} = resolve_ref(StoreRef),
+get_instance(Store, InstId, Query) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
     StoreMod:get_instance(StoreArgs, InstId, Query).
 
 

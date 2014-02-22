@@ -47,8 +47,11 @@ store(Config) ->
 %%
 %%
 test_add_instance(Config) ->
-    InstId = asd,
-    {ok, InstId} = eproc_store:add_instance(store(Config), #instance{id = InstId}),
+    {ok, InstId} = eproc_store:add_instance(store(Config), #instance{
+        id = anything,
+        group = new
+    }),
+    true = is_integer(InstId),
     ok.
 
 

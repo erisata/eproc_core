@@ -35,14 +35,16 @@ all() ->
 %%
 %%
 init_per_suite(Config) ->
-    {ok, _PID} = eproc_store_ets:start_link(),
+    {ok, PID} = eproc_store_ets:start_link({local, eproc_store_ets_SUITE}),
     {ok, Store} = eproc_store:ref(eproc_store_ets, undefined),
-    [{store, Store} | Config].
+    unlink(PID),
+    [{store, Store}, {store_pid, PID} | Config].
 
 %%
 %%
 %%
-end_per_suite(_Config) ->
+end_per_suite(Config) ->
+    exit(proplists:get_value(store_pid, Config), kill),
     ok.
 
 

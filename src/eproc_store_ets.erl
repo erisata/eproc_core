@@ -23,7 +23,7 @@
 -behaviour(gen_server).
 -compile([{parse_transform, lager_transform}]).
 -export([start_link/1]).
--export([add_instance/2, add_transition/3, load_instance/2, load_running/2, get_instance/3]).
+-export([supervisor_child_specs/1, add_instance/2, add_transition/3, load_instance/2, load_running/2, get_instance/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -include("eproc.hrl").
 
@@ -35,8 +35,8 @@
 %%
 %%
 %%
-start_link(_Args) ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, undefined, []).
+start_link(Name) ->
+    gen_server:start_link(Name, ?MODULE, {}, []).
 
 
 
@@ -47,7 +47,7 @@ start_link(_Args) ->
 %%
 %%  Creates ETS tables.
 %%
-init(undefined) ->
+init({}) ->
     ets:new('eproc_store_ets$inst', [set, public, named_table, {keypos, #instance.id}]),
     ets:new('eproc_store_ets$cntr', [set, public, named_table, {keypos, 1}]),
     ets:insert('eproc_store_ets$cntr', {inst, 0}),
@@ -94,6 +94,15 @@ code_change(_OldVsn, State, _Extra) ->
 %% =============================================================================
 %%  Callbacks for `eproc_store`.
 %% =============================================================================
+
+%%
+%%  Returns supervisor child specifications for starting the registry.
+%%
+supervisor_child_specs(_StoreArgs) ->
+    Mod = ?MODULE,
+    Spec = {Mod, {Mod, start_link, [{local, Mod}]}, permanent, 10000, worker, [Mod]},
+    {ok, [Spec]}.
+
 
 %%
 %%

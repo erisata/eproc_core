@@ -14,16 +14,20 @@
 %| limitations under the License.
 %\--------------------------------------------------------------------
 
-[
-    {kernel, [
-        {error_logger, {file, "logs/eunit_kernel.log"}}
-    ]},
-    {sasl, [
-        {sasl_error_logger, {file, "logs/eunit_sasl.log"}}
-    ]},
-    {lager, [
-        {handlers, [{lager_file_backend, [{file, "logs/eunit_lager.log"}, {level, debug}]}]},
-        {error_logger_redirect, true}
-    ]}
-].
+%%
+%%  See also `itest/eproc_store_ets_SUITE.erl`.
+%%
+-module(eproc_store_ets_tests).
+-compile([{parse_transform, lager_transform}]).
+-include("eproc.hrl").
+-include_lib("eunit/include/eunit.hrl").
+
+
+%%
+%%  Check if supervisor specs are returned.
+%%
+supervisor_child_specs_test() ->
+    {ok, Specs} = eproc_store_ets:supervisor_child_specs([]),
+    ?assert(is_list(Specs)).
+
 
