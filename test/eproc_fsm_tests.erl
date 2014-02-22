@@ -987,18 +987,62 @@ unknown_message_test() ->
 
 
 %%
-%%  TODO: Check if send_create_event/* works.
-%%  TODO: Check start_mfa.
+%%  Check if send_create_event/* works.
+%%  Also check if start_spec option is handled properly.
 %%
 send_create_event_test() ->
-    ?assert(todo).
+    ok = meck:new(eproc_store, []),
+    ok = meck:new(eproc_reg_gproc, []),
+    ok = meck:expect(eproc_store, add_instance, fun
+        (_StoreRef, #instance{status = running, opts = [{some, opt}]}) ->
+            {ok, 127}
+    end),
+    ok = meck:expect(eproc_reg_gproc, send, fun
+        ({new, reg_args, {inst, 127}, {mfa, ['$fsm_ref', some]}}, Event = {'$gen_cast', _}) ->
+            Event
+    end),
+    {ok, Registry} = eproc_registry:ref(eproc_reg_gproc, reg_args),
+    ?assertEqual({ok, {inst, 127}}, eproc_fsm:send_create_event(eproc_fsm__void, {}, event1, [
+        {start_spec, {mfa, ['$fsm_ref', some]}},
+        {registry, Registry},
+        {timeout, 12300},
+        {source, test},
+        {some, opt}
+    ])),
+    ?assertEqual(1, meck:num_calls(eproc_store, add_instance, '_')),
+    ?assertEqual(1, meck:num_calls(eproc_reg_gproc, send, ['_', '_'])),
+    ?assert(meck:validate([eproc_store, eproc_reg_gproc])),
+    ok = meck:unload([eproc_store, eproc_reg_gproc]).
 
 
 %%
-%%  TODO: Check if sync_send_create_event/* works.
+%%  Check if sync_send_create_event/* works.
 %%
 sync_send_create_event_test() ->
-    ?assert(todo).
+    Target = spawn(fun () ->
+        receive
+            {'$gen_call', From, _Event} ->
+                gen_server:reply(From, reply1)
+        end
+    end),
+    ok = meck:new(eproc_store, []),
+    ok = meck:new(eproc_reg_gproc, []),
+    ok = meck:expect(eproc_store, add_instance, fun
+        (_StoreRef, #instance{status = running, opts = []}) ->
+            {ok, 127}
+    end),
+    ok = meck:expect(eproc_reg_gproc, whereis_name, fun
+        ({new, reg_args, {inst, 127}, {default, []}}) ->
+            Target
+    end),
+    {ok, Registry} = eproc_registry:ref(eproc_reg_gproc, reg_args),
+    ?assertEqual({ok, {inst, 127}, reply1}, eproc_fsm:sync_send_create_event(eproc_fsm__void, {}, event1, [
+        {registry, Registry}
+    ])),
+    ?assertEqual(1, meck:num_calls(eproc_store, add_instance, '_')),
+    ?assertEqual(1, meck:num_calls(eproc_reg_gproc, whereis_name, ['_'])),
+    ?assert(meck:validate([eproc_store, eproc_reg_gproc])),
+    ok = meck:unload([eproc_store, eproc_reg_gproc]).
 
 
 
