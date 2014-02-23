@@ -35,12 +35,14 @@ test: compile
 itest: compile
 	$(REBAR) ct skip_deps=true
 
-clean:
+clean: clean-itest
 	$(REBAR) clean skip_deps=true
 
-clean-all:
+clean-all: clean-itest
 	$(REBAR) clean
+
+clean-itest:
 	rm -f itest/*.beam
 
-.PHONY: all deps compile compile-all check test itest clean clean-all
+.PHONY: all deps compile compile-all check test itest clean clean-all clean-itest
 

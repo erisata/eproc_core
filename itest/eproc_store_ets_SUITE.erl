@@ -20,7 +20,8 @@
 -module(eproc_store_ets_SUITE).
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([
-    test_single_instance/1
+    test_unnamed_instance/1,
+    test_named_instance/1
 ]).
 -include_lib("common_test/include/ct.hrl").
 -include("eproc.hrl").
@@ -29,7 +30,7 @@
 %%
 %%
 all() ->
-    eproc_store_TCK:all().
+    eproc_store_tck:all().
 
 %%
 %%
@@ -52,7 +53,7 @@ end_per_suite(Config) ->
 %%  Testcases.
 %% =============================================================================
 
-test_single_instance(Config) ->
-    eproc_store_TCK:test_single_instance(Config).
+test_unnamed_instance(Config)   -> eproc_store_tck:test_unnamed_instance(Config).
+test_named_instance(Config)     -> eproc_store_tck:test_named_instance(Config).
 
 

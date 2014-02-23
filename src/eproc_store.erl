@@ -61,7 +61,7 @@
 
 -callback load_instance(
         StoreArgs   :: term(),
-        InstId      :: inst_id()
+        FsmRef      :: fsm_ref()
     ) ->
         {ok, #instance{}} |
         {error, not_found}.
@@ -76,8 +76,8 @@
 
 -callback get_instance(
         StoreArgs   :: term(),
-        InstId      :: inst_id(),
-        Query       :: term()
+        FsmRef      :: fsm_ref(),
+        Query       :: header
     ) ->
         {ok, #instance{}} |
         {error, Reason :: term()}.

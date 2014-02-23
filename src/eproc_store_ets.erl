@@ -141,7 +141,7 @@ load_instance(_StoreArgs, {inst, InstId}) ->
         [] ->
             {error, not_found};
         [Instance] ->
-            Transitions = [],   % TODO
+            Transitions = todo,   % TODO
             LoadedInstance = Instance#instance{
                 transitions = Transitions
             },
@@ -156,7 +156,7 @@ load_instance(_StoreArgs, {name, Name}) ->
         [] ->
             {error, not_found};
         [Instance] ->
-            Transitions = [],   % TODO
+            Transitions = todo,   % TODO
             LoadedInstance = Instance#instance{
                 transitions = Transitions
             },
@@ -174,17 +174,23 @@ load_running(_StoreArgs, PartitionPred) ->
 %%
 %%
 %%
-get_instance(_StoreArgs, {inst, InstId}, _Query) ->
+get_instance(_StoreArgs, {inst, InstId}, Query) ->
     case ets:lookup('eproc_store_ets$inst', InstId) of
         [] ->
             {error, not_found};
         [Instance] ->
-            % TODO: how about transitions ?
-            % Transitions = [],
-            % LoadedInstance = Instance#instance{
-                % transitions = Transitions
-            % },
-            {ok, Instance}
+            Transitions = case Query of
+                header ->
+                    undefined;
+                Other ->
+                    % TODO: how about transitions ?
+                    % Transitions = [],
+                    % LoadedInstance = Instance#instance{
+                    % transitions = Transitions
+                    % },
+                    todo
+            end,
+            {ok, Instance#instance{transitions = Transitions}}
     end;
 
 get_instance(_StoreArgs, {name, _Name}, _Query) ->

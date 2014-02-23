@@ -15,12 +15,17 @@
 %\--------------------------------------------------------------------
 
 %%
-%%  Testcases that should be valid for all the `eproc_store` implementations.
-%%  See `eproc_store_ets_SUITE` for an example of using it.
+%%  "Technology Compatibility Kit" for `eproc_registry` implementations.
+%%  This module contains testcases, that should be valid for all the
+%%  `eproc_registry` implementations. The testcases are prepared to be
+%%  used with the Common Test framework.
+%%  See `eproc_reg_gproc_SUITE` for an example of using it.
 %%
--module(eproc_store_TCK).
+-module(eproc_registry_tck).
 -export([all/0]).
--export([test_single_instance/1]).
+-export([
+    test_something/1
+]).
 -include_lib("common_test/include/ct.hrl").
 -include("eproc.hrl").
 
@@ -28,14 +33,16 @@
 %%
 %%
 %%
-all() ->
-    [test_single_instance].
+all() -> [
+        test_something
+    ].
+
 
 %%
 %%
 %%
-store(Config) ->
-    proplists:get_value(store, Config).
+registry(Config) ->
+    proplists:get_value(registry, Config).
 
 
 
@@ -44,30 +51,9 @@ store(Config) ->
 %% =============================================================================
 
 %%
-%%  TODO: Check if the following scenario works:
+%%  TODO: Implement test cases.
 %%
-%%    * get and non-existing instance.
-%%    * Add instance.
-%%    * Add Another instance with name.
-%%    * Add Another instance with same name.
-%%    * Get instance.
-%%    * Load instance.
-%%    * Suspend.
-%%    * Resume.
-%%    * Add transition.
-%%    * Add transition.
-%%    * Suspend.
-%%    * Resume.
-%%    * Suspend.
-%%    * Resume.
-%%    * Suspend.
-%%
-test_single_instance(Config) ->
-    {ok, InstId} = eproc_store:add_instance(store(Config), #instance{
-        id = anything,
-        group = new
-    }),
-    true = is_integer(InstId),
+test_something(Config) ->
     ok.
 
 
