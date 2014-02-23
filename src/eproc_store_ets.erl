@@ -27,6 +27,17 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -include("eproc.hrl").
 
+-define(INST_TBL, 'eproc_store_ets$instance').
+-define(NAME_TBL, 'eproc_store_ets$inst_name').
+-define(TRN_TBL,  'eproc_store_ets$transition').
+-define(MSG_TBL,  'eproc_store_ets$message').
+-define(CNT_TBL,  'eproc_store_ets$counter').
+
+-record(inst_name, {
+    name    :: inst_name(),
+    inst_id :: inst_id()
+}).
+
 
 %% =============================================================================
 %%  Public API.
@@ -48,9 +59,13 @@ start_link(Name) ->
 %%  Creates ETS tables.
 %%
 init({}) ->
-    ets:new('eproc_store_ets$inst', [set, public, named_table, {keypos, #instance.id}]),
-    ets:new('eproc_store_ets$cntr', [set, public, named_table, {keypos, 1}]),
-    ets:insert('eproc_store_ets$cntr', {inst, 0}),
+    WC = {write_concurrency, true},
+    ets:new(?INST_TBL, [set, public, named_table, {keypos, #instance.id},        WC]),
+    ets:new(?NAME_TBL, [set, public, named_table, {keypos, #inst_name.name},     WC]),
+    ets:new(?TRN_TBL,  [bag, public, named_table, {keypos, #transition.inst_id}, WC]),
+    ets:new(?MSG_TBL,  [set, public, named_table, {keypos, #message.id},         WC]),
+    ets:new(?CNT_TBL,  [set, public, named_table, {keypos, 1}]),
+    ets:insert(?CNT_TBL, {inst, 0}),
     State = undefined,
     {ok, State}.
 
@@ -105,54 +120,70 @@ supervisor_child_specs(_StoreArgs) ->
 
 
 %%
-%%
+%%  Add new instance to the store.
 %%
 add_instance(_StoreArgs, Instance = #instance{name = Name, group = Group}) ->
-    InstId = ets:update_counter('eproc_store_ets$cntr', inst, 1),
+    InstId = ets:update_counter(?CNT_TBL, inst, 1),
     ResolvedGroup = if
         Group =:= new     -> InstId;
         is_integer(Group) -> Group
     end,
-    ResolvedName = case Name of
-        undefined -> undefined;
-        _         -> Name
+    case Name =:= undefined orelse ets:insert_new(?NAME_TBL, #inst_name{name = Name, inst_id = InstId}) of
+        true ->
+            true = ets:insert(?INST_TBL, Instance#instance{
+                id = InstId,
+                name = Name,
+                group = ResolvedGroup,
+                transitions = undefined
+            }),
+            {ok, InstId};
+        false ->
+            {error, name_not_uniq}
+    end.
+
+
+%%
+%%  Add a transition for an existing instance.
+%%
+add_transition(_StoreArgs, Transition, Messages) ->
+    #transition{
+        inst_id      = InstId,
+        number       = TrnNr,
+        attr_actions = AttrActions,
+        attrs_active = undefined,
+        inst_status  = Status,
+        inst_suspend = undefined
+    } = Transition,
+    true = is_list(AttrActions),
+    OldStatus = ets:lookup_element(?INST_TBL, InstId, #instance.status),
+
+    true = ets:insert(?TRN_TBL, Transition),
+    [ true = ets:insert(?MSG_TBL, Message) || Message <- Messages],
+
+    true = case Status =:= OldStatus of
+        true  -> true;
+        false -> ets:update_element(?INST_TBL, InstId, {#instance.status, Status})
     end,
-    true = ets:insert('eproc_store_ets$inst', Instance#instance{
-        id = InstId,
-        name = ResolvedName,
-        group = ResolvedGroup,
-        transitions = undefined
-    }),
-    {ok, InstId}.
-
-
-%%
-%%
-%%
-add_transition(_StoreArgs, _Transition, _Messages) ->
-    {error, not_implemented}.   % TODO
+    {ok, TrnNr}.
 
 
 %%
 %%  Loads instance data for runtime.
 %%
 load_instance(_StoreArgs, {inst, InstId}) ->
-    case ets:lookup('eproc_store_ets$inst', InstId) of
+    case ets:lookup(?INST_TBL, InstId) of
         [] ->
             {error, not_found};
         [Instance] ->
-            Transitions = todo,   % TODO
-            LoadedInstance = Instance#instance{
-                transitions = Transitions
-            },
-            {ok, LoadedInstance}
+            Transitions = get_last_transition(Instance),
+            {ok, Instance#instance{transitions = Transitions}}
     end;
 
 load_instance(_StoreArgs, {name, undefined}) ->
     {error, not_found};
 
 load_instance(_StoreArgs, {name, Name}) ->
-    case ets:match_object('eproc_store_ets$inst', #instance{name = Name, _ = '_'}) of
+    case ets:match_object(?INST_TBL, #instance{name = Name, _ = '_'}) of
         [] ->
             {error, not_found};
         [Instance] ->
@@ -175,7 +206,7 @@ load_running(_StoreArgs, PartitionPred) ->
 %%
 %%
 get_instance(_StoreArgs, {inst, InstId}, Query) ->
-    case ets:lookup('eproc_store_ets$inst', InstId) of
+    case ets:lookup(?INST_TBL, InstId) of
         [] ->
             {error, not_found};
         [Instance] ->
@@ -201,5 +232,65 @@ get_instance(_StoreArgs, {name, _Name}, _Query) ->
 %% =============================================================================
 %%  Internal functions.
 %% =============================================================================
+
+%%
+%%
+%%
+get_last_transition(#instance{id = InstId}) ->
+    case ets:lookup(?TRN_TBL, InstId) of
+        [] ->
+            [];
+        Transitions ->
+            SortedTrns = lists:keysort(#transition.number, Transitions),
+            case lists:foldl(fun aggregate_attrs/2, undefined, SortedTrns) of
+                undefined -> [];
+                LastTrn   -> [LastTrn]
+            end
+    end.
+
+
+%%
+%%  Replay all attribute actions, from all transitions.
+%%
+aggregate_attrs(Transition, undefined) ->
+    #transition{inst_id = InstId, number = TrnNr, attr_actions = AttrActions} = Transition,
+    Transition#transition{attrs_active = apply_attr_action(AttrActions, [], InstId, TrnNr)};
+
+aggregate_attrs(Transition, #transition{attrs_active = AttrsActive}) ->
+    #transition{inst_id = InstId, number = TrnNr, attr_actions = AttrActions} = Transition,
+    Transition#transition{attrs_active = apply_attr_action(AttrActions, AttrsActive, InstId, TrnNr)}.
+
+
+%%
+%%  Replays single attribute action.
+%%  Returns a list of active attributes after applying the provided attribute action.
+%%
+apply_attr_action(#attr_action{module = Module, attr_id = AttrId, action = Action}, Attrs, InstId, TrnNr) ->
+    case Action of
+        {create, Name, Scope, Data} ->
+            NewAttr = #attribute{
+                inst_id = InstId,
+                attr_id = AttrId,
+                module = Module,
+                name = Name,
+                scope = Scope,
+                data = Data,
+                from = TrnNr,
+                upds = [],
+                till = undefined,
+                reason = undefined
+            },
+            [NewAttr | Attrs];
+        {update, NewScope, NewData} ->
+            Attr = #attribute{upds = Upds} = lists:keyfind(AttrId, #attribute.attr_id, Attrs),
+            NewAttr = Attr#attribute{
+                scope = NewScope,
+                data = NewData,
+                upds = [TrnNr | Upds]
+            },
+            lists:keyreplace(AttrId, #attribute.attr_id, Attrs, NewAttr);
+        {remove, _Reason} ->
+            lists:keydelete(AttrId, #attribute.attr_id, Attrs)
+    end.
 
 
