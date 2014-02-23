@@ -83,11 +83,11 @@ create_test() ->
     ok = meck:new(eproc_store, []),
     ok = meck:new(eproc_fsm__void, [passthrough]),
     ok = meck:expect(eproc_store, add_instance, fun
-        (_StoreRef, #instance{status = running, group = 17,  name = create_test, opts = [{n1, v1}]}) -> {ok, iid1};
-        (_StoreRef, #instance{status = running, group = new, name = undefined,   opts = []        }) -> {ok, iid2}
+        (_StoreRef, #instance{status = running, group = 17,  name = create_test, start_spec = undefined,     opts = [{n1, v1}]}) -> {ok, iid1};
+        (_StoreRef, #instance{status = running, group = new, name = undefined,   start_spec = {default, []}, opts = []        }) -> {ok, iid2}
     end),
     {ok, {inst, iid1}} = eproc_fsm:create(eproc_fsm__void, {}, [{group, 17}, {name, create_test}, {n1, v1}]),
-    {ok, {inst, iid2}} = eproc_fsm:create(eproc_fsm__void, {}, []),
+    {ok, {inst, iid2}} = eproc_fsm:create(eproc_fsm__void, {}, [{start_spec, {default, []}}]),
     ?assertEqual(2, meck:num_calls(eproc_store, add_instance, '_')),
     ?assertEqual(2, meck:num_calls(eproc_fsm__void, init, [{}])),
     ?assert(meck:validate([eproc_store, eproc_fsm__void])),

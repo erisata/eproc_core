@@ -170,62 +170,34 @@ add_transition(_StoreArgs, Transition, Messages) ->
 %%
 %%  Loads instance data for runtime.
 %%
-load_instance(_StoreArgs, {inst, InstId}) ->
-    case ets:lookup(?INST_TBL, InstId) of
-        [] ->
-            {error, not_found};
-        [Instance] ->
-            Transitions = get_last_transition(Instance),
-            {ok, Instance#instance{transitions = Transitions}}
-    end;
-
-load_instance(_StoreArgs, {name, undefined}) ->
-    {error, not_found};
-
-load_instance(_StoreArgs, {name, Name}) ->
-    case ets:match_object(?INST_TBL, #instance{name = Name, _ = '_'}) of
-        [] ->
-            {error, not_found};
-        [Instance] ->
-            Transitions = todo,   % TODO
-            LoadedInstance = Instance#instance{
-                transitions = Transitions
-            },
-            {ok, LoadedInstance}
-    end.
+load_instance(_StoreArgs, FsmRef) ->
+    read_instance(FsmRef, current).
 
 
 %%
-%%
+%%  Load start specs for all currently running FSMs.
 %%
 load_running(_StoreArgs, PartitionPred) ->
-    {ok, []}.   % TODO: Implement.
+    FilterFun = fun
+        (#instance{id = InstId, group = Group, start_spec = StartSpec, status = running}, Filtered) ->
+            case PartitionPred(InstId, Group) of
+                true  ->
+                    [{{inst, InstId}, StartSpec} | Filtered];
+                false ->
+                    Filtered
+            end;
+        (_Other, Filtered) ->
+            Filtered
+    end,
+    Running = ets:foldl(FilterFun, [], ?INST_TBL),
+    {ok, Running}.
 
 
 %%
 %%
 %%
-get_instance(_StoreArgs, {inst, InstId}, Query) ->
-    case ets:lookup(?INST_TBL, InstId) of
-        [] ->
-            {error, not_found};
-        [Instance] ->
-            Transitions = case Query of
-                header ->
-                    undefined;
-                Other ->
-                    % TODO: how about transitions ?
-                    % Transitions = [],
-                    % LoadedInstance = Instance#instance{
-                    % transitions = Transitions
-                    % },
-                    todo
-            end,
-            {ok, Instance#instance{transitions = Transitions}}
-    end;
-
-get_instance(_StoreArgs, {name, _Name}, _Query) ->
-    {error, not_implemented}.   % TODO
+get_instance(_StoreArgs, FsmRef, Query) ->
+    read_instance(FsmRef, Query).
 
 
 
@@ -234,9 +206,40 @@ get_instance(_StoreArgs, {name, _Name}, _Query) ->
 %% =============================================================================
 
 %%
+%%  Reads instance record.
+%%
+read_instance({inst, InstId}, Query) ->
+    case ets:lookup(?INST_TBL, InstId) of
+        [] ->
+            {error, not_found};
+        [Instance] ->
+            read_instance_data(Instance, Query)
+    end;
+
+read_instance({name, Name}, Query) ->
+    case ets:lookup(?NAME_TBL, Name) of
+        [] ->
+            {error, not_found};
+        [#inst_name{inst_id = InstId}] ->
+            read_instance({inst, InstId}, Query)
+    end.
+
+
+%%
+%%  Reads instance related data according to query.
+%%
+read_instance_data(Instance, header) ->
+    {ok, Instance#instance{transitions = undefined}};
+
+read_instance_data(Instance, current) ->
+    Transitions = read_transitions(Instance, last),
+    {ok, Instance#instance{transitions = Transitions}}.
+
+
 %%
 %%
-get_last_transition(#instance{id = InstId}) ->
+%%
+read_transitions(#instance{id = InstId}, last) ->
     case ets:lookup(?TRN_TBL, InstId) of
         [] ->
             [];
@@ -251,6 +254,7 @@ get_last_transition(#instance{id = InstId}) ->
 
 %%
 %%  Replay all attribute actions, from all transitions.
+%%  TODO: Move this function to `eproc_store`.
 %%
 aggregate_attrs(Transition, undefined) ->
     #transition{inst_id = InstId, number = TrnNr, attr_actions = AttrActions} = Transition,
@@ -264,6 +268,7 @@ aggregate_attrs(Transition, #transition{attrs_active = AttrsActive}) ->
 %%
 %%  Replays single attribute action.
 %%  Returns a list of active attributes after applying the provided attribute action.
+%%  TODO: Move this function to `eproc_store`.
 %%
 apply_attr_action(#attr_action{module = Module, attr_id = AttrId, action = Action}, Attrs, InstId, TrnNr) ->
     case Action of

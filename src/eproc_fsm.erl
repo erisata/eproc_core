@@ -556,7 +556,7 @@
 %%      Name is valid for the entire FSM lifecycle, including
 %%      the `completed` state.
 %%
-%%  `{start_spec, StartSpec :: start_spec()}` - TODO
+%%  `{start_spec, StartSpec :: start_spec()}`
 %%  :   Tells, how the FSM should be started. Default is `{default, []}`.
 %%      This option is used by `eproc_registry` therefore will be ignored,
 %%      if the FSM will be used stand-alone, without the registry.
@@ -1358,9 +1358,10 @@ resolve_registry(StartOptions) ->
 %%  Creates new instance, initializes its initial state.
 %%
 handle_create(Module, Args, CreateOpts, CustomOpts) ->
-    Group = proplists:get_value(group, CreateOpts, new),
-    Name  = proplists:get_value(name,  CreateOpts, undefined),
-    Store = proplists:get_value(store, CreateOpts, undefined),
+    Group       = proplists:get_value(group,      CreateOpts, new),
+    Name        = proplists:get_value(name,       CreateOpts, undefined),
+    Store       = proplists:get_value(store,      CreateOpts, undefined),
+    StartSpec   = proplists:get_value(start_spec, CreateOpts, undefined),
     {ok, InitSData} = call_init_persistent(Module, Args),
     Instance = #instance{
         id          = undefined,
@@ -1370,6 +1371,7 @@ handle_create(Module, Args, CreateOpts, CustomOpts) ->
         args        = Args,
         opts        = CustomOpts,
         init        = InitSData,
+        start_spec  = StartSpec,
         status      = running,
         created     = eproc:now(),
         terminated  = undefined,

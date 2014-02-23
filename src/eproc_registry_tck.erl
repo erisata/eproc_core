@@ -54,6 +54,7 @@ registry(Config) ->
 %%  TODO: Implement test cases.
 %%
 test_something(Config) ->
+    _Registry = registry(Config),
     ok.
 
 
