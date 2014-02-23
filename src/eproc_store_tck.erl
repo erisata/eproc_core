@@ -96,8 +96,8 @@ test_unnamed_instance(Config) ->
     %%  Add unnamed process with new group.
     %%  and second, to check if they are not interferring.
     Inst = inst_value(),
-    {ok, IID1} = eproc_store:add_instance(Store, Inst),
-    {ok, IID2} = eproc_store:add_instance(Store, Inst),
+    {ok, IID1} = eproc_store:add_instance(Store, Inst#instance{group = new}),
+    {ok, IID2} = eproc_store:add_instance(Store, Inst#instance{group = 897}),
     true = undefined =/= IID1,
     true = undefined =/= IID2,
     true = IID1 =/= IID2,
@@ -106,6 +106,8 @@ test_unnamed_instance(Config) ->
     {ok, Inst2 = #instance{id = IID2, group = GRP2}} = eproc_store:get_instance(Store, {inst, IID2}, header),
     Inst1 = Inst#instance{id = IID1, group = GRP1},
     Inst2 = Inst#instance{id = IID2, group = GRP2},
+    false = is_atom(GRP1),
+    897 = GRP2,
     %%  Try to load instance data.
     {ok, LoadedInst = #instance{id = IID1, group = GRP1}} = eproc_store:load_instance(Store, {inst, IID1}),
     LoadedInst = Inst#instance{id = IID1, group = GRP1, transitions = []},
