@@ -31,6 +31,7 @@
     add_instance/2,
     add_transition/3,
     set_instance_killed/3,
+    set_instance_suspended/3,
     load_instance/2,
     load_running/2
 ]).
@@ -39,6 +40,7 @@
 
 -define(INST_TBL, 'eproc_store_ets$instance').
 -define(NAME_TBL, 'eproc_store_ets$inst_name').
+-define(SUSP_TBL, 'eproc_store_ets$inst_susp').
 -define(TRN_TBL,  'eproc_store_ets$transition').
 -define(MSG_TBL,  'eproc_store_ets$message').
 -define(CNT_TBL,  'eproc_store_ets$counter').
@@ -72,10 +74,12 @@ init({}) ->
     WC = {write_concurrency, true},
     ets:new(?INST_TBL, [set, public, named_table, {keypos, #instance.id},        WC]),
     ets:new(?NAME_TBL, [set, public, named_table, {keypos, #inst_name.name},     WC]),
+    ets:new(?SUSP_TBL, [bag, public, named_table, {keypos, #inst_susp.inst_id},  WC]),
     ets:new(?TRN_TBL,  [bag, public, named_table, {keypos, #transition.inst_id}, WC]),
     ets:new(?MSG_TBL,  [set, public, named_table, {keypos, #message.id},         WC]),
     ets:new(?CNT_TBL,  [set, public, named_table, {keypos, 1}]),
     ets:insert(?CNT_TBL, {inst, 0}),
+    ets:insert(?CNT_TBL, {susp, 0}),
     State = undefined,
     {ok, State}.
 
@@ -183,7 +187,7 @@ add_transition(_StoreArgs, Transition, Messages) ->
 %%  Mark instance as killed.
 %%
 set_instance_killed(_StoreArgs, FsmRef, UserAction) ->
-    case read_instance(FsmRef, current) of
+    case read_instance(FsmRef, header) of
         {error, Reason} ->
             {error, Reason};
         {ok, Instance = #instance{id = InstId, status = Status}} ->
@@ -196,6 +200,24 @@ set_instance_killed(_StoreArgs, FsmRef, UserAction) ->
             end
     end.
 
+%%
+%%  Mark instance as suspended.
+%%
+set_instance_suspended(_StoreArgs, FsmRef, Reason) ->
+    case read_instance(FsmRef, current) of
+        {error, Reason} ->
+            {error, Reason};
+        {ok, Instance = #instance{id = InstId, status = Status}} ->
+            case {is_instance_terminated(Status), Status} of
+                {true, _} ->
+                    {error, terminated};
+                {false, suspended} ->
+                    {ok, InstId};
+                {false, running} ->
+                    ok = write_instance_suspended(Instance, Reason),
+                    {ok, InstId}
+            end
+    end.
 
 %%
 %%  Loads instance data for runtime.
@@ -267,7 +289,7 @@ read_instance_data(Instance, current) ->
 
 
 %%
-%%
+%%  Read instance transitions according to the query.
 %%
 read_transitions(#instance{id = InstId}, last) ->
     case ets:lookup(?TRN_TBL, InstId) of
@@ -283,7 +305,7 @@ read_transitions(#instance{id = InstId}, last) ->
 
 
 %%
-%%
+%%  Mark instance as terminated.
 %%
 write_instance_terminated(#instance{id = InstId, name = Name}, Status, Reason) ->
     true = ets:update_element(?INST_TBL, InstId, [
@@ -299,6 +321,32 @@ write_instance_terminated(#instance{id = InstId, name = Name}, Status, Reason) -
             true = ets:delete_object(?NAME_TBL, InstName),
             ok
     end.
+
+
+%%
+%%  Mark instance as suspended.
+%%
+write_instance_suspended(#instance{id = InstId, transitions = Transitions}, Reason) ->
+    true = ets:update_element(?INST_TBL, InstId, {#instance.status, suspended}),
+    TrnNr = case Transitions of
+        [] -> 0;
+        [#transition{number = N}] -> N
+    end,
+    SuspId = ets:update_counter(?CNT_TBL, susp, 1),
+    InstSuspension = #inst_susp{
+        id          = SuspId,
+        inst_id     = InstId,
+        trn_nr      = TrnNr,
+        suspended   = erlang:now(),
+        reason      = Reason,
+        updated     = undefined,
+        upd_sname   = undefined,
+        upd_sdata   = undefined,
+        upd_attrs   = undefined,
+        resumed     = undefined
+    },
+    true = ets:insert_new(?SUSP_TBL, InstSuspension),
+    ok.
 
 
 %%

@@ -27,7 +27,7 @@
     add_instance/2,
     add_transition/3,
     set_instance_killed/3,
-    set_instance_suspended/4,
+    set_instance_suspended/3,
     set_instance_resumed/3,
     set_instance_state/5,
     load_instance/2,
@@ -81,6 +81,17 @@
         StoreArgs   :: term(),
         FsmRef      :: fsm_ref(),
         UserAction  :: #user_action{}
+    ) ->
+        {ok, inst_id()}.
+
+
+%%
+%%  TODO: Describe, what should be done here.
+%%
+-callback set_instance_suspended(
+        StoreArgs   :: term(),
+        FsmRef      :: fsm_ref(),
+        Reason      :: #user_action{} | {fault, Reason :: term()} | {impl, Reason :: binary()}
     ) ->
         {ok, inst_id()}.
 
@@ -196,11 +207,11 @@ set_instance_killed(Store, FsmRef, UserAction) ->
 
 
 %%
-%%  TODO
+%%  Marks an FSM instance as suspended.
 %%
-set_instance_suspended(Store, FsmRef, UserAction, Reason) ->
+set_instance_suspended(Store, FsmRef, Reason) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:set_instance_suspended(StoreArgs, FsmRef, UserAction, Reason).
+    StoreMod:set_instance_suspended(StoreArgs, FsmRef, Reason).
 
 
 %%

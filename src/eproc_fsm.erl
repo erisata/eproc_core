@@ -1019,11 +1019,47 @@ kill(FsmRef, Options) ->
 
 
 %%
-%%  TODO: Add spec.
+%%  Suspends existing FSM instance. The FSM can be either online or offline.
+%%  If FSM is online, it will be stopped. In any case, the FSM will be marked
+%%  as suspended. This function also returns `ok` if the FSM was already
+%%  suspended, and error if the FSM is already terminated.
 %%
+%%  Parameters:
+%%
+%%  `FsmRef`
+%%  :   References particular FSM instance. The reference must be either
+%%      `{inst, _}` or `{name, _}`. Erlang process ids or names are not
+%%      supported here. See `send_event/3` for more details.
+%%  `Options`
+%%  :   Any of the Common FSM Options can be provided here.
+%%      Only the `registry` and `user` options will be used here
+%%      and other options will be ignored.
+%%
+%%  This function depends on `eproc_registry`.
+%%
+-spec suspend(
+        FsmRef  :: fsm_ref() | otp_ref(),
+        Options :: list()
+    ) ->
+        ok |
+        {error, bad_ref} |
+        {error, Reason :: term()}.
+
 suspend(FsmRef, Options) ->
-    {ok, ResolvedFsmRef} = resolve_fsm_ref(FsmRef, Options),
-    gen_server:call(ResolvedFsmRef, {'eproc_fsm$suspend'}).
+    case is_fsm_ref(FsmRef) of
+        false ->
+            {error, bad_ref};
+        true ->
+            Store = resolve_store(Options),
+            UserAction = resolve_user_action(Options),
+            case eproc_store:set_instance_suspended(Store, FsmRef, UserAction) of
+                {ok, _InstId} ->
+                    {ok, ResolvedFsmRef} = resolve_fsm_ref(FsmRef, Options),
+                    gen_server:cast(ResolvedFsmRef, {'eproc_fsm$suspend'});
+                {error, Reason} ->
+                    {error, Reason}
+            end
+    end.
 
 
 %%
@@ -1253,6 +1289,10 @@ handle_cast({'eproc_fsm$send_event', Event, EventSrc}, State) ->
 
 handle_cast({'eproc_fsm$kill'}, State = #state{inst_id = InstId}) ->
     lager:notice("FSM id=~p killed.", [InstId]),
+    {stop, normal, State};
+
+handle_cast({'eproc_fsm$suspend'}, State = #state{inst_id = InstId}) ->
+    lager:notice("FSM id=~p suspended.", [InstId]),
     {stop, normal, State}.
 
 
@@ -1494,7 +1534,7 @@ handle_start(FsmRef, StartOpts, State = #state{store = Store, restart = RestartO
                     lager:debug("FSM started, ref=~p.", [FsmRef]),
                     {online, NewState};
                 fail ->
-                    % TODO: Suspend
+                    {ok, InstId} = eproc_store:set_instance_suspended(Store, FsmRef, {fault, restart_limit}),
                     lager:notice("Suspending FSM on startup, give up restarting, ref=~p, id=~p.", [FsmRef, InstId]),
                     {offline, InstId}
             end;

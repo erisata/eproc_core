@@ -195,10 +195,10 @@
 %%  is marked as suspended again, but no new suspension record is created.
 %%  The failure will be appended to the list of resume failures ('res_faults').
 %%
--record(inst_suspension, {
+-record(inst_susp, {
     id          :: integer(),       %% Suspension ID, must not be used for record sorting.
     inst_id     :: inst_id(),       %% FSM instance, that was suspended.
-    trn_nr      :: trn_nr(),        %% Transition at which the instance was suspended.
+    trn_nr      :: trn_nr(),        %% Transition at which the instance was suspended or 0, if in the initial state.
     suspended   :: timestamp(),     %% When the FSM was suspended.
     reason      :: #user_action{} | {fault, Reason :: term()} | {impl, Reason :: binary()},
     updated     :: #user_action{} | undefined,  %% Who, when, why updated the state.
@@ -231,7 +231,7 @@
     attr_actions    :: [#attr_action{}],                %% All attribute actions performed in this transition.
     attrs_active    :: [#attribute{}] | undefined,      %% Active props, keys and timers at the target state, Calculated field.
     inst_status     :: inst_status(),                   %% Instance status, after the transition.
-    inst_suspend    :: #inst_suspension{} | undefined   %% Filled, if the instance was suspended and its state updated.
+    inst_suspend    :: #inst_susp{} | undefined         %% Filled, if the instance was suspended and its state updated.
 }).
 
 %%
