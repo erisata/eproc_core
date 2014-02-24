@@ -199,13 +199,13 @@ eproc_store_core_test_named_instance(Config) ->
 %%  TODO:.
 %%
 eproc_store_core_test_suspend_resume(_Config) ->
-    ok.
+    throw(todo).
 
 
 %%
 %%  TODO:.for terminated FSM.
 %%
 eproc_store_core_test_add_transition(_Config) ->
-    ok.
+    throw(todo).
 
 

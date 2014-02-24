@@ -988,7 +988,7 @@ sync_send_event(FsmRef, Event) ->
 %%      supported here. See `send_event/3` for more details.
 %%  `Options`
 %%  :   Any of the Common FSM Options can be provided here.
-%%      Only the `registry` and `user` options will be used here
+%%      Only `store`, `registry` and `user` options will be used here
 %%      and other options will be ignored.
 %%
 %%  This function depends on `eproc_registry`.
@@ -1032,7 +1032,7 @@ kill(FsmRef, Options) ->
 %%      supported here. See `send_event/3` for more details.
 %%  `Options`
 %%  :   Any of the Common FSM Options can be provided here.
-%%      Only the `registry` and `user` options will be used here
+%%      Only `store`, `registry` and `user` options will be used here
 %%      and other options will be ignored.
 %%
 %%  This function depends on `eproc_registry`.
@@ -1063,13 +1063,52 @@ suspend(FsmRef, Options) ->
 
 
 %%
-%%  TODO: Add spec.
+%%  Resumes previously suspended FSM instance. If the FSM is already running,
+%%  `ok` will be returned, nothing will be done and error will not be rised.
+%%  While performing resume, the FSM will be marked as running and started
+%%  in the registrt (made online). The instance startup is performed synchronously.
+%%  It is an error to resume already terminated process.
 %%
+%%  Parameters:
+%%
+%%  `FsmRef`
+%%  :   References particular FSM instance. The reference must be either
+%%      `{inst, _}` or `{name, _}`. Erlang process ids or names are not
+%%      supported here. See `send_event/3` for more details.
+%%  `Options`
+%%  :   Any of the Common FSM Options can be provided here.
+%%      Only `store`, `registry` and `user` options will be used
+%%      here, other options will be ignored.
+%%
+%%  This function depends on `eproc_registry`.
+%%
+-spec resume(
+        FsmRef  :: fsm_ref() | otp_ref(),
+        Options :: list()
+    ) ->
+        ok |
+        {error, bad_ref} |
+        {error, Reason :: term()}.
+
 resume(FsmRef, Options) ->
-    % TODO start instance in the registry.
-    {ok, _ResolvedFsmRef} = resolve_fsm_ref(FsmRef, Options),
-    ok.
-    % TODO: gen_server:call(ResolvedFsmRef, {'eproc_fsm$resume', Reason}).
+    case is_fsm_ref(FsmRef) of
+        false ->
+            {error, bad_ref};
+        true ->
+            Store = resolve_store(Options),
+            UserAction = resolve_user_action(Options),
+            case eproc_store:set_instance_resumed(Store, FsmRef, UserAction) of
+                {error, running} ->
+                    ok;
+                {ok, InstId, StartSpec} ->
+                    Registry = resolve_registry(Options),
+                    {ok, ResolvedFsmRef} = eproc_registry:make_new_fsm_ref(Registry, {inst, InstId}, StartSpec),
+                    true = gen_server:call(ResolvedFsmRef, {'eproc_fsm$is_online'}),
+                    ok;
+                {error, Reason} ->
+                    {error, Reason}
+            end
+    end.
 
 
 %%

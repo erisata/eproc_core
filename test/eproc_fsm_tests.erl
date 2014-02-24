@@ -1167,8 +1167,12 @@ suspend_test() ->
     ok = meck:unload([eproc_store, eproc_reg_gproc]).
 
 
+%%
+%%  TODO: Check if resume/* works.
+%%
+resume_test() ->
+    ?assert(todo).
 
-% TODO: Check if resume/* works.
 
 
 % TODO: Check if set_state/* works.
