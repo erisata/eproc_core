@@ -17,8 +17,6 @@
 %%
 %%  Unit tests for `eproc_fsm`.
 %%
-%%  TODO: Use monitor instead of timer.
-%%
 -module(eproc_fsm_tests).
 -compile([{parse_transform, lager_transform}]).
 -define(DEBUG, true).
@@ -377,10 +375,42 @@ start_link_opts_restart_test() ->
 
 
 %%
-%% TODO: Check id suspending on restart works.
+%%  Check id suspending on restart works.
 %%
 start_link_restart_suspend_test() ->
-    ?assert(todo).
+    ok = meck:new(eproc_store, []),
+    ok = meck:new(eproc_restart, []),
+    ok = meck:new(eproc_fsm__void, []),
+    ok = meck:expect(eproc_store, load_instance, fun
+        (store, {inst, 100}) ->
+            {ok, #instance{
+                id = 100, group = 200, name = name, module = eproc_fsm__void,
+                args = {}, opts = [], init = {state, undefined}, status = running,
+                created = erlang:now(), transitions = []
+            }}
+    end),
+    ok = meck:expect(eproc_store, set_instance_suspended, fun
+        (store, {inst, InstId = 100}, {fault, restart_limit}) ->
+            {ok, InstId}
+    end),
+    ok = meck:expect(eproc_restart, restarted, fun
+        ({eproc_fsm, 100}, _Opts) -> fail
+    end),
+    ok = meck:expect(eproc_restart, cleanup, fun
+        ({eproc_fsm, 100}, _Opts) -> ok
+    end),
+    OldTrapExit = erlang:process_flag(trap_exit, true),
+    {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
+    ?assert(receive {'EXIT', PID, normal}  -> true after 1000 -> false end),
+    erlang:process_flag(trap_exit, OldTrapExit),
+    ?assertEqual(false, eproc_fsm:is_online(PID)),
+    ?assertEqual(1, meck:num_calls(eproc_store, load_instance, '_')),
+    ?assertEqual(1, meck:num_calls(eproc_store, set_instance_suspended, '_')),
+    ?assertEqual(1, meck:num_calls(eproc_restart, restarted, '_')),
+    ?assertEqual(1, meck:num_calls(eproc_restart, cleanup, '_')),
+    ?assertEqual(0, meck:num_calls(eproc_fsm__void, '_', '_')),
+    ?assert(meck:validate([eproc_store, eproc_restart, eproc_fsm__void])),
+    ok = meck:unload([eproc_store, eproc_restart, eproc_fsm__void]).
 
 
 %%
@@ -422,8 +452,9 @@ send_event_final_state_from_init_test() ->
     end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
+    Mon = erlang:monitor(process, PID),
     ?assertEqual(ok, eproc_fsm:send_event(PID, done, [{source, {test, test}}])),
-    timer:sleep(100),
+    ?assert(receive {'DOWN', Mon, process, PID, normal} -> true after 1000 -> false end),
     ?assertEqual(false, eproc_fsm:is_online(PID)),
     ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, [[], {event, done}, '_'])),
     ?assertEqual(1, meck:num_calls(eproc_store, add_transition, '_')),
@@ -461,8 +492,9 @@ send_event_final_state_from_ordinary_test() ->
     end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
+    Mon = erlang:monitor(process, PID),
     ?assertEqual(ok, eproc_fsm:send_event(PID, close, [{source, {test, test}}])),
-    timer:sleep(100),
+    ?assert(receive {'DOWN', Mon, process, PID, normal} -> true after 1000 -> false end),
     ?assertEqual(false, eproc_fsm:is_online(PID)),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {event, close}, '_'])),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {exit, [closed]}, '_'])),
@@ -500,7 +532,6 @@ send_event_next_state_from_init_test() ->
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
     ?assertEqual(ok, eproc_fsm:send_event(PID, reset, [{source, {test, test}}])),
-    timer:sleep(100),
     ?assertEqual(true, eproc_fsm:is_online(PID)),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[], {event, reset}, '_'])),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {entry, []}, '_'])),
@@ -541,7 +572,6 @@ send_event_next_state_from_ordinary_test() ->
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
     ?assertEqual(ok, eproc_fsm:send_event(PID, flip, [{source, {test, test}}])),
-    timer:sleep(100),
     ?assertEqual(true, eproc_fsm:is_online(PID)),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {event, flip}, '_'])),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {exit, [decrementing]}, '_'])),
@@ -578,8 +608,9 @@ send_event_same_state_from_init_test() ->
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assertEqual(true, eproc_fsm:is_online(PID)),
     unlink(PID),
+    Mon = erlang:monitor(process, PID),
     ?assertEqual(ok, eproc_fsm:send_event(PID, skip, [{source, {test, test}}])),
-    timer:sleep(100),
+    ?assert(receive {'DOWN', Mon, process, PID, Reason} when Reason =/= normal -> true after 1000 -> false end),
     ?assertEqual(false, eproc_fsm:is_online(PID)),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[], {event, skip}, '_'])),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
@@ -618,7 +649,6 @@ send_event_same_state_from_ordinary_test() ->
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
     ?assertEqual(ok, eproc_fsm:send_event(PID, skip, [{source, {test, test}}])),
-    timer:sleep(100),
     ?assertEqual(true, eproc_fsm:is_online(PID)),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {event, skip}, '_'])),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
@@ -656,8 +686,9 @@ send_event_reply_test() ->
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assertEqual(true, eproc_fsm:is_online(PID)),
     unlink(PID),
+    Mon = erlang:monitor(process, PID),
     ?assertEqual(ok, eproc_fsm:send_event(PID, get, [{source, {test, test}}])),
-    timer:sleep(100),
+    ?assert(receive {'DOWN', Mon, process, PID, Reason} when Reason =/= normal -> true after 1000 -> false end),
     ?assertEqual(false, eproc_fsm:is_online(PID)),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {event, get}, '_'])),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
@@ -691,8 +722,9 @@ send_event_save_runtime_test() ->
     end),
     {ok, PID} = eproc_fsm:start_link({inst, 1000}, []),
     ?assert(eproc_fsm:is_online(PID)),
+    Mon = erlang:monitor(process, PID),
     ?assertEqual(ok, eproc_fsm:send_event(PID, done, [{source, {test, test}}])),
-    timer:sleep(100),
+    ?assert(receive {'DOWN', Mon, process, PID, normal} -> true after 1000 -> false end),
     ?assertEqual(false, eproc_fsm:is_online(PID)),
     ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, '_')),
     ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, [[], {event, done}, {state, a, not_empty_at_runtime}])),
@@ -733,7 +765,6 @@ send_event_handle_attrs_test() ->
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
     ?assertEqual(ok, eproc_fsm:send_event(PID, flip, [{source, {test, test}}])),
-    timer:sleep(100),
     ?assertEqual(true, eproc_fsm:is_online(PID)),
     ?assertEqual(1, meck:num_calls(eproc_fsm_attr, transition_start, '_')),
     ?assertEqual(1, meck:num_calls(eproc_fsm_attr, transition_end, '_')),
@@ -774,9 +805,12 @@ send_event_restart_unreg_test() ->
     ?assert(eproc_fsm:is_online(PID2)),
     unlink(PID1),
     unlink(PID2),
+    Mon1 = erlang:monitor(process, PID1),
+    Mon2 = erlang:monitor(process, PID2),
     ?assertEqual(ok, eproc_fsm:send_event(PID1, done, [{source, {test, test}}])),
     ?assertEqual(ok, eproc_fsm:send_event(PID2, done, [{source, {test, test}}])),
-    timer:sleep(100),
+    ?assert(receive {'DOWN', Mon1, process, PID1, Reason} when Reason =/= normal-> true after 1000 -> false end),
+    ?assert(receive {'DOWN', Mon2, process, PID2, normal} -> true after 1000 -> false end),
     ?assertEqual(false, eproc_fsm:is_online(PID1)),
     ?assertEqual(false, eproc_fsm:is_online(PID2)),
     ?assertEqual(0, meck:num_calls(eproc_restart, cleanup, [{eproc_fsm, 100}, '_'])),
@@ -816,8 +850,9 @@ sync_send_event_final_state_from_ordinary_test() ->
     end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
+    Mon = erlang:monitor(process, PID),
     ?assertEqual({ok, 5}, eproc_fsm:sync_send_event(PID, last, [{source, {test, test}}])),
-    timer:sleep(100),
+    ?assert(receive {'DOWN', Mon, process, PID, normal} -> true after 1000 -> false end),
     ?assertEqual(false, eproc_fsm:is_online(PID)),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {sync, '_', last}, '_'])),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {exit, [closed]}, '_'])),
@@ -858,7 +893,6 @@ sync_send_event_next_state_from_ordinary_test() ->
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
     ?assertEqual({ok, 5}, eproc_fsm:sync_send_event(PID, next, [{source, {test, test}}])),
-    timer:sleep(100),
     ?assertEqual(true, eproc_fsm:is_online(PID)),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {sync, '_', next}, '_'])),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {exit, [incrementing]}, '_'])),
@@ -900,7 +934,6 @@ sync_send_event_same_state_from_ordinary_test() ->
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
     ?assertEqual({ok, 5}, eproc_fsm:sync_send_event(PID, get, [{source, {test, test}}])),
-    timer:sleep(100),
     ?assertEqual(true, eproc_fsm:is_online(PID)),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {sync, '_', get}, '_'])),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
@@ -945,7 +978,6 @@ sync_send_event_reply_test() ->
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
     ?assertEqual({ok, something}, eproc_fsm:sync_send_event(PID, get, [{source, {test, test}}])),
-    timer:sleep(100),
     ?assertEqual(true, eproc_fsm:is_online(PID)),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {sync, '_', get}, '_'])),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
@@ -989,7 +1021,6 @@ unknown_message_test() ->
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
     PID ! some_unknown_message,
-    timer:sleep(100),
     ?assertEqual(true, eproc_fsm:is_online(PID)),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {info, some_unknown_message}, '_'])),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
@@ -1085,10 +1116,11 @@ kill_test() ->
     end),
     {ok, Registry} = eproc_registry:ref(eproc_reg_gproc, reg_args),
     ?assert(eproc_fsm:is_online(PID)),
+    Mon = erlang:monitor(process, PID),
     ?assertEqual({error, bad_ref},   eproc_fsm:kill(PID,             [{store, store}, {registry, Registry}])),
     ?assertEqual({error, not_found}, eproc_fsm:kill({inst, unknown}, [{store, store}, {registry, Registry}, {user, <<"SomeUser">>}])),
     ?assertEqual(ok,                 eproc_fsm:kill({inst, 100},     [{store, store}, {registry, Registry}, {user, {<<"SomeUser">>, <<"Hmm">>}}])),
-    timer:sleep(100),
+    ?assert(receive {'DOWN', Mon, process, PID, normal} -> true after 1000 -> false end),
     ?assertEqual(false, eproc_fsm:is_online(PID)),
     ?assertEqual(2, meck:num_calls(eproc_store, set_instance_killed, '_')),
     ?assertEqual(1, meck:num_calls(eproc_reg_gproc, send, '_')),
@@ -1123,10 +1155,11 @@ suspend_test() ->
     end),
     {ok, Registry} = eproc_registry:ref(eproc_reg_gproc, reg_args),
     ?assert(eproc_fsm:is_online(PID)),
+    Mon = erlang:monitor(process, PID),
     ?assertEqual({error, bad_ref},   eproc_fsm:suspend(PID,             [{store, store}, {registry, Registry}])),
     ?assertEqual({error, not_found}, eproc_fsm:suspend({inst, unknown}, [{store, store}, {registry, Registry}, {user, <<"SomeUser">>}])),
     ?assertEqual(ok,                 eproc_fsm:suspend({inst, 100},     [{store, store}, {registry, Registry}, {user, {<<"SomeUser">>, <<"Hmm">>}}])),
-    timer:sleep(100),
+    ?assert(receive {'DOWN', Mon, process, PID, normal} -> true after 1000 -> false end),
     ?assertEqual(false, eproc_fsm:is_online(PID)),
     ?assertEqual(2, meck:num_calls(eproc_store, set_instance_suspended, '_')),
     ?assertEqual(1, meck:num_calls(eproc_reg_gproc, send, '_')),
@@ -1136,7 +1169,11 @@ suspend_test() ->
 
 
 % TODO: Check if resume/* works.
+
+
 % TODO: Check if set_state/* works.
+
+
 
 % TODO: Check if register_message/* works.
 % TODO: Check if resolve_start_spec/* works.

@@ -1066,6 +1066,7 @@ suspend(FsmRef, Options) ->
 %%  TODO: Add spec.
 %%
 resume(FsmRef, Options) ->
+    % TODO start instance in the registry.
     {ok, _ResolvedFsmRef} = resolve_fsm_ref(FsmRef, Options),
     ok.
     % TODO: gen_server:call(ResolvedFsmRef, {'eproc_fsm$resume', Reason}).
