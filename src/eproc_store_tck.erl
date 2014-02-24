@@ -76,9 +76,9 @@ inst_value() ->
 %%  Check if the following functions work:
 %%
 %%    * add_instance(unnamed), w/wo group.
-%%    * get_instance(), header.
-%%    * load_instance().
-%%    * set_instance_killed().
+%%    * get_instance(iid), header.
+%%    * load_instance(iid).
+%%    * set_instance_killed(iid).
 %%
 %%  TODO:
 %%
@@ -117,16 +117,71 @@ test_unnamed_instance(Config) ->
     {ok, IID1} = eproc_store:set_instance_killed(Store, {inst, IID1}, #user_action{}),
     {ok, IID2} = eproc_store:set_instance_killed(Store, {inst, IID2}, #user_action{}),
     {error, not_found} = eproc_store:set_instance_killed(Store, {inst, some}, #user_action{}),
+    {ok, #instance{
+        id = IID1,
+        group = GRP1,
+        status = killed,
+        terminated = {_, _, _},
+        term_reason = #user_action{}}
+    } = eproc_store:get_instance(Store, {inst, IID1}, header),
     ok.
 
 
 %%
-%%    * get and non-existing instance.
-%%    * Add Another instance with name.
-%%    * Add Another instance with same name.
+%%  Check if the following functions work:
 %%
+%%    * add_instance(name), w/wo group.
+%%    * get_instance(name), header.
+%%    * load_instance(name).
+%%    * set_instance_killed(name).
 %%
-test_named_instance(_Config) ->
+%%  Scenario:
+%%
+%%    * Add instance with unique name.
+%%    * Add another instance with unique name.
+%%    * Add another instance with same name.
+%%    * Add an instance with the name of already killed FSM.
+%%
+test_named_instance(Config) ->
+    Store = store(Config),
+    %%  Add instances.
+    Inst = inst_value(),
+    {ok, IID1}  = eproc_store:add_instance(Store, Inst#instance{group = new, name = test_named_instance_a}),
+    {ok, IID2}  = eproc_store:add_instance(Store, Inst#instance{group = 897, name = test_named_instance_b}),
+    {error, bad_name} = eproc_store:add_instance(Store, Inst#instance{group = 897, name = test_named_instance_b}),
+    true = undefined =/= IID1,
+    true = undefined =/= IID2,
+    true = IID1 =/= IID2,
+    %%  Try to get instance headers by IID and by name.
+    {ok, Inst1 = #instance{id = IID1, group = GRP1}} = eproc_store:get_instance(Store, {inst, IID1}, header),
+    {ok, Inst2 = #instance{id = IID2, group = GRP2}} = eproc_store:get_instance(Store, {inst, IID2}, header),
+    {error, not_found}  = eproc_store:get_instance(Store, {inst, some}, header),
+    {ok, Inst1}         = eproc_store:get_instance(Store, {name, test_named_instance_a}, header),
+    {ok, Inst2}         = eproc_store:get_instance(Store, {name, test_named_instance_b}, header),
+    {error, not_found}  = eproc_store:get_instance(Store, {name, test_named_instance_c}, header),
+    Inst1 = Inst#instance{id = IID1, group = GRP1, name = test_named_instance_a},
+    Inst2 = Inst#instance{id = IID2, group = GRP2, name = test_named_instance_b},
+    false = is_atom(GRP1),
+    897 = GRP2,
+    %%  Try to load instance data.
+    {ok, LoadedInst = #instance{id = IID1, group = GRP1}} = eproc_store:load_instance(Store, {name, test_named_instance_a}),
+    LoadedInst = Inst#instance{id = IID1, group = GRP1, name = test_named_instance_a, transitions = []},
+    %%  Kill created instances.
+    {ok, IID1}         = eproc_store:set_instance_killed(Store, {name, test_named_instance_a}, #user_action{}),
+    {error, not_found} = eproc_store:set_instance_killed(Store, {name, test_named_instance_a}, #user_action{}),
+    {ok, IID2}         = eproc_store:set_instance_killed(Store, {name, test_named_instance_b}, #user_action{}),
+    {error, not_found} = eproc_store:set_instance_killed(Store, {name, test_named_instance_v}, #user_action{}),
+    {ok, #instance{
+        id = IID1,
+        group = GRP1,
+        status = killed,
+        terminated = {_, _, _},
+        term_reason = #user_action{}}
+    } = eproc_store:get_instance(Store, {inst, IID1}, header),
+    %%  Names can be reused, after FSM termination.
+    {ok, IID3} = eproc_store:add_instance(Store, Inst#instance{group = new, name = test_named_instance_a}),
+    {ok, IID3} = eproc_store:set_instance_killed(Store, {name, test_named_instance_a}, #user_action{}),
+    true = IID3 =/= IID1,
     ok.
 
 

@@ -148,7 +148,7 @@ add_instance(_StoreArgs, Instance = #instance{name = Name, group = Group}) ->
             }),
             {ok, InstId};
         false ->
-            {error, name_not_uniq}
+            {error, bad_name}
     end.
 
 
@@ -165,17 +165,13 @@ add_transition(_StoreArgs, Transition, Messages) ->
         inst_suspend = undefined
     } = Transition,
     true = is_list(AttrActions),
-    OldStatus = ets:lookup_element(?INST_TBL, InstId, #instance.status),
+    Instance = #instance{status = OldStatus} = ets:lookup(?INST_TBL, InstId),
 
     case {is_instance_terminated(OldStatus), is_instance_terminated(Status)} of
         {false, false} ->
             ok;
         {false, true} ->
-            true = ets:update_element(?INST_TBL, InstId, [
-                {#instance.status,      Status},
-                {#instance.terminated,  erlang:now()},
-                {#instance.term_reason, normal}
-            ])
+            ok = write_instance_terminated(Instance, Status, normal)
     end,
 
     true = ets:insert(?TRN_TBL, Transition),
@@ -190,14 +186,10 @@ set_instance_killed(_StoreArgs, FsmRef, UserAction) ->
     case read_instance(FsmRef, current) of
         {error, Reason} ->
             {error, Reason};
-        {ok, #instance{id = InstId, status = Status}} ->
+        {ok, Instance = #instance{id = InstId, status = Status}} ->
             case is_instance_terminated(Status) of
                 false ->
-                    true = ets:update_element(?INST_TBL, InstId, [
-                        {#instance.status,      killed},
-                        {#instance.terminated,  erlang:now()},
-                        {#instance.term_reason, UserAction}
-                    ]),
+                    ok = write_instance_terminated(Instance, killed, UserAction),
                     {ok, InstId};
                 true ->
                     {ok, InstId}
@@ -291,6 +283,25 @@ read_transitions(#instance{id = InstId}, last) ->
 
 
 %%
+%%
+%%
+write_instance_terminated(#instance{id = InstId, name = Name}, Status, Reason) ->
+    true = ets:update_element(?INST_TBL, InstId, [
+        {#instance.status,      Status},
+        {#instance.terminated,  erlang:now()},
+        {#instance.term_reason, Reason}
+    ]),
+    case Name of
+        undefined ->
+            ok;
+        _ ->
+            InstName = #inst_name{name = Name, inst_id = InstId},
+            true = ets:delete_object(?NAME_TBL, InstName),
+            ok
+    end.
+
+
+%%
 %%  Replay all attribute actions, from all transitions.
 %%  TODO: Move this function to `eproc_store`.
 %%
@@ -340,10 +351,10 @@ apply_attr_action(#attr_action{module = Module, attr_id = AttrId, action = Actio
 %%
 %%  Checks if instance is terminated by status.
 %%
-is_instance_terminated(running) -> true;
-is_instance_terminated(suspend) -> true;
-is_instance_terminated(done)    -> false;
-is_instance_terminated(failed)  -> false;
-is_instance_terminated(killed)  -> false.
+is_instance_terminated(running) -> false;
+is_instance_terminated(suspend) -> false;
+is_instance_terminated(done)    -> true;
+is_instance_terminated(failed)  -> true;
+is_instance_terminated(killed)  -> true.
 
 

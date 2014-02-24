@@ -27,4 +27,8 @@ The following is a command example for invoking particular unit test suite:
 
     env ERL_AFLAGS='-config test/sys' rebar eunit skip_deps=true verbose=1 suites=eproc_fsm
 
+And this one is for particular integration test suite:
+
+    rebar compile ct skip_deps=true suites=eproc_store_ets
+
 
