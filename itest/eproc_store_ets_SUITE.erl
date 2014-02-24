@@ -20,8 +20,10 @@
 -module(eproc_store_ets_SUITE).
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([
-    test_unnamed_instance/1,
-    test_named_instance/1
+    eproc_store_core_test_unnamed_instance/1,
+    eproc_store_core_test_named_instance/1,
+    eproc_store_core_test_suspend_resume/1,
+    eproc_store_core_test_add_transition/1
 ]).
 -include_lib("common_test/include/ct.hrl").
 -include("eproc.hrl").
@@ -30,7 +32,7 @@
 %%
 %%
 all() ->
-    eproc_store_tck:all().
+    eproc_store_tck:testcases(core).
 
 %%
 %%
@@ -53,7 +55,10 @@ end_per_suite(Config) ->
 %%  Testcases.
 %% =============================================================================
 
-test_unnamed_instance(Config)   -> eproc_store_tck:test_unnamed_instance(Config).
-test_named_instance(Config)     -> eproc_store_tck:test_named_instance(Config).
+-define(MAP_TCK_TEST(Name), Name(Config) -> eproc_store_tck:Name(Config)).
 
+?MAP_TCK_TEST(eproc_store_core_test_unnamed_instance).
+?MAP_TCK_TEST(eproc_store_core_test_named_instance).
+?MAP_TCK_TEST(eproc_store_core_test_suspend_resume).
+?MAP_TCK_TEST(eproc_store_core_test_add_transition).
 

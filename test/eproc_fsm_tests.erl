@@ -17,6 +17,8 @@
 %%
 %%  Unit tests for `eproc_fsm`.
 %%
+%%  TODO: Use monitor instead of timer.
+%%
 -module(eproc_fsm_tests).
 -compile([{parse_transform, lager_transform}]).
 -define(DEBUG, true).
@@ -372,6 +374,13 @@ start_link_opts_restart_test() ->
     ?assert(meck:validate([eproc_store, eproc_restart, eproc_fsm__void])),
     ok = meck:unload([eproc_store, eproc_restart, eproc_fsm__void]),
     ok = unlink_kill([PID1, PID2]).
+
+
+%%
+%% TODO: Check id suspending on restart works.
+%%
+start_link_restart_suspend_test() ->
+    ?assert(todo).
 
 
 %%
@@ -737,7 +746,7 @@ send_event_handle_attrs_test() ->
 %%  Check if FSM is unregistered from the restart manager on a normal
 %%  shutdown and is not unregistered on a crash.
 %%
-send_event_restart_test() ->
+send_event_restart_unreg_test() ->
     ok = meck:new(eproc_store, []),
     ok = meck:new(eproc_restart, [passthrough]),
     ok = meck:new(eproc_fsm__void, [passthrough]),
@@ -1089,7 +1098,6 @@ kill_test() ->
 
 %%
 %% Check if suspend/* works.
-%% TODO: Check id suspension on restart works.
 %%
 suspend_test() ->
     ok = meck:new(eproc_store, []),

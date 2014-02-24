@@ -22,10 +22,12 @@
 %%  See `eproc_store_ets_SUITE` for an example of using it.
 %%
 -module(eproc_store_tck).
--export([all/0]).
+-export([testcases/1]).
 -export([
-    test_unnamed_instance/1,
-    test_named_instance/1
+    eproc_store_core_test_unnamed_instance/1,
+    eproc_store_core_test_named_instance/1,
+    eproc_store_core_test_suspend_resume/1,
+    eproc_store_core_test_add_transition/1
 ]).
 -include_lib("common_test/include/ct.hrl").
 -include("eproc.hrl").
@@ -34,9 +36,17 @@
 %%
 %%
 %%
-all() -> [
-        test_unnamed_instance,
-        test_named_instance
+testcases(core) -> [
+    eproc_store_core_test_unnamed_instance,
+    eproc_store_core_test_named_instance,
+    eproc_store_core_test_suspend_resume,
+    eproc_store_core_test_add_transition
+    ];
+
+testcases(router) -> [
+    ];
+
+testcases(meta) -> [
     ].
 
 
@@ -92,7 +102,7 @@ inst_value() ->
 %%    * Resume.
 %%    * Suspend.
 %%
-test_unnamed_instance(Config) ->
+eproc_store_core_test_unnamed_instance(Config) ->
     Store = store(Config),
     %%  Add unnamed process with new group.
     %%  and second, to check if they are not interferring.
@@ -142,7 +152,7 @@ test_unnamed_instance(Config) ->
 %%    * Add another instance with same name.
 %%    * Add an instance with the name of already killed FSM.
 %%
-test_named_instance(Config) ->
+eproc_store_core_test_named_instance(Config) ->
     Store = store(Config),
     %%  Add instances.
     Inst = inst_value(),
@@ -182,6 +192,20 @@ test_named_instance(Config) ->
     {ok, IID3} = eproc_store:add_instance(Store, Inst#instance{group = new, name = test_named_instance_a}),
     {ok, IID3} = eproc_store:set_instance_killed(Store, {name, test_named_instance_a}, #user_action{}),
     true = IID3 =/= IID1,
+    ok.
+
+
+%%
+%%  TODO:.
+%%
+eproc_store_core_test_suspend_resume(_Config) ->
+    ok.
+
+
+%%
+%%  TODO:.for terminated FSM.
+%%
+eproc_store_core_test_add_transition(_Config) ->
     ok.
 
 
