@@ -23,7 +23,17 @@
 -behaviour(gen_server).
 -compile([{parse_transform, lager_transform}]).
 -export([start_link/1]).
--export([supervisor_child_specs/1, add_instance/2, add_transition/3, load_instance/2, load_running/2, get_instance/3]).
+-export([
+    supervisor_child_specs/1,
+    get_instance/3
+]).
+-export([
+    add_instance/2,
+    add_transition/3,
+    set_instance_killed/3,
+    load_instance/2,
+    load_running/2
+]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -include("eproc.hrl").
 
@@ -157,14 +167,42 @@ add_transition(_StoreArgs, Transition, Messages) ->
     true = is_list(AttrActions),
     OldStatus = ets:lookup_element(?INST_TBL, InstId, #instance.status),
 
+    case {is_instance_terminated(OldStatus), is_instance_terminated(Status)} of
+        {false, false} ->
+            ok;
+        {false, true} ->
+            true = ets:update_element(?INST_TBL, InstId, [
+                {#instance.status,      Status},
+                {#instance.terminated,  erlang:now()},
+                {#instance.term_reason, normal}
+            ])
+    end,
+
     true = ets:insert(?TRN_TBL, Transition),
     [ true = ets:insert(?MSG_TBL, Message) || Message <- Messages],
+    {ok, InstId, TrnNr}.
 
-    true = case Status =:= OldStatus of
-        true  -> true;
-        false -> ets:update_element(?INST_TBL, InstId, {#instance.status, Status})
-    end,
-    {ok, TrnNr}.
+
+%%
+%%  Mark instance as killed.
+%%
+set_instance_killed(_StoreArgs, FsmRef, UserAction) ->
+    case read_instance(FsmRef, current) of
+        {error, Reason} ->
+            {error, Reason};
+        {ok, #instance{id = InstId, status = Status}} ->
+            case is_instance_terminated(Status) of
+                false ->
+                    true = ets:update_element(?INST_TBL, InstId, [
+                        {#instance.status,      killed},
+                        {#instance.terminated,  erlang:now()},
+                        {#instance.term_reason, UserAction}
+                    ]),
+                    {ok, InstId};
+                true ->
+                    {ok, InstId}
+            end
+    end.
 
 
 %%
@@ -297,5 +335,15 @@ apply_attr_action(#attr_action{module = Module, attr_id = AttrId, action = Actio
         {remove, _Reason} ->
             lists:keydelete(AttrId, #attribute.attr_id, Attrs)
     end.
+
+
+%%
+%%  Checks if instance is terminated by status.
+%%
+is_instance_terminated(running) -> true;
+is_instance_terminated(suspend) -> true;
+is_instance_terminated(done)    -> false;
+is_instance_terminated(failed)  -> false;
+is_instance_terminated(killed)  -> false.
 
 

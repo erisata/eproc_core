@@ -248,9 +248,10 @@
     start_spec  :: fsm_start_spec() | undefined,    %% Optional FSM start specification.
     status      :: inst_status(),                   %% Current status if the FSM instance.
     created     :: datetime(),                      %% Time, when the instance was created.
-    terminated  :: datetime() | undefined,          %% Time, when the instance was terminated.
-    archived    :: datetime() | undefined,          %% Time, when the instance was archived.
-    transitions :: [#transition{}] | undefined      %% Instance transitions. Calculated field.
+    terminated  :: datetime() | undefined,                  %% Time, when the instance was terminated.
+    term_reason :: #user_action{} | normal | undefined,     %% Reason, why the instance was terminated.
+    archived    :: datetime() | undefined,                  %% Time, when the instance was archived.
+    transitions :: [#transition{}] | undefined              %% Instance transitions. Calculated field.
 }).
 
 

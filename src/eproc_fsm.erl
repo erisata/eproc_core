@@ -127,6 +127,9 @@
 %%  `{timeout, Timeout}`
 %%  :   Timeout for the function, 5000 (5 seconds) is the default.
 %%
+%%  `{user, (User :: binary() | {User :: binary(), Comment :: binary()})}`
+%%  :   indicates a user initiaten an action. This option is mainly
+%%      used for administrative actions: kill, suspend, resume and set_state.
 %%
 -module(eproc_fsm).
 -behaviour(gen_server).
@@ -141,7 +144,7 @@
     send_create_event/4, sync_send_create_event/4,
     send_event/3, send_event/2,
     sync_send_event/3, sync_send_event/2,
-    kill/2, suspend/2, resume/2, set_state/4, is_online/1
+    kill/2, suspend/2, resume/2, set_state/4, is_online/2, is_online/1
 ]).
 
 %%
@@ -159,6 +162,7 @@
     is_state_in_scope/2,
     is_state_valid/1,
     is_next_state_valid/1,
+    is_fsm_ref/1,
     register_message/4,
     resolve_start_spec/2
 ]).
@@ -655,8 +659,8 @@ create(Module, Args, Options) ->
         {ok, pid()} | ignore | {error, term()}.
 
 start_link(FsmName, FsmRef, Options) ->
-    {ok, StartOptions, ProcessOptions} = resolve_start_link_opts(Options),
-    gen_server:start_link(FsmName, ?MODULE, {FsmRef, StartOptions}, ProcessOptions).
+    {ok, StartOpts, ProcessOptions} = resolve_start_link_opts(Options),
+    gen_server:start_link(FsmName, ?MODULE, {FsmRef, StartOpts}, ProcessOptions).
 
 
 %%
@@ -669,8 +673,8 @@ start_link(FsmName, FsmRef, Options) ->
         {ok, pid()} | ignore | {error, term()}.
 
 start_link(FsmRef, Options) ->
-    {ok, StartOptions, ProcessOptions} = resolve_start_link_opts(Options),
-    gen_server:start_link(?MODULE, {FsmRef, StartOptions}, ProcessOptions).
+    {ok, StartOpts, ProcessOptions} = resolve_start_link_opts(Options),
+    gen_server:start_link(?MODULE, {FsmRef, StartOpts}, ProcessOptions).
 
 
 %%
@@ -779,6 +783,16 @@ is_next_state_valid([_|_] = State) ->
 
 is_next_state_valid(_State) ->
     false.
+
+
+%%
+%%  Checks, if a term is an FSM reference.
+%%
+-spec is_fsm_ref(fsm_ref() | term()) -> boolean().
+
+is_fsm_ref({inst, _}) -> true;
+is_fsm_ref({name, _}) -> true;
+is_fsm_ref(_) -> false.
 
 
 %%
@@ -892,7 +906,7 @@ sync_send_create_event(Module, Args, Event, Options) ->
 
 send_event(FsmRef, Event, Options) ->
     {ok, EventSrc} = resolve_event_src(Options),
-    {ok, ResolvedFsmRef} = resolve_fsm_ref(FsmRef),
+    {ok, ResolvedFsmRef} = resolve_fsm_ref(FsmRef, Options),
     gen_server:cast(ResolvedFsmRef, {'eproc_fsm$send_event', Event, EventSrc}).
 
 
@@ -943,7 +957,7 @@ send_event(FsmRef, Event) ->
 sync_send_event(FsmRef, Event, Options) ->
     {ok, EventSrc} = resolve_event_src(Options),
     {ok, Timeout}  = resolve_timeout(Options),
-    {ok, ResolvedFsmRef} = resolve_fsm_ref(FsmRef),
+    {ok, ResolvedFsmRef} = resolve_fsm_ref(FsmRef, Options),
     gen_server:call(ResolvedFsmRef, {'eproc_fsm$sync_send_event', Event, EventSrc}, Timeout).
 
 
@@ -962,32 +976,72 @@ sync_send_event(FsmRef, Event) ->
 
 
 %%
-%%  TODO: Add spec.
+%%  Kills existing FSM instance. The FSM can be either online or offline.
+%%  If FSM is online, it will be stopped. In any case, the FSM will be marked
+%%  as killed. This function also returns `ok` if the FSM was already terminated.
 %%
-kill(FsmRef, Reason) ->
-    gen_server:cast(FsmRef, {'eproc_fsm$kill', Reason}).
+%%  Parameters:
+%%
+%%  `FsmRef`
+%%  :   References particular FSM instance. The reference must be either
+%%      `{inst, _}` or `{name, _}`. Erlang process ids or names are not
+%%      supported here. See `send_event/3` for more details.
+%%  `Options`
+%%  :   Any of the Common FSM Options can be provided here.
+%%      Only the `registry` and `user` options will be used here
+%%      and other options will be ignored.
+%%
+%%  This function depends on `eproc_registry`.
+%%
+-spec kill(
+        FsmRef  :: fsm_ref() | otp_ref(),
+        Options :: list()
+    ) ->
+        ok |
+        {error, bad_ref} |
+        {error, Reason :: term()}.
+
+kill(FsmRef, Options) ->
+    case is_fsm_ref(FsmRef) of
+        false ->
+            {error, bad_ref};
+        true ->
+            Store = resolve_store(Options),
+            UserAction = resolve_user_action(Options),
+            case eproc_store:set_instance_killed(Store, FsmRef, UserAction) of
+                {ok, _InstId} ->
+                    {ok, ResolvedFsmRef} = resolve_fsm_ref(FsmRef, Options),
+                    gen_server:cast(ResolvedFsmRef, {'eproc_fsm$kill'});
+                {error, Reason} ->
+                    {error, Reason}
+            end
+    end.
 
 
 %%
 %%  TODO: Add spec.
 %%
-suspend(FsmRef, Reason) ->
-    gen_server:call(FsmRef, {'eproc_fsm$suspend', Reason}).
+suspend(FsmRef, Options) ->
+    {ok, ResolvedFsmRef} = resolve_fsm_ref(FsmRef, Options),
+    gen_server:call(ResolvedFsmRef, {'eproc_fsm$suspend'}).
 
 
 %%
 %%  TODO: Add spec.
 %%
-resume(FsmRef, Reason) ->
-    gen_server:call(FsmRef, {'eproc_fsm$resume', Reason}).
+resume(FsmRef, Options) ->
+    {ok, _ResolvedFsmRef} = resolve_fsm_ref(FsmRef, Options),
+    ok.
+    % TODO: gen_server:call(ResolvedFsmRef, {'eproc_fsm$resume', Reason}).
 
 
 %%
 %%  TODO: Add spec.
 %%
-set_state(FsmRef, NewStateName, NewStateData, Reason) ->
+set_state(FsmRef, NewStateName, NewStateData, Options) ->
     % TODO: Make it offline.
-    gen_server:call(FsmRef, {'eproc_fsm$set_state', NewStateName, NewStateData, Reason}).
+    {ok, ResolvedFsmRef} = resolve_fsm_ref(FsmRef, Options),
+    gen_server:call(ResolvedFsmRef, {'eproc_fsm$set_state', NewStateName, NewStateData}).
 
 
 %%
@@ -995,17 +1049,40 @@ set_state(FsmRef, NewStateName, NewStateData, Reason) ->
 %%  the FSM process, so it can be used for sinchronizing with the FSM.
 %%  E.g. for waiting for asynchronous initialization to complete.
 %%
+%%  Parameters:
+%%
+%%  `FsmRef`
+%%  :   References particular FSM instance.
+%%      See `send_event/3` for more details.
+%%  `Options`
+%%  :   Any of the Common FSM Options can be provided here.
+%%      Only the `registry` option will be used, other will be ignored.
+%%
 -spec is_online(
-        FsmRef :: fsm_ref() | otp_ref()
+        FsmRef  :: fsm_ref() | otp_ref(),
+        Options :: list()
     ) ->
         boolean().
 
-is_online(FsmRef) ->
-    case catch gen_server:call(FsmRef, {is_online}) of
+is_online(FsmRef, Options) ->
+    {ok, ResolvedFsmRef} = resolve_fsm_ref(FsmRef, Options),
+    case catch gen_server:call(ResolvedFsmRef, {'eproc_fsm$is_online'}) of
         true                  -> true;
         {'EXIT', {normal, _}} -> false;
         {'EXIT', {noproc, _}} -> false
     end.
+
+
+%%
+%%  Equivalent to `is_online(FsmRef, [])`.
+%%
+-spec is_online(
+        FsmRef  :: fsm_ref() | otp_ref()
+    ) ->
+        boolean().
+
+is_online(FsmRef) ->
+    is_online(FsmRef, []).
 
 
 %%
@@ -1122,20 +1199,20 @@ resolve_start_spec(FsmRef, {mfa, {Module, Function, Args}}) when is_atom(Module)
 %%  The initialization is implemented asynchronously to avoid timeouts when
 %%  restarting the engine with a lot of running fsm's.
 %%
-init({FsmRef, StartOptions}) ->
+init({FsmRef, StartOpts}) ->
     State = #state{
-        store    = resolve_store(StartOptions),
-        registry = resolve_registry(StartOptions),
-        restart  = proplists:get_value(restart, StartOptions, [])
+        store    = resolve_store(StartOpts),
+        registry = resolve_registry(StartOpts),
+        restart  = proplists:get_value(restart, StartOpts, [])
     },
-    self() ! {'eproc_fsm$start', FsmRef, StartOptions},
+    self() ! {'eproc_fsm$start', FsmRef, StartOpts},
     {ok, State}.
 
 
 %%
 %%  Syncronous calls.
 %%
-handle_call({is_online}, _From, State) ->
+handle_call({'eproc_fsm$is_online'}, _From, State) ->
     {reply, true, State};
 
 handle_call({'eproc_fsm$sync_send_event', Event, EventSrc}, From, State) ->
@@ -1172,14 +1249,18 @@ handle_cast({'eproc_fsm$send_event', Event, EventSrc}, State) ->
         {cont, noreply, NewState} -> {noreply, NewState};
         {stop, noreply, NewState} -> shutdown(NewState);
         {error, Reason}           -> {stop, {error, Reason}, State}
-    end.
+    end;
+
+handle_cast({'eproc_fsm$kill'}, State = #state{inst_id = InstId}) ->
+    lager:notice("FSM id=~p killed.", [InstId]),
+    {stop, normal, State}.
 
 
 %%
 %%  Asynchronous FSM initialization.
 %%
-handle_info({'eproc_fsm$start', FsmRef, StartOptions}, State) ->
-    case handle_start(FsmRef, StartOptions, State) of
+handle_info({'eproc_fsm$start', FsmRef, StartOpts}, State) ->
+    case handle_start(FsmRef, StartOpts, State) of
         {online, NewState} -> {noreply, NewState};
         {offline, InstId}  -> shutdown(State#state{inst_id = InstId})
     end;
@@ -1310,21 +1391,21 @@ resolve_event_src(SendOptions) ->
 %%
 %%  Resolves instance reference.
 %%
-resolve_fsm_ref({inst, InstId}) ->
-    {ok, {via, eproc_registry, {inst, InstId}}};
-
-resolve_fsm_ref({name, Name}) ->
-    {ok, {via, eproc_registry, {name, Name}}};
-
-resolve_fsm_ref(FsmRef) ->
-    {ok, FsmRef}.
+resolve_fsm_ref(FsmRef, Options) ->
+    case is_fsm_ref(FsmRef) of
+        true ->
+            Registry = resolve_registry(Options),
+            {ok, _ResolvedFsmRef} = eproc_registry:make_fsm_ref(Registry, FsmRef);
+        false ->
+            {ok, FsmRef}
+    end.
 
 
 %%
 %%  Resolve store.
 %%
-resolve_store(StartOptions) ->
-    case proplists:get_value(store, StartOptions) of
+resolve_store(StartOpts) ->
+    case proplists:get_value(store, StartOpts) of
         undefined ->
             {ok, Store} = eproc_store:ref(),
             Store;
@@ -1336,8 +1417,8 @@ resolve_store(StartOptions) ->
 %%
 %%  Resolve registry, if needed.
 %%
-resolve_registry(StartOptions) ->
-    case {proplists:get_value(register, StartOptions), proplists:get_value(registry, StartOptions)} of
+resolve_registry(StartOpts) ->
+    case {proplists:get_value(register, StartOpts), proplists:get_value(registry, StartOpts)} of
         {none, undefined} ->
             undefined;
         {undefined, undefined} ->
@@ -1352,6 +1433,25 @@ resolve_registry(StartOptions) ->
         {_, Registry} ->
             Registry
     end.
+
+
+%%
+%%  Creates user action from the supplied options.
+%%
+resolve_user_action(CommonOpts) ->
+    {User, Comment} = case proplists:get_value(user, CommonOpts) of
+        {U, C} when is_binary(U), is_binary(C) ->
+            {U, C};
+        U when is_binary(U) ->
+            {U, undefined};
+        undefined ->
+            {undefined, undefined}
+    end,
+    #user_action{
+        user = User,
+        time = erlang:now(),
+        comment = Comment
+    }.
 
 
 %%
@@ -1375,6 +1475,7 @@ handle_create(Module, Args, CreateOpts, CustomOpts) ->
         status      = running,
         created     = eproc:now(),
         terminated  = undefined,
+        term_reason = undefined,
         archived    = undefined,
         transitions = undefined
     },
@@ -1384,12 +1485,12 @@ handle_create(Module, Args, CreateOpts, CustomOpts) ->
 %%
 %%  Loads the instance and starts it if needed.
 %%
-handle_start(FsmRef, StartOptions, State = #state{store = Store, restart = RestartOpts}) ->
+handle_start(FsmRef, StartOpts, State = #state{store = Store, restart = RestartOpts}) ->
     case eproc_store:load_instance(Store, FsmRef) of
         {ok, Instance = #instance{id = InstId, status = running}} ->
             case eproc_restart:restarted({?MODULE, InstId}, RestartOpts) of
                 ok ->
-                    {ok, NewState} = start_loaded(Instance, StartOptions, State),
+                    {ok, NewState} = start_loaded(Instance, StartOpts, State),
                     lager:debug("FSM started, ref=~p.", [FsmRef]),
                     {online, NewState};
                 fail ->
@@ -1406,7 +1507,7 @@ handle_start(FsmRef, StartOptions, State = #state{store = Store, restart = Resta
 %%
 %%  Starts already loaded instance.
 %%
-start_loaded(Instance, StartOptions, State) ->
+start_loaded(Instance, StartOpts, State) ->
     #instance{
         id = InstId,
         group = Group,
@@ -1422,7 +1523,7 @@ start_loaded(Instance, StartOptions, State) ->
     undefined = erlang:put('eproc_fsm$group', Group),
     undefined = erlang:put('eproc_fsm$name', Name),
 
-    ok = register_online(Instance, Registry, StartOptions),
+    ok = register_online(Instance, Registry, StartOpts),
 
     {ok, LastTrnNr, LastSName, LastSData, LastAttrId, ActiveAttrs} = case Transitions of
         []           -> create_state(Instance);
@@ -1473,8 +1574,8 @@ call_init_runtime(SName, SData, Module) ->
 %%
 %%  Register instance id and name to a registry if needed.
 %%
-register_online(#instance{id = InstId, name = Name}, Registry, StartOptions) ->
-    case proplists:get_value(register, StartOptions) of
+register_online(#instance{id = InstId, name = Name}, Registry, StartOpts) ->
+    case proplists:get_value(register, StartOpts) of
         undefined -> ok;
         none -> ok;
         id   -> eproc_registry:register_fsm(Registry, InstId, [{inst, InstId}]);
@@ -1643,7 +1744,7 @@ perform_transition(Trigger, InitAttrActions, State) ->
         inst_status  = InstStatus,
         inst_suspend = undefined
     },
-    {ok, TrnNr} = eproc_store:add_transition(Store, Transition, TransitionMsgs),
+    {ok, InstId, TrnNr} = eproc_store:add_transition(Store, Transition, TransitionMsgs),
 
     RefForReg = fun
         (undefined) -> undefined;
@@ -1792,7 +1893,8 @@ split_options(Prop = {N, _}, {Create, Start, Send, Common, Unknown}) when
 split_options(Prop = {N, _}, {Create, Start, Send, Common, Unknown}) when
         N =:= timeout;
         N =:= store;
-        N =:= registry
+        N =:= registry;
+        N =:= user
         ->
     {Create, Start, Send, [Prop | Common], Unknown};
 
@@ -1869,12 +1971,12 @@ split_options_test_() -> [
             [{group, x}, {name, x}, {start_spec, x}, {max_transitions, x}, {max_errors, x}, {max_sent_msgs, x}],
             [{restart, x}, {register, x}],
             [{source, x}],
-            [{timeout, x}, {store, x}, {registry, x}],
+            [{timeout, x}, {store, x}, {registry, x}, {user, x}],
             [{some, y}]
         },
         split_options([
             {group, x}, {name, x}, {start_spec, x}, {max_transitions, x}, {max_errors, x}, {max_sent_msgs, x},
-            {restart, x}, {register, x}, {source, x}, {timeout, x}, {store, x}, {registry, x}, {some, y}
+            {restart, x}, {register, x}, {source, x}, {timeout, x}, {store, x}, {registry, x}, {user, x}, {some, y}
         ])
     )].
 

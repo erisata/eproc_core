@@ -13,6 +13,10 @@
 %| See the License for the specific language governing permissions and
 %| limitations under the License.
 %\--------------------------------------------------------------------
+
+%%
+%%  Unit tests for `eproc_fsm`.
+%%
 -module(eproc_fsm_tests).
 -compile([{parse_transform, lager_transform}]).
 -define(DEBUG, true).
@@ -405,7 +409,7 @@ send_event_final_state_from_init_test() ->
             } = Transition,
             ?assert(is_integer(Duration)),
             ?assert(Duration >= 0),
-            {ok, TrnNr}
+            {ok, 100, TrnNr}
     end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
@@ -444,7 +448,7 @@ send_event_final_state_from_ordinary_test() ->
                 trigger_resp = undefined,
                 inst_status  = done
             } = Transition,
-            {ok, TrnNr}
+            {ok, InstId, TrnNr}
     end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
@@ -482,7 +486,7 @@ send_event_next_state_from_init_test() ->
                 trigger_resp = undefined,
                 inst_status  = running
             } = Transition,
-            {ok, TrnNr}
+            {ok, InstId, TrnNr}
     end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
@@ -523,7 +527,7 @@ send_event_next_state_from_ordinary_test() ->
                 trigger_resp = undefined,
                 inst_status  = running
             } = Transition,
-            {ok, TrnNr}
+            {ok, InstId, TrnNr}
     end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
@@ -555,8 +559,8 @@ send_event_same_state_from_init_test() ->
             }}
     end),
     ok = meck:expect(eproc_store, add_transition, fun
-        (store, #transition{number = TrnNr}, _Messages) ->
-            {ok, TrnNr}
+        (store, #transition{inst_id = InstId, number = TrnNr}, _Messages) ->
+            {ok, InstId, TrnNr}
     end),
     ok = meck:expect(eproc_fsm__seq, handle_state, fun
         ([], {event, skip}, StateData) ->
@@ -600,7 +604,7 @@ send_event_same_state_from_ordinary_test() ->
                 trigger_resp = undefined,
                 inst_status  = running
             } = Transition,
-            {ok, TrnNr}
+            {ok, InstId, TrnNr}
     end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
@@ -633,8 +637,8 @@ send_event_reply_test() ->
             }}
     end),
     ok = meck:expect(eproc_store, add_transition, fun
-        (store, #transition{number = TrnNr}, _Messages) ->
-            {ok, TrnNr}
+        (store, #transition{inst_id = InstId, number = TrnNr}, _Messages) ->
+            {ok, InstId, TrnNr}
     end),
     ok = meck:expect(eproc_fsm__seq, handle_state, fun
         ([incrementing], {event, get}, StateData) ->
@@ -673,8 +677,8 @@ send_event_save_runtime_test() ->
             {ok, 3, not_empty_at_runtime}
     end),
     ok = meck:expect(eproc_store, add_transition, fun
-        (store, #transition{number = TrnNr, sdata = {state, a, this_is_empty}}, [#message{}]) ->
-            {ok, TrnNr}
+        (store, #transition{inst_id = InstId, number = TrnNr, sdata = {state, a, this_is_empty}}, [#message{}]) ->
+            {ok, InstId, TrnNr}
     end),
     {ok, PID} = eproc_fsm:start_link({inst, 1000}, []),
     ?assert(eproc_fsm:is_online(PID)),
@@ -715,7 +719,7 @@ send_event_handle_attrs_test() ->
                 trigger_resp = undefined,
                 inst_status  = running
             } = Transition,
-            {ok, TrnNr}
+            {ok, InstId, TrnNr}
     end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
@@ -746,8 +750,8 @@ send_event_restart_test() ->
             }}
     end),
     ok = meck:expect(eproc_store, add_transition, fun
-        (store, #transition{number = TrnNr}, [#message{}]) ->
-            {ok, TrnNr}
+        (store, #transition{inst_id = InstId, number = TrnNr}, [#message{}]) ->
+            {ok, InstId, TrnNr}
     end),
     ok = meck:expect(eproc_fsm__void, handle_state, fun
         ([], {event, done}, {state, 100}) ->
@@ -799,7 +803,7 @@ sync_send_event_final_state_from_ordinary_test() ->
                 trigger_resp = #msg_ref{id = {InstId, TrnNr, 1}, peer = {test, test}},
                 inst_status  = done
             } = Transition,
-            {ok, TrnNr}
+            {ok, InstId, TrnNr}
     end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
@@ -840,7 +844,7 @@ sync_send_event_next_state_from_ordinary_test() ->
                 trigger_resp = #msg_ref{id = {InstId, TrnNr, 1}, peer = {test, test}},
                 inst_status  = running
             } = Transition,
-            {ok, TrnNr}
+            {ok, InstId, TrnNr}
     end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
@@ -882,7 +886,7 @@ sync_send_event_same_state_from_ordinary_test() ->
                 trigger_resp = #msg_ref{id = {InstId, TrnNr, 1}, peer = {test, test}},
                 inst_status  = running
             } = Transition,
-            {ok, TrnNr}
+            {ok, InstId, TrnNr}
     end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
@@ -922,7 +926,7 @@ sync_send_event_reply_test() ->
                 trigger_resp = #msg_ref{id = {InstId, TrnNr, 1}, peer = {test, test}},
                 inst_status  = running
             } = Transition,
-            {ok, TrnNr}
+            {ok, InstId, TrnNr}
     end),
     ok = meck:expect(eproc_fsm__seq, handle_state, fun
         ([incrementing], {sync, From, get}, StateData) ->
@@ -967,7 +971,7 @@ unknown_message_test() ->
                 trigger_resp = undefined,
                 inst_status  = running
             } = Transition,
-            {ok, TrnNr}
+            {ok, InstId, TrnNr}
     end),
     ok = meck:expect(eproc_fsm__seq, handle_state, fun
         ([incrementing], {info, some_unknown_message}, StateData) ->
@@ -1045,8 +1049,44 @@ sync_send_create_event_test() ->
     ok = meck:unload([eproc_store, eproc_reg_gproc]).
 
 
+%%
+%%  Check if `kill/*` works.
+%%
+kill_test() ->
+    ok = meck:new(eproc_store, []),
+    ok = meck:new(eproc_reg_gproc, []),
+    ok = meck:expect(eproc_store, load_instance, fun
+        (store, {inst, 100}) ->
+            {ok, #instance{
+                id = 100, group = 200, name = name, module = eproc_fsm__seq,
+                args = {}, opts = [], init = {state, undefined}, status = running,
+                created = erlang:now(), transitions = []
+            }}
+    end),
+    ok = meck:expect(eproc_store, set_instance_killed, fun
+        (store, {inst, InstId = 100}, #user_action{user = <<"SomeUser">>, time = {_, _, _}, comment = <<"Hmm">>}) ->
+            {ok, InstId};
+        (store, {inst, unknown}, #user_action{}) ->
+            {error, not_found}
+    end),
+    {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
+    ok = meck:expect(eproc_reg_gproc, send, fun
+        ({fsm, reg_args, {inst, 100}}, Event = {'$gen_cast', _}) ->
+            PID ! Event
+    end),
+    {ok, Registry} = eproc_registry:ref(eproc_reg_gproc, reg_args),
+    ?assert(eproc_fsm:is_online(PID)),
+    ?assertEqual({error, bad_ref},   eproc_fsm:kill(PID,             [{store, store}, {registry, Registry}])),
+    ?assertEqual({error, not_found}, eproc_fsm:kill({inst, unknown}, [{store, store}, {registry, Registry}, {user, <<"SomeUser">>}])),
+    ?assertEqual(ok,                 eproc_fsm:kill({inst, 100},     [{store, store}, {registry, Registry}, {user, {<<"SomeUser">>, <<"Hmm">>}}])),
+    timer:sleep(100),
+    ?assertEqual(false, eproc_fsm:is_online(PID)),
+    ?assertEqual(2, meck:num_calls(eproc_store, set_instance_killed, '_')),
+    ?assertEqual(1, meck:num_calls(eproc_reg_gproc, send, '_')),
+    ?assert(meck:validate([eproc_store, eproc_reg_gproc])),
+    ok = meck:unload([eproc_store, eproc_reg_gproc]).
 
-% TODO: Check if kill/* works.
+
 % TODO: Check if suspend/* works.
 % TODO: Check if resume/* works.
 % TODO: Check if set_state/* works.

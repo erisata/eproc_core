@@ -78,6 +78,7 @@ inst_value() ->
 %%    * add_instance(unnamed), w/wo group.
 %%    * get_instance(), header.
 %%    * load_instance().
+%%    * set_instance_killed().
 %%
 %%  TODO:
 %%
@@ -111,6 +112,11 @@ test_unnamed_instance(Config) ->
     %%  Try to load instance data.
     {ok, LoadedInst = #instance{id = IID1, group = GRP1}} = eproc_store:load_instance(Store, {inst, IID1}),
     LoadedInst = Inst#instance{id = IID1, group = GRP1, transitions = []},
+    %%  Kill created instances.
+    {ok, IID1} = eproc_store:set_instance_killed(Store, {inst, IID1}, #user_action{}),
+    {ok, IID1} = eproc_store:set_instance_killed(Store, {inst, IID1}, #user_action{}),
+    {ok, IID2} = eproc_store:set_instance_killed(Store, {inst, IID2}, #user_action{}),
+    {error, not_found} = eproc_store:set_instance_killed(Store, {inst, some}, #user_action{}),
     ok.
 
 
