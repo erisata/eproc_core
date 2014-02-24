@@ -1087,7 +1087,46 @@ kill_test() ->
     ok = meck:unload([eproc_store, eproc_reg_gproc]).
 
 
-% TODO: Check if suspend/* works.
+%%
+%% Check if suspend/* works.
+%% TODO: Check id suspension on restart works.
+%%
+suspend_test() ->
+    ok = meck:new(eproc_store, []),
+    ok = meck:new(eproc_reg_gproc, []),
+    ok = meck:expect(eproc_store, load_instance, fun
+        (store, {inst, 100}) ->
+            {ok, #instance{
+                id = 100, group = 200, name = name, module = eproc_fsm__seq,
+                args = {}, opts = [], init = {state, undefined}, status = running,
+                created = erlang:now(), transitions = []
+            }}
+    end),
+    ok = meck:expect(eproc_store, set_instance_suspended, fun
+        (store, {inst, InstId = 100}, #user_action{user = <<"SomeUser">>, time = {_, _, _}, comment = <<"Hmm">>}) ->
+            {ok, InstId};
+        (store, {inst, unknown}, #user_action{}) ->
+            {error, not_found}
+    end),
+    {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
+    ok = meck:expect(eproc_reg_gproc, send, fun
+        ({fsm, reg_args, {inst, 100}}, Event = {'$gen_cast', _}) ->
+            PID ! Event
+    end),
+    {ok, Registry} = eproc_registry:ref(eproc_reg_gproc, reg_args),
+    ?assert(eproc_fsm:is_online(PID)),
+    ?assertEqual({error, bad_ref},   eproc_fsm:suspend(PID,             [{store, store}, {registry, Registry}])),
+    ?assertEqual({error, not_found}, eproc_fsm:suspend({inst, unknown}, [{store, store}, {registry, Registry}, {user, <<"SomeUser">>}])),
+    ?assertEqual(ok,                 eproc_fsm:suspend({inst, 100},     [{store, store}, {registry, Registry}, {user, {<<"SomeUser">>, <<"Hmm">>}}])),
+    timer:sleep(100),
+    ?assertEqual(false, eproc_fsm:is_online(PID)),
+    ?assertEqual(2, meck:num_calls(eproc_store, set_instance_suspended, '_')),
+    ?assertEqual(1, meck:num_calls(eproc_reg_gproc, send, '_')),
+    ?assert(meck:validate([eproc_store, eproc_reg_gproc])),
+    ok = meck:unload([eproc_store, eproc_reg_gproc]).
+
+
+
 % TODO: Check if resume/* works.
 % TODO: Check if set_state/* works.
 
