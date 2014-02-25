@@ -32,6 +32,7 @@
     add_transition/3,
     set_instance_killed/3,
     set_instance_suspended/3,
+    set_instance_resumed/4,
     load_instance/2,
     load_running/2
 ]).
@@ -200,6 +201,7 @@ set_instance_killed(_StoreArgs, FsmRef, UserAction) ->
             end
     end.
 
+
 %%
 %%  Mark instance as suspended.
 %%
@@ -218,6 +220,27 @@ set_instance_suspended(_StoreArgs, FsmRef, Reason) ->
                     {ok, InstId}
             end
     end.
+
+
+%%
+%%  Mark instance as running after it was suspended.
+%%
+set_instance_resumed(_StoreArgs, FsmRef, UserAction, TransitionFun) ->
+    case read_instance(FsmRef, current) of
+        {error, Reason} ->
+            {error, Reason};
+        {ok, Instance = #instance{id = InstId, status = Status, start_spec = StartSpec}} ->
+            case {is_instance_terminated(Status), Status} of
+                {true, _} ->
+                    {error, terminated};
+                {false, running} ->
+                    {error, running};
+                {false, suspended} ->
+                    ok = write_instance_resumed(Instance, UserAction, TransitionFun),
+                    {ok, InstId, StartSpec}
+            end
+    end.
+
 
 %%
 %%  Loads instance data for runtime.
@@ -345,8 +368,43 @@ write_instance_suspended(#instance{id = InstId, transitions = Transitions}, Reas
         upd_attrs   = undefined,
         resumed     = undefined
     },
-    true = ets:insert_new(?SUSP_TBL, InstSuspension),
+    true = ets:insert(?SUSP_TBL, InstSuspension),
     ok.
+
+
+%%
+%%  Mark instance as resumed.
+%%
+write_instance_resumed(Instance = #instance{id = InstId, transitions = Transitions}, UserAction, TransitionFun) ->
+    TrnNr = case Transitions of
+        [] -> 0;
+        [#transition{number = N}] -> N
+    end,
+    [InstSusp] = ets:match_object(?SUSP_TBL, #inst_susp{
+        inst_id = InstId,
+        trn_nr = TrnNr,
+        resumed = undefined,
+        _ = '_'
+    }),
+    TrnAdded = case TransitionFun(Instance, InstSusp) of
+        none ->
+            ok;
+        {add, NewTransition, NewMessage} ->
+            true = ets:insert(?TRN_TBL, NewTransition),
+            true = ets:insert(?MSG_TBL, NewMessage),
+            ok;
+        {error, TrnFailReason} ->
+            {error, TrnFailReason}
+    end,
+    case TrnAdded of
+        ok ->
+            true = ets:update_element(?INST_TBL, InstId, {#instance.status, running}),
+            true = ets:delete_object(?SUSP_TBL, InstSusp),
+            true = ets:insert(?SUSP_TBL, InstSusp#inst_susp{resumed = UserAction}),
+            ok;
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 
 %%

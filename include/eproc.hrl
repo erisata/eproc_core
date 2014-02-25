@@ -181,19 +181,19 @@
 
 
 %%
-%%  Describes a manual state update.
-%%  An administrator can update the process state and its
-%%  atributes while the FSM is in the suspended mode.
+%%  Describes single process suspend action and a manual state update.
+%%  An administrator can update the process state and its atributes
+%%  while the FSM is in the suspended mode.
 %%
-%%  The suspension record is only needed on startup, if it has
-%%  `Updated =/= undefined` for the current transition. When starting
-%%  the FSM with such a record present, new transition will be created
-%%  with the `sname` and `sdata` copied from it. This way the suspension
-%%  record will became not active (not referring the last transition).
+%%  The `inst_susp` record is not used in runtime. This record collects
+%%  information (state updates) while FSM is suspended. When resuming
+%%  the FSM, the `inst_susp` record is updated by providing value for the
+%%  `resumed` field (become closed). If the state was updated by the
+%%  administrator while the FSM was suspended, new transition is created
+%%  on resume with updated state data.
 %%
-%%  If resume is failing due to updated data or attribute actions, the process
-%%  is marked as suspended again, but no new suspension record is created.
-%%  The failure will be appended to the list of resume failures ('res_faults').
+%%  Suspend instances are not numbered. The active record should be
+%%  recognized by `resumed =:= undefined`.
 %%
 -record(inst_susp, {
     id          :: integer(),       %% Suspension ID, must not be used for record sorting.
@@ -205,12 +205,9 @@
     upd_sname   :: term() | undefined,          %% FSM state name set by an administrator.
     upd_sdata   :: term() | undefined,          %% FSM state data set by an administrator.
     upd_attrs   :: [#attr_action{}] | undefined,%% Manual attribute changes.
-    resumed     :: [{                           %% Multiple attempts to resume prcess can exist.
-        #user_action{},                         %% Who, when, why resumed the FSM.
-        FailTime :: timestamp() | undefined,    %% Failure timestamp, if any.
-        FailReason :: term()                    %% Failure description.
-    }]
+    resumed     :: #user_action{} | undefined   %% Who, when, why resumed the FSM.
 }).
+
 
 %%
 %%  Describes single transition of a particular instance.

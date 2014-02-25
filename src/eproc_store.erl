@@ -28,7 +28,7 @@
     add_transition/3,
     set_instance_killed/3,
     set_instance_suspended/3,
-    set_instance_resumed/3,
+    set_instance_resumed/4,
     set_instance_state/5,
     load_instance/2,
     load_running/2
@@ -94,6 +94,25 @@
         Reason      :: #user_action{} | {fault, Reason :: term()} | {impl, Reason :: binary()}
     ) ->
         {ok, inst_id()}.
+
+
+%%
+%%  TODO: Describe, what should be done here.
+%%
+-callback set_instance_resumed(
+        StoreArgs   :: term(),
+        FsmRef      :: fsm_ref(),
+        UserAction  :: #user_action{},
+        TransitionFun
+    ) ->
+        {ok, inst_id(), fsm_start_spec()} |
+        {error, running} |
+        {error, Reason :: term()}
+    when
+        TransitionFun :: fun (
+                (#instance{}, #inst_susp{}) ->
+                (none | {add, #transition{}, #message{}} | {error, term()})
+            ).
 
 
 %%
@@ -215,11 +234,11 @@ set_instance_suspended(Store, FsmRef, Reason) ->
 
 
 %%
-%%  TODO
+%%  Marks an FSM as running after it was suspended.
 %%
-set_instance_resumed(Store, FsmRef, UserAction) ->
+set_instance_resumed(Store, FsmRef, UserAction, TransitionFun) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:set_instance_resumed(StoreArgs, FsmRef, UserAction).
+    StoreMod:set_instance_resumed(StoreArgs, FsmRef, UserAction, TransitionFun).
 
 
 %%

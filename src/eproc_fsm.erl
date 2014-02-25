@@ -144,7 +144,8 @@
     send_create_event/4, sync_send_create_event/4,
     send_event/3, send_event/2,
     sync_send_event/3, sync_send_event/2,
-    kill/2, suspend/2, resume/2, set_state/4, is_online/2, is_online/1
+    kill/2, suspend/2, resume/2, set_state/4,
+    is_online/2, is_online/1
 ]).
 
 %%
@@ -1097,13 +1098,13 @@ resume(FsmRef, Options) ->
         true ->
             Store = resolve_store(Options),
             UserAction = resolve_user_action(Options),
-            case eproc_store:set_instance_resumed(Store, FsmRef, UserAction) of
-                {error, running} ->
-                    ok;
+            case eproc_store:set_instance_resumed(Store, FsmRef, UserAction, fun resume_transition/2) of
                 {ok, InstId, StartSpec} ->
                     Registry = resolve_registry(Options),
                     {ok, ResolvedFsmRef} = eproc_registry:make_new_fsm_ref(Registry, {inst, InstId}, StartSpec),
                     true = gen_server:call(ResolvedFsmRef, {'eproc_fsm$is_online'}),
+                    ok;
+                {error, running} ->
                     ok;
                 {error, Reason} ->
                     {error, Reason}
@@ -1997,6 +1998,72 @@ create_prepare_send(Module, Args, Options) ->
     {ok, StartSpec} = resolve_start_spec(CreateOpts),
     {ok, NewFsmRef} = eproc_registry:make_new_fsm_ref(Registry, FsmRef, StartSpec),
     {ok, FsmRef, NewFsmRef, AllSendOpts}.
+
+
+%%
+%%  Creates a resume transition. This function is passed to a store
+%%  as a parameter for `set_instance_suspended` function.
+%%
+%%  NOTE: Runtime field is intentionally left unchanged here.
+%%
+resume_transition(#instance{}, #inst_susp{updated = undefined}) ->
+    none;
+
+resume_transition(Instance, InstSusp) ->
+    #instance{
+        id = InstId,
+        transitions = Transitions
+    } = Instance,
+    #inst_susp{
+        upd_sname = UpdSName,
+        upd_sdata = UpdSData,
+        upd_attrs = UpdAttrs,
+        resumed = #user_action{user = User}
+    } = InstSusp,
+    case upgrade_state(Instance, UpdSName, UpdSData) of
+        {ok, CheckedSName, CheckedSData} ->
+            NewAttrIds = [ X || #attr_action{attr_id = X} <- UpdAttrs],
+            {TrnNr, LastAttrId} = case Transitions of
+                [] ->
+                    {1, lists:max(NewAttrIds)};
+                [#transition{number = N, attr_last_id = ALID}] ->
+                    {N + 1, lists:max([ALID | NewAttrIds])}
+            end,
+            Now = erlang:now(),
+            TriggerSrc = {admin, User},
+            MsgId = {InstId, TrnNr, 0},
+            MsgRef = #msg_ref{id = MsgId, peer = TriggerSrc},
+            NewTransition = #transition{
+                inst_id = InstId,
+                number = TrnNr,
+                sname = CheckedSName,
+                sdata = CheckedSData,
+                timestamp = Now,
+                duration = 0,
+                trigger_type = admin,
+                trigger_msg  = MsgRef,
+                trigger_resp = undefined,
+                trn_messages = [],
+                attr_last_id = LastAttrId,
+                attr_actions = UpdAttrs,
+                attrs_active = undefined,
+                inst_status  = running,
+                inst_suspend = undefined
+            },
+            NewMessage = #message{
+                id       = MsgId,
+                sender   = TriggerSrc,
+                receiver = {inst, InstId},
+                resp_to  = undefined,
+                date     = Now,
+                body     = resume
+            },
+            {add, NewTransition, NewMessage};
+        {error, Reason} ->
+            {error, Reason};
+        _ ->
+            {error, bad_state}
+    end.
 
 
 
