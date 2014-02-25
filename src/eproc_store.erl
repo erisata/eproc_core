@@ -246,7 +246,7 @@ set_instance_resumed(Store, FsmRef, UserAction, TransitionFun) ->
 %%
 set_instance_state(Store, FsmRef, UserAction, StateName, StateData) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:set_instance_resumed(StoreArgs, FsmRef, UserAction, StateName, StateData).
+    StoreMod:set_instance_state(StoreArgs, FsmRef, UserAction, StateName, StateData).
 
 
 %%

@@ -386,7 +386,8 @@ write_instance_resumed(Instance = #instance{id = InstId, transitions = Transitio
         resumed = undefined,
         _ = '_'
     }),
-    TrnAdded = case TransitionFun(Instance, InstSusp) of
+    NewInstSusp = InstSusp#inst_susp{resumed = UserAction},
+    TrnAdded = case TransitionFun(Instance, NewInstSusp) of
         none ->
             ok;
         {add, NewTransition, NewMessage} ->
@@ -400,7 +401,7 @@ write_instance_resumed(Instance = #instance{id = InstId, transitions = Transitio
         ok ->
             true = ets:update_element(?INST_TBL, InstId, {#instance.status, running}),
             true = ets:delete_object(?SUSP_TBL, InstSusp),
-            true = ets:insert(?SUSP_TBL, InstSusp#inst_susp{resumed = UserAction}),
+            true = ets:insert(?SUSP_TBL, NewInstSusp),
             ok;
         {error, Reason} ->
             {error, Reason}

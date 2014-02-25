@@ -272,6 +272,7 @@
     {mfa, {Module :: module(), Function :: atom(), Args :: list()}}.
 
 
+
 %% =============================================================================
 %%  Callback definitions.
 %% =============================================================================
@@ -295,6 +296,7 @@
         {ok, StateData}
     when
         StateData :: state_data().
+
 
 %%
 %%  This function is invoked on each (re)start of the FSM. On the first start
@@ -331,6 +333,7 @@
     when
         RuntimeField :: integer(),
         RuntimeData :: state_data().
+
 
 %%
 %%  This function handles events coming to the FSM. It is also used
@@ -459,6 +462,7 @@
     ) ->
         Term :: term().
 
+
 %%
 %%  This callback is used to handle code upgrades. Its use is similar to one,
 %%  specified for the `gen_fsm`, except that its use is extended in this module.
@@ -487,13 +491,16 @@
         Extra       :: {advanced, Extra} | undefined
     ) ->
         {ok, NextStateName, NewStateData} |
-        {ok, NextStateName, NewStateData, RuntimeField}
+        {ok, NextStateName, NewStateData, RuntimeField} |
+        {error, Reason}
     when
         Vsn     :: term(),
         Extra   :: term(),
         NextStateName :: state_name(),
         NewStateData  :: state_data(),
-        RuntimeField  :: integer().
+        RuntimeField  :: integer(),
+        Reason        :: term().
+
 
 %%
 %%  This function is used to format internal FSM state in some specific way.
@@ -1698,7 +1705,9 @@ upgrade_state(#instance{module = Module}, SName, SData) ->
             {ok, NextSName, NewSData};
         {ok, NextSName, NewSData, _RTField} ->
             lager:warning("Runtime field is returned from the code_change/4, but it will be overriden in init/2."),
-            {ok, NextSName, NewSData}
+            {ok, NextSName, NewSData};
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 
