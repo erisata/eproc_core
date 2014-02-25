@@ -2069,9 +2069,7 @@ resume_transition(Instance, InstSusp) ->
             },
             {add, NewTransition, NewMessage};
         {error, Reason} ->
-            {error, Reason};
-        _ ->
-            {error, bad_state}
+            {error, Reason}
     end.
 
 
