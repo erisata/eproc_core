@@ -29,7 +29,7 @@
     set_instance_killed/3,
     set_instance_suspended/3,
     set_instance_resumed/4,
-    set_instance_state/5,
+    set_instance_state/6,
     load_instance/2,
     load_running/2
 ]).
@@ -113,6 +113,21 @@
                 (#instance{}, #inst_susp{}) ->
                 (none | {add, #transition{}, #message{}} | {error, term()})
             ).
+
+
+%%
+%%  TODO: Describe, what should be done here.
+%%
+-callback set_instance_state(
+        StoreArgs   :: term(),
+        FsmRef      :: fsm_ref(),
+        UserAction  :: #user_action{},
+        StateName   :: term(),
+        StateData   :: term(),
+        AttrActions :: [#attr_action{}]
+    ) ->
+        {ok, inst_id()} |
+        {error, Reason :: term()}.
 
 
 %%
@@ -242,11 +257,11 @@ set_instance_resumed(Store, FsmRef, UserAction, TransitionFun) ->
 
 
 %%
-%%  TODO
+%%  Updates state "manually" for a suspended FSM.
 %%
-set_instance_state(Store, FsmRef, UserAction, StateName, StateData) ->
+set_instance_state(Store, FsmRef, UserAction, StateName, StateData, AttrActions) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:set_instance_state(StoreArgs, FsmRef, UserAction, StateName, StateData).
+    StoreMod:set_instance_state(StoreArgs, FsmRef, UserAction, StateName, StateData, AttrActions).
 
 
 %%

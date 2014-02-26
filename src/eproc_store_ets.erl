@@ -33,6 +33,7 @@
     set_instance_killed/3,
     set_instance_suspended/3,
     set_instance_resumed/4,
+    set_instance_state/6,
     load_instance/2,
     load_running/2
 ]).
@@ -207,8 +208,8 @@ set_instance_killed(_StoreArgs, FsmRef, UserAction) ->
 %%
 set_instance_suspended(_StoreArgs, FsmRef, Reason) ->
     case read_instance(FsmRef, current) of
-        {error, Reason} ->
-            {error, Reason};
+        {error, FailReason} ->
+            {error, FailReason};
         {ok, Instance = #instance{id = InstId, status = Status}} ->
             case {is_instance_terminated(Status), Status} of
                 {true, _} ->
@@ -227,8 +228,8 @@ set_instance_suspended(_StoreArgs, FsmRef, Reason) ->
 %%
 set_instance_resumed(_StoreArgs, FsmRef, UserAction, TransitionFun) ->
     case read_instance(FsmRef, current) of
-        {error, Reason} ->
-            {error, Reason};
+        {error, FailReason} ->
+            {error, FailReason};
         {ok, Instance = #instance{id = InstId, status = Status, start_spec = StartSpec}} ->
             case {is_instance_terminated(Status), Status} of
                 {true, _} ->
@@ -236,8 +237,32 @@ set_instance_resumed(_StoreArgs, FsmRef, UserAction, TransitionFun) ->
                 {false, running} ->
                     {error, running};
                 {false, suspended} ->
-                    ok = write_instance_resumed(Instance, UserAction, TransitionFun),
-                    {ok, InstId, StartSpec}
+                    case write_instance_resumed(Instance, UserAction, TransitionFun) of
+                        ok                  -> {ok, InstId, StartSpec};
+                        {error, FailReason} -> {error, FailReason}
+                    end
+            end
+    end.
+
+
+%%
+%%  Update state for a suspended FSM.
+%%
+set_instance_state(_StoreArgs, FsmRef, UserAction, StateName, StateData, AttrActions) ->
+    case read_instance(FsmRef, current) of
+        {error, FailReason} ->
+            {error, FailReason};
+        {ok, Instance = #instance{id = InstId, status = Status}} ->
+            case {is_instance_terminated(Status), Status} of
+                {true, _} ->
+                    {error, terminated};
+                {false, running} ->
+                    {error, running};
+                {false, suspended} ->
+                    case write_instance_status_update(Instance, UserAction, StateName, StateData, AttrActions) of
+                        ok                  -> {ok, InstId};
+                        {error, FailReason} -> {error, FailReason}
+                    end
             end
     end.
 
@@ -328,6 +353,26 @@ read_transitions(#instance{id = InstId}, last) ->
 
 
 %%
+%%  Reads currently active instance suspend record.
+%%
+read_active_inst_susp(#instance{id = InstId, transitions = Transitions}) ->
+    TrnNr = case Transitions of
+        [] -> 0;
+        [#transition{number = N}] -> N
+    end,
+    Pattern = #inst_susp{
+        inst_id = InstId,
+        trn_nr = TrnNr,
+        resumed = undefined,
+        _ = '_'
+    },
+    case ets:match_object(?SUSP_TBL, Pattern) of
+        [InstSusp] -> {ok, InstSusp};
+        [] -> {error, not_found}
+    end.
+
+
+%%
 %%  Mark instance as terminated.
 %%
 write_instance_terminated(#instance{id = InstId, name = Name}, Status, Reason) ->
@@ -375,17 +420,8 @@ write_instance_suspended(#instance{id = InstId, transitions = Transitions}, Reas
 %%
 %%  Mark instance as resumed.
 %%
-write_instance_resumed(Instance = #instance{id = InstId, transitions = Transitions}, UserAction, TransitionFun) ->
-    TrnNr = case Transitions of
-        [] -> 0;
-        [#transition{number = N}] -> N
-    end,
-    [InstSusp] = ets:match_object(?SUSP_TBL, #inst_susp{
-        inst_id = InstId,
-        trn_nr = TrnNr,
-        resumed = undefined,
-        _ = '_'
-    }),
+write_instance_resumed(Instance = #instance{id = InstId}, UserAction, TransitionFun) ->
+    {ok, InstSusp} = read_active_inst_susp(Instance),
     NewInstSusp = InstSusp#inst_susp{resumed = UserAction},
     TrnAdded = case TransitionFun(Instance, NewInstSusp) of
         none ->
@@ -409,16 +445,46 @@ write_instance_resumed(Instance = #instance{id = InstId, transitions = Transitio
 
 
 %%
+%%  Update instance state "manually".
+%%
+write_instance_status_update(Instance, UserAction, StateName, StateData, AttrActions) ->
+    {ok, InstSusp} = read_active_inst_susp(Instance),
+    NewInstSusp = InstSusp#inst_susp{
+        updated = UserAction,
+        upd_sname = StateName,
+        upd_sdata = StateData,
+        upd_attrs = AttrActions % TODO: Handle them somehow.
+    },
+    true = ets:delete_object(?SUSP_TBL, InstSusp),
+    true = ets:insert(?SUSP_TBL, NewInstSusp),
+    ok.
+
+
+%%
 %%  Replay all attribute actions, from all transitions.
+%%  Designed to be used with `lists:foldl`.
 %%  TODO: Move this function to `eproc_store`.
 %%
 aggregate_attrs(Transition, undefined) ->
     #transition{inst_id = InstId, number = TrnNr, attr_actions = AttrActions} = Transition,
-    Transition#transition{attrs_active = apply_attr_action(AttrActions, [], InstId, TrnNr)};
+    Transition#transition{attrs_active = apply_attr_actions(AttrActions, [], InstId, TrnNr)};
 
 aggregate_attrs(Transition, #transition{attrs_active = AttrsActive}) ->
     #transition{inst_id = InstId, number = TrnNr, attr_actions = AttrActions} = Transition,
-    Transition#transition{attrs_active = apply_attr_action(AttrActions, AttrsActive, InstId, TrnNr)}.
+    Transition#transition{attrs_active = apply_attr_actions(AttrActions, AttrsActive, InstId, TrnNr)}.
+
+
+%%
+%%  Helper for `aggregate_attrs`.
+%%
+apply_attr_actions(undefined, Attrs, _InstId, _TrnNr) ->
+    Attrs;
+
+apply_attr_actions(AttrActions, Attrs, InstId, TrnNr) ->
+    FoldFun = fun (Act, Lst) ->
+        apply_attr_action(Act, Lst, InstId, TrnNr)
+    end,
+    lists:foldl(FoldFun, Attrs, AttrActions).
 
 
 %%
@@ -458,10 +524,10 @@ apply_attr_action(#attr_action{module = Module, attr_id = AttrId, action = Actio
 %%
 %%  Checks if instance is terminated by status.
 %%
-is_instance_terminated(running) -> false;
-is_instance_terminated(suspend) -> false;
-is_instance_terminated(done)    -> true;
-is_instance_terminated(failed)  -> true;
-is_instance_terminated(killed)  -> true.
+is_instance_terminated(running)   -> false;
+is_instance_terminated(suspended) -> false;
+is_instance_terminated(done)      -> true;
+is_instance_terminated(failed)    -> true;
+is_instance_terminated(killed)    -> true.
 
 
