@@ -22,12 +22,19 @@
 %%  Test primitive encoding rules.
 %%
 encode_test() ->
-    {ok, <<"<integer>1</integer>">>} = eproc_codec_xml:encode(1),
-    {ok, <<"<atom>asd</atom>">>}     = eproc_codec_xml:encode(asd),
-    {ok, <<"<string>asd</string>">>} = eproc_codec_xml:encode("asd"),
-    {ok, <<"<tuple></tuple>">>}      = eproc_codec_xml:encode({}),
-    {ok, <<"<list></list>">>}        = eproc_codec_xml:encode([]),
-    {ok, <<"<binary>asd</binary>">>} = eproc_codec_xml:encode(<<"asd">>),
+    {ok, Codec}= eproc_codec:ref(eproc_codec_xml, []),
+    {ok, Xml1} = eproc_codec:encode(Codec, 1),
+    {ok, Xml2} = eproc_codec:encode(Codec, asd),
+    {ok, Xml3} = eproc_codec:encode(Codec, "asd"),
+    {ok, Xml4} = eproc_codec:encode(Codec, {}),
+    {ok, Xml5} = eproc_codec:encode(Codec, []),
+    {ok, Xml6} = eproc_codec:encode(Codec, <<"asd">>),
+    ?assertEqual("<?xml version=\"1.0\"?><integer>1</integer>", lists:flatten(Xml1)),
+    ?assertEqual("<?xml version=\"1.0\"?><atom>asd</atom>", lists:flatten(Xml2)),
+    ?assertEqual("<?xml version=\"1.0\"?><string>asd</string>", lists:flatten(Xml3)),
+    ?assertEqual("<?xml version=\"1.0\"?><tuple/>", lists:flatten(Xml4)),
+    ?assertEqual("<?xml version=\"1.0\"?><list/>", lists:flatten(Xml5)),
+    ?assertEqual("<?xml version=\"1.0\"?><binary>asd</binary>", lists:flatten(Xml6)),
     ok.
 
 

@@ -19,19 +19,19 @@
 %%
 -module(eproc_codec_xml).
 -behaviour(eproc_codec).
--export([encode/1, decode/1]).
+-export([encode/2, decode/1]).
 
 
 %% =============================================================================
-%%  Public API.
+%%  Callbacks for `eproc_codec`.
 %% =============================================================================
 
 %%
 %%  Encode term to XML.
 %%
-encode(_Term) ->
-    % TODO: Implement.
-    {error, not_implemented}.
+encode(_CodecArgs, Term) ->
+    Xml = xmerl:export_simple([encode(Term)], xmerl_xml),
+    {ok, Xml}.
 
 
 %%
@@ -47,3 +47,24 @@ decode(_Xml) ->
 %%  Internal functions.
 %% =============================================================================
 
+encode(Term) when is_tuple(Term) ->
+    L = tuple_to_list(Term),
+    {tuple, [encode(E) || E <- L]};
+    
+encode(Term = [H | _]) when is_integer(H), H < 256 ->
+    {string, [Term]};
+
+encode(Term) when is_list(Term) ->
+    {list, [encode(E) || E <- Term]};
+    
+encode(Term) when is_atom(Term) ->
+    A = atom_to_list(Term),
+    {atom, [A]};
+
+encode(Term) when is_integer(Term) ->
+    I = integer_to_list(Term),
+    {integer, [I]};
+    
+encode(Term) when is_binary(Term) ->
+    B = binary_to_list(Term),
+    {binary, [B]}.
