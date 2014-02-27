@@ -15,3 +15,23 @@
 %\--------------------------------------------------------------------
 
 -module(eproc_codec).
+
+
+
+-callback encode(
+        CodecArgs   :: term(),
+        Term        :: term()
+    ) ->
+        {ok, Encoded :: iolist()} |
+        {error, Reason :: term()}.
+
+
+-callback decode(
+        CodecArgs   :: term(),
+        Encoded     :: iolist()
+    ) ->
+        {ok, Term :: term()} |
+        {error, Reason :: term()}.
+
+
+

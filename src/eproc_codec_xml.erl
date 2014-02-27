@@ -18,6 +18,7 @@
 %%  Encodes / decodes erlang terms to/from XML using xmerl.
 %%
 -module(eproc_codec_xml).
+-behaviour(eproc_codec).
 -export([encode/1, decode/1]).
 
 
