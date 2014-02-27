@@ -15,8 +15,18 @@
 %\--------------------------------------------------------------------
 
 -module(eproc_codec).
+-compile([{parse_transform, lager_transform}]).
+-export([ref/2]).
+-export([encode/2, decode/2]).
+-export_type([ref/0]).
+-include("eproc.hrl").
+
+-opaque ref() :: {Callback :: module(), Args :: term()}.
 
 
+%% =============================================================================
+%%  Callback definitions.
+%% =============================================================================
 
 -callback encode(
         CodecArgs   :: term(),
@@ -33,5 +43,46 @@
         {ok, Term :: term()} |
         {error, Reason :: term()}.
 
+
+%% =============================================================================
+%%  Public API.
+%% =============================================================================
+
+%%
+%%  Create a codec reference.
+%%
+-spec ref(module(), term()) -> {ok, codec_ref()}.
+
+ref(Module, Args) ->
+    {ok, {Module, Args}}.
+
+
+%%
+%%
+%%
+encode(Codec, Term) ->
+    {ok, {CodecMod, CodecArgs}} = resolve_ref(Codec),
+    CodecMod:encode(CodecArgs, Term).
+
+
+%%
+%%
+%%
+decode(Codec, Encoded) ->
+    {ok, {CodecMod, CodecArgs}} = resolve_ref(Codec),
+    CodecMod:decode(CodecArgs, Encoded).
+
+
+
+%% =============================================================================
+%%  Internal functions.
+%% =============================================================================
+
+
+%%
+%%  Resolve the provided codec reference.
+%%
+resolve_ref({CodecMod, CodecArgs}) ->
+    {ok, {CodecMod, CodecArgs}}.
 
 
