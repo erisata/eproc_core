@@ -14,6 +14,10 @@
 %| limitations under the License.
 %\--------------------------------------------------------------------
 
+%%
+%%  Main interface for codecs. Codecs are used to convert Erlang terms
+%%  to some external format and vice versa.
+%%
 -module(eproc_codec).
 -compile([{parse_transform, lager_transform}]).
 -export([ref/2]).
@@ -28,6 +32,9 @@
 %%  Callback definitions.
 %% =============================================================================
 
+%%
+%%  Encode term to an external format (iolist).
+%%
 -callback encode(
         CodecArgs   :: term(),
         Term        :: term()
@@ -36,12 +43,16 @@
         {error, Reason :: term()}.
 
 
+%%
+%%  Decode term from an external format (iolist).
+%%
 -callback decode(
         CodecArgs   :: term(),
         Encoded     :: iolist()
     ) ->
         {ok, Term :: term()} |
         {error, Reason :: term()}.
+
 
 
 %% =============================================================================
@@ -58,7 +69,7 @@ ref(Module, Args) ->
 
 
 %%
-%%
+%%  Encode term to an external format (iolist).
 %%
 encode(Codec, Term) ->
     {ok, {CodecMod, CodecArgs}} = resolve_ref(Codec),
@@ -66,7 +77,7 @@ encode(Codec, Term) ->
 
 
 %%
-%%
+%%  Decode term from an external format (iolist).
 %%
 decode(Codec, Encoded) ->
     {ok, {CodecMod, CodecArgs}} = resolve_ref(Codec),
