@@ -2031,10 +2031,15 @@ resume_transition(Instance, InstSusp) ->
     } = InstSusp,
     case upgrade_state(Instance, UpdSName, UpdSData) of
         {ok, CheckedSName, CheckedSData} ->
-            NewAttrIds = [ X || #attr_action{attr_id = X} <- UpdAttrs],
+            {ok, NewAttrActions, NewLastAttrId} = eproc_fsm_attr:resumed(
+                InstId, TrnNr, NextSName,
+                ActionSpecs, LastAttrId, ActiveAttrs
+            ),
+            %{ok, AAA} = eproc_fsm_attr:resume_attrs(), %TODO
+            %NewAttrIds = [ X || #attr_action{attr_id = X} <- UpdAttrs],
             {TrnNr, LastAttrId} = case Transitions of
                 [] ->
-                    {1, lists:max(NewAttrIds)};
+                    {1, lists:max(NewAttrIds)}; % TODO: Numbering
                 [#transition{number = N, attr_last_id = ALID}] ->
                     {N + 1, lists:max([ALID | NewAttrIds])}
             end,

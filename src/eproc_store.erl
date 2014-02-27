@@ -97,7 +97,20 @@
 
 
 %%
-%%  TODO: Describe, what should be done here.
+%%  This function is invoked when the FSM is resumed. It should
+%%  change data only if the current status of the FSM is `suspended`.
+%%  The following cases shoud be handled here:
+%%
+%%   1. State was not updated while FSM was suspended. In this case
+%%      the FSM status should be changed to "running" and the `inst_susp`
+%%      record should be closed by setting the `resumed` field.
+%%
+%%   2. State was updated while FSM was suspended. In this case the
+%%      FSM status should be left unchanged (`suspended`) and the
+%%      `inst_susp` should be closed by adding the user action to the
+%%      front of the resume list. The FSM status will be changed later
+%%      with invokation of `add_transition`, used to create new transition
+%%      reflecting updated state.
 %%
 -callback set_instance_resumed(
         StoreArgs   :: term(),
@@ -106,7 +119,7 @@
         TransitionFun
     ) ->
         {ok, inst_id(), fsm_start_spec()} |
-        {error, running} |
+        {error, not_found | running | terminated} |
         {error, Reason :: term()}
     when
         TransitionFun :: fun (

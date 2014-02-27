@@ -174,3 +174,11 @@ event_test() ->
     meck:unload([Mod]).
 
 
+
+%%
+%%  Check if resume works.
+%%
+resume_test() ->
+    ?assert(todo).
+
+

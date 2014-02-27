@@ -234,6 +234,15 @@ event(_Event, _State) ->
     unknown.
 
 
+%%
+%%  Invoked, when the FSM is being resumed.
+%%
+resumed(InstId, TrnNr, NextSName, ActionSpecs, LastAttrId, ActiveAttrs) ->
+
+
+    {ok, NewActions, NewAttrId}.
+
+
 
 %% =============================================================================
 %%  Internal functions.

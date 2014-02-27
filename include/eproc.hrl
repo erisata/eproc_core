@@ -183,17 +183,34 @@
 %%
 %%  Describes single process suspend action and a manual state update.
 %%  An administrator can update the process state and its atributes
-%%  while the FSM is in the suspended mode.
+%%  while the FSM is in the suspended mode. This record collect these changes.
 %%
-%%  The `inst_susp` record is not used in runtime. This record collects
+%%  TODO: The `inst_susp` record is not used in runtime. This record collects
 %%  information (state updates) while FSM is suspended. When resuming
 %%  the FSM, the `inst_susp` record is updated by providing value for the
 %%  `resumed` field (become closed). If the state was updated by the
 %%  administrator while the FSM was suspended, new transition is created
 %%  on resume with updated state data.
 %%
-%%  Suspend instances are not numbered. The active record should be
+%%  TODO: Suspend instances are not numbered. The active record should be
 %%  recognized by `resumed =:= undefined`.
+%%
+%%
+%%  An instance of this record is considered active if:
+%%
+%%    * It is for the current (last) transition
+%%    * AND updated = #user_action{}
+%%    * OR resumed = []
+%%
+%%  I.e, the record is inactive if:
+%%
+%%    * updated == undefined && resumed = [_|_]
+%%    * updated == #user_action{}
+%%
+%%  TODO: How to identify all suspends and all resumes.
+%%  TODO: Do we need an order in suspensions? Maybe auto numbering and links to older version?
+%%
+%%  TODO: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 %%
 -record(inst_susp, {
     id          :: integer(),       %% Suspension ID, must not be used for record sorting.

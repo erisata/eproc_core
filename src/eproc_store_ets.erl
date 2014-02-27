@@ -180,6 +180,7 @@ add_transition(_StoreArgs, Transition, Messages) ->
             ok = write_instance_terminated(Instance, Status, normal)
     end,
 
+    ok = handle_attr_actions(Instance, Transition, Messages),
     true = ets:insert(?TRN_TBL, Transition),
     [ true = ets:insert(?MSG_TBL, Message) || Message <- Messages],
     {ok, InstId, TrnNr}.
@@ -427,6 +428,7 @@ write_instance_resumed(Instance = #instance{id = InstId}, UserAction, Transition
         none ->
             ok;
         {add, NewTransition, NewMessage} ->
+            ok = handle_attr_actions(Instance, NewTransition, [NewMessage]),
             true = ets:insert(?TRN_TBL, NewTransition),
             true = ets:insert(?MSG_TBL, NewMessage),
             ok;
@@ -453,7 +455,7 @@ write_instance_status_update(Instance, UserAction, StateName, StateData, AttrAct
         updated = UserAction,
         upd_sname = StateName,
         upd_sdata = StateData,
-        upd_attrs = AttrActions % TODO: Handle them somehow.
+        upd_attrs = AttrActions
     },
     true = ets:delete_object(?SUSP_TBL, InstSusp),
     true = ets:insert(?SUSP_TBL, NewInstSusp),
@@ -529,5 +531,12 @@ is_instance_terminated(suspended) -> false;
 is_instance_terminated(done)      -> true;
 is_instance_terminated(failed)    -> true;
 is_instance_terminated(killed)    -> true.
+
+
+%%
+%%  TODO: Handle all attribute actions of the transition.
+%%
+handle_attr_actions(Instance, Transition, Messages) ->
+    ok.
 
 
