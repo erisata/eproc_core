@@ -269,7 +269,7 @@
 %%
 -opaque start_spec()  ::
     {default, StartOpts :: list()} |
-    {mfa, {Module :: module(), Function :: atom(), Args :: list()}}.
+    {mfa, MFArgs ::mfargs()}.
 
 
 
@@ -1099,13 +1099,16 @@ suspend(FsmRef, Options) ->
         {error, Reason :: term()}.
 
 resume(FsmRef, Options) ->
+    %%
+    %%  TODO: Check if not online, before resuming.
+    %%
     case is_fsm_ref(FsmRef) of
         false ->
             {error, bad_ref};
         true ->
             Store = resolve_store(Options),
             UserAction = resolve_user_action(Options),
-            case eproc_store:set_instance_resumed(Store, FsmRef, UserAction, fun resume_transition/2) of
+            case eproc_store:set_instance_resumed(Store, FsmRef, UserAction) of
                 {ok, InstId, StartSpec} ->
                     Registry = resolve_registry(Options),
                     {ok, ResolvedFsmRef} = eproc_registry:make_new_fsm_ref(Registry, {inst, InstId}, StartSpec),
@@ -1308,7 +1311,8 @@ handle_call({'eproc_fsm$sync_send_event', Event, EventSrc}, From, State) ->
         reply_fun = fun (R) -> gen_server:reply(From, R), ok end,
         src_arg = false
     },
-    case perform_transition(Trigger, [], State) of
+    TransitionFun = fun (Trg, St) -> perform_event_transition(Trg, [], St) end,
+    case perform_transition(Trigger, TransitionFun, State) of
         {cont, noreply,        NewState} -> {noreply, NewState};
         {cont, {reply, Reply}, NewState} -> {reply, Reply, NewState};
         {stop, noreply,        NewState} -> shutdown(NewState);
@@ -1329,7 +1333,8 @@ handle_cast({'eproc_fsm$send_event', Event, EventSrc}, State) ->
         reply_fun = undefined,
         src_arg = false
     },
-    case perform_transition(Trigger, [], State) of
+    TransitionFun = fun (Trg, St) -> perform_event_transition(Trg, [], St) end,
+    case perform_transition(Trigger, TransitionFun, State) of
         {cont, noreply, NewState} -> {noreply, NewState};
         {stop, noreply, NewState} -> shutdown(NewState);
         {error, Reason}           -> {stop, {error, Reason}, State}
@@ -1361,7 +1366,8 @@ handle_info(Event, State = #state{attrs = Attrs}) ->
         {handled, NewAttrs} ->
             {noreply, State#state{attrs = NewAttrs}};
         {trigger, NewAttrs, Trigger, AttrAction} ->
-            case perform_transition(Trigger, [AttrAction], State#state{attrs = NewAttrs}) of
+            TransitionFun = fun (Trg, St) -> perform_event_transition(Trg, [AttrAction], St) end,
+            case perform_transition(Trigger, TransitionFun, State#state{attrs = NewAttrs}) of
                 {cont, noreply, NewState} -> {noreply, NewState};
                 {stop, noreply, NewState} -> shutdown(NewState);
                 {error, Reason}           -> {stop, {error, Reason}, State#state{attrs = NewAttrs}}
@@ -1375,7 +1381,8 @@ handle_info(Event, State = #state{attrs = Attrs}) ->
                 reply_fun = undefined,
                 src_arg = false
             },
-            case perform_transition(Trigger, [], State) of
+            TransitionFun = fun (Trg, St) -> perform_event_transition(Trg, [], St) end,
+            case perform_transition(Trigger, TransitionFun, State) of
                 {cont, noreply, NewState} -> {noreply, NewState};
                 {stop, noreply, NewState} -> shutdown(NewState);
                 {error, Reason}           -> {stop, {error, Reason}, State}
@@ -1551,6 +1558,15 @@ handle_create(Module, Args, CreateOpts, CustomOpts) ->
     Store       = proplists:get_value(store,      CreateOpts, undefined),
     StartSpec   = proplists:get_value(start_spec, CreateOpts, undefined),
     {ok, InitSData} = call_init_persistent(Module, Args),
+    InstState = #inst_state{
+        inst_id         = undefined,
+        trn_nr          = 0,
+        sname           = [],
+        sdata           = InitSData,
+        attr_last_id    = 0,
+        attrs_active    = [],
+        interrupt       = undefined
+    },
     Instance = #instance{
         id          = undefined,
         group       = Group,
@@ -1558,13 +1574,13 @@ handle_create(Module, Args, CreateOpts, CustomOpts) ->
         module      = Module,
         args        = Args,
         opts        = CustomOpts,
-        init        = InitSData,
         start_spec  = StartSpec,
         status      = running,
         created     = eproc:now(),
         terminated  = undefined,
         term_reason = undefined,
         archived    = undefined,
+        state       = InstState,
         transitions = undefined
     },
     {ok, _InstId} = eproc_store:add_instance(Store, Instance).
@@ -1600,9 +1616,13 @@ start_loaded(Instance, StartOpts, State) ->
         id = InstId,
         group = Group,
         name = Name,
-        module = Module,
-        transitions = Transitions
+        state = InstState
     } = Instance,
+    #inst_state{
+        sname = LastSName,
+        sdata = LastSData,
+        interrupt = Interrupt
+    } = InstState,
     #state{
         registry = Registry
     } = State,
@@ -1613,24 +1633,55 @@ start_loaded(Instance, StartOpts, State) ->
 
     ok = register_online(Instance, Registry, StartOpts),
 
-    {ok, LastTrnNr, LastSName, LastSData, LastAttrId, ActiveAttrs} = case Transitions of
-        []           -> create_state(Instance);
-        [Transition] -> reload_state(Instance, Transition)
-    end,
+    case Interrupt of
+        undefined ->
+            {ok, _NewState} = init_loaded(Instance, LastSName, LastSData, State);
+        #interrupt{updated = undefined} ->
+            {ok, _NewState} = init_loaded(Instance, LastSName, LastSData, State);
+        #interrupt{upd_sname = UpdSName, upd_sdata = UpdSData, resumed = #user_action{user = ResumedUser}} ->
+            {ok, NewState} = init_loaded(Instance, UpdSName, UpdSData, State),
+            Trigger = #trigger_spec{
+                type = admin,
+                source = ResumedUser,
+                message = resume,
+                sync = false,
+                reply_fun = undefined,
+                src_arg = false
+            },
+            TransitionFun = fun (T, S) -> perform_resume_transition(T, Interrupt, S) end,
+            case perform_transition(Trigger, TransitionFun, NewState) of
+                {cont, noreply, ResumedState} -> {ok, ResumedState};
+                {error, Reason}               -> {error, Reason}
+            end
+    end.
 
-    {ok, UpgradedSName, UpgradedSData} = upgrade_state(Instance, LastSName, LastSData),
+
+%%
+%%  Initializes loaded instance.
+%%
+init_loaded(Instance, SName, SData, State) ->
+    #instance{
+        id = InstId,
+        module = Module,
+        state = InstState
+    } = Instance,
+    #inst_state{
+        trn_nr = LastTrnNr,
+        attr_last_id = LastAttrId,
+        attrs_active = ActiveAttrs
+    } = InstState,
+    {ok, UpgradedSName, UpgradedSData} = upgrade_state(Instance, SName, SData),
     {ok, AttrState} = eproc_fsm_attr:init(UpgradedSName, LastAttrId, ActiveAttrs),
-    {ok, LastSDataWithRT, RTField, RTDefault} = call_init_runtime(UpgradedSName, UpgradedSData, Module),
-
+    {ok, UpgradedSDataWithRT, RTField, RTDefault} = call_init_runtime(UpgradedSName, UpgradedSData, Module),
     NewState = State#state{
-        inst_id = InstId,
-        module  = Module,
-        sname   = UpgradedSName,
-        sdata   = LastSDataWithRT,
+        inst_id     = InstId,
+        module      = Module,
+        sname       = UpgradedSName,
+        sdata       = UpgradedSDataWithRT,
         rt_field    = RTField,
         rt_default  = RTDefault,
-        trn_nr  = LastTrnNr,
-        attrs   = AttrState
+        trn_nr      = LastTrnNr,
+        attrs       = AttrState
     },
     {ok, NewState}.
 
@@ -1673,30 +1724,6 @@ register_online(#instance{id = InstId, name = Name}, Registry, StartOpts) ->
 
 
 %%
-%%  Initialize current state for the first transition.
-%%
-create_state(Instance) ->
-    #instance{
-        init = InitSData
-    } = Instance,
-    {ok, 0, [], InitSData, 0, []}.
-
-
-%%
-%%  Prepare a state after normal restart or resume with not updated state.
-%%
-reload_state(_Instance, Transition) ->
-    #transition{
-        number = LastTrnNr,
-        sname  = LastSName,
-        sdata  = LastSData,
-        attr_last_id = LastAttrId,
-        attrs_active = AttrsActive
-    } = Transition,
-    {ok, LastTrnNr, LastSName, LastSData, LastAttrId, AttrsActive}.
-
-
-%%
 %%  Perform state upgrade on code change or state reload from db.
 %%
 upgrade_state(#instance{module = Module}, SName, SData) ->
@@ -1714,12 +1741,10 @@ upgrade_state(#instance{module = Module}, SName, SData) ->
 %%
 %%  Perform a state transition.
 %%
-perform_transition(Trigger, InitAttrActions, State) ->
+perform_transition(Trigger, TransitionFun, State) ->
     #state{
         inst_id = InstId,
-        module = Module,
         sname = SName,
-        sdata = SData,
         trn_nr = LastTrnNr,
         rt_field = RuntimeField,
         rt_default = RuntimeDefault,
@@ -1729,53 +1754,14 @@ perform_transition(Trigger, InitAttrActions, State) ->
     #trigger_spec{
         type = TriggerType,
         source = TriggerSrc,
-        message = TriggerMsg,
-        sync = TriggerSync,
-        reply_fun = From,
-        src_arg = TriggerSrcArg
+        message = TriggerMsg
     } = Trigger,
 
     erlang:put('eproc_fsm$messages', []),
-    erlang:put('eproc_fsm$reply', noreply),
     TrnNr = LastTrnNr + 1,
     TrnStart = erlang:now(),
     {ok, TrnAttrs} = eproc_fsm_attr:transition_start(InstId, TrnNr, SName, Attrs),
-
-    TriggerArg = case {TriggerSrcArg, TriggerSync} of
-        {true,  true}  -> {TriggerType, TriggerSrc, From, TriggerMsg};
-        {true,  false} -> {TriggerType, TriggerSrc, TriggerMsg};
-        {false, true}  -> {TriggerType, From, TriggerMsg};
-        {false, false} -> {TriggerType, TriggerMsg}
-    end,
-    {TrnMode, TransitionReply, NewSName, NewSData} = case Module:handle_state(SName, TriggerArg, SData) of
-        {same_state,          NSD} -> {same,  noreply,    SName, NSD};
-        {next_state,     NSN, NSD} -> {next,  noreply,    NSN,   NSD};
-        {final_state,    NSN, NSD} -> {final, noreply,    NSN,   NSD};
-        {reply_same,  R,      NSD} -> {same,  {reply, R}, SName, NSD};
-        {reply_next,  R, NSN, NSD} -> {next,  {reply, R}, NSN,   NSD};
-        {reply_final, R, NSN, NSD} -> {final, {reply, R}, NSN,   NSD}
-    end,
-    true = is_next_state_valid(NewSName),
-
-    ExplicitReply = erlang:erase('eproc_fsm$reply'),
-    {ok, Reply} = case {TriggerSync, TransitionReply, ExplicitReply} of
-        {true,  {reply, TR}, noreply    } -> {ok, {reply, TR}};
-        {true,  noreply,     {reply, ER}} -> {ok, {reply, ER}};
-        {false, noreply,     noreply    } -> {ok, noreply}
-    end,
-
-    {ProcAction, SDataAfterTrn} = case TrnMode of
-        same ->
-            {cont, NewSData};
-        next ->
-            {ok, SDataAfterExit} = perform_exit(SName, NewSName, NewSData, State),
-            {ok, SDataAfterEntry} = perform_entry(SName, NewSName, SDataAfterExit, State),
-            {cont, SDataAfterEntry};
-        final ->
-            {ok, SDataAfterExit} = perform_exit(SName, NewSName, NewSData, State),
-            {stop, SDataAfterExit}
-    end,
-
+    {ok, ProcAction, NewSName, NewSData, TransitionReply, Reply, ExplicitAttrActions} = TransitionFun(Trigger, State),
     {ok, AttrActions, LastAttrId, NewAttrs} = eproc_fsm_attr:transition_end(InstId, TrnNr, NewSName, TrnAttrs),
     TrnEnd = erlang:now(),
 
@@ -1821,7 +1807,7 @@ perform_transition(Trigger, InitAttrActions, State) ->
         inst_id = InstId,
         number = TrnNr,
         sname = NewSName,
-        sdata = cleanup_runtime_data(SDataAfterTrn, RuntimeField, RuntimeDefault),
+        sdata = cleanup_runtime_data(NewSData, RuntimeField, RuntimeDefault),
         timestamp = TrnStart,
         duration = timer:now_diff(TrnEnd, TrnStart),
         trigger_type = TriggerType,
@@ -1829,10 +1815,8 @@ perform_transition(Trigger, InitAttrActions, State) ->
         trigger_resp = ResponseMsgRef,
         trn_messages = RegisteredMsgRefs,
         attr_last_id = LastAttrId,
-        attr_actions = InitAttrActions ++ AttrActions,
-        attrs_active = undefined,
-        inst_status  = InstStatus,
-        inst_suspend = undefined
+        attr_actions = ExplicitAttrActions ++ AttrActions,
+        inst_status  = InstStatus
     },
     {ok, InstId, TrnNr} = eproc_store:add_transition(Store, Transition, TransitionMsgs),
 
@@ -1845,11 +1829,93 @@ perform_transition(Trigger, InitAttrActions, State) ->
     %% Ok, save changes in the state.
     NewState = State#state{
         sname = NewSName,
-        sdata = SDataAfterTrn,
+        sdata = NewSData,
         trn_nr = TrnNr,
         attrs = NewAttrs
     },
     {ProcAction, TransitionReply, NewState}.
+
+
+%%
+%%  Performs actions specific for the resume-initiated transition.
+%%
+perform_resume_transition(_Trigger, Interrupt, State) ->
+    #state{
+        sname = SName,
+        sdata = SData
+    } = State,
+    #interrupt{
+        upd_script = UpdScript
+    } = Interrupt,
+    case UpdScript of
+        undefined ->
+            ok;
+        _ when is_list(UpdScript) ->
+            ScriptExecFun = fun
+                ({R, {M, F, A}}) ->
+                    R = erlang:apply(M, F, A);
+                ({M, F, A}) ->
+                    erlang:apply(M, F, A)
+            end,
+            ok = lists:foreach(ScriptExecFun, UpdScript)
+    end,
+    {ok, cont, SName, SData, noreply, noreply, []}.
+
+
+%%
+%%  Performs actions specific for event-initiated transition.
+%%
+perform_event_transition(Trigger, InitAttrActions, State) ->
+    #state{
+        module = Module,
+        sname = SName,
+        sdata = SData
+    } = State,
+    #trigger_spec{
+        type = TriggerType,
+        source = TriggerSrc,
+        message = TriggerMsg,
+        sync = TriggerSync,
+        reply_fun = From,
+        src_arg = TriggerSrcArg
+    } = Trigger,
+    erlang:put('eproc_fsm$reply', noreply),
+
+    TriggerArg = case {TriggerSrcArg, TriggerSync} of
+        {true,  true}  -> {TriggerType, TriggerSrc, From, TriggerMsg};
+        {true,  false} -> {TriggerType, TriggerSrc, TriggerMsg};
+        {false, true}  -> {TriggerType, From, TriggerMsg};
+        {false, false} -> {TriggerType, TriggerMsg}
+    end,
+    {TrnMode, TransitionReply, NewSName, NewSData} = case Module:handle_state(SName, TriggerArg, SData) of
+        {same_state,          NSD} -> {same,  noreply,    SName, NSD};
+        {next_state,     NSN, NSD} -> {next,  noreply,    NSN,   NSD};
+        {final_state,    NSN, NSD} -> {final, noreply,    NSN,   NSD};
+        {reply_same,  R,      NSD} -> {same,  {reply, R}, SName, NSD};
+        {reply_next,  R, NSN, NSD} -> {next,  {reply, R}, NSN,   NSD};
+        {reply_final, R, NSN, NSD} -> {final, {reply, R}, NSN,   NSD}
+    end,
+    true = is_next_state_valid(NewSName),
+
+    ExplicitReply = erlang:erase('eproc_fsm$reply'),
+    {ok, Reply} = case {TriggerSync, TransitionReply, ExplicitReply} of
+        {true,  {reply, TR}, noreply    } -> {ok, {reply, TR}};
+        {true,  noreply,     {reply, ER}} -> {ok, {reply, ER}};
+        {false, noreply,     noreply    } -> {ok, noreply}
+    end,
+
+    {ProcAction, SDataAfterTrn} = case TrnMode of
+        same ->
+            {cont, NewSData};
+        next ->
+            {ok, SDataAfterExit} = perform_exit(SName, NewSName, NewSData, State),
+            {ok, SDataAfterEntry} = perform_entry(SName, NewSName, SDataAfterExit, State),
+            {cont, SDataAfterEntry};
+        final ->
+            {ok, SDataAfterExit} = perform_exit(SName, NewSName, NewSData, State),
+            {stop, SDataAfterExit}
+    end,
+    {ok, ProcAction, NewSName, SDataAfterTrn, TransitionReply, Reply, InitAttrActions}.
 
 
 %%
@@ -2007,75 +2073,6 @@ create_prepare_send(Module, Args, Options) ->
     {ok, StartSpec} = resolve_start_spec(CreateOpts),
     {ok, NewFsmRef} = eproc_registry:make_new_fsm_ref(Registry, FsmRef, StartSpec),
     {ok, FsmRef, NewFsmRef, AllSendOpts}.
-
-
-%%
-%%  Creates a resume transition. This function is passed to a store
-%%  as a parameter for `set_instance_suspended` function.
-%%
-%%  NOTE: Runtime field is intentionally left unchanged here.
-%%
-resume_transition(#instance{}, #inst_susp{updated = undefined}) ->
-    none;
-
-resume_transition(Instance, InstSusp) ->
-    #instance{
-        id = InstId,
-        transitions = Transitions
-    } = Instance,
-    #inst_susp{
-        upd_sname = UpdSName,
-        upd_sdata = UpdSData,
-        upd_attrs = UpdAttrs,
-        resumed = #user_action{user = User}
-    } = InstSusp,
-    case upgrade_state(Instance, UpdSName, UpdSData) of
-        {ok, CheckedSName, CheckedSData} ->
-            {ok, NewAttrActions, NewLastAttrId} = eproc_fsm_attr:resumed(
-                InstId, TrnNr, NextSName,
-                ActionSpecs, LastAttrId, ActiveAttrs
-            ),
-            %{ok, AAA} = eproc_fsm_attr:resume_attrs(), %TODO
-            %NewAttrIds = [ X || #attr_action{attr_id = X} <- UpdAttrs],
-            {TrnNr, LastAttrId} = case Transitions of
-                [] ->
-                    {1, lists:max(NewAttrIds)}; % TODO: Numbering
-                [#transition{number = N, attr_last_id = ALID}] ->
-                    {N + 1, lists:max([ALID | NewAttrIds])}
-            end,
-            Now = erlang:now(),
-            TriggerSrc = {admin, User},
-            MsgId = {InstId, TrnNr, 0},
-            MsgRef = #msg_ref{id = MsgId, peer = TriggerSrc},
-            NewTransition = #transition{
-                inst_id = InstId,
-                number = TrnNr,
-                sname = CheckedSName,
-                sdata = CheckedSData,
-                timestamp = Now,
-                duration = 0,
-                trigger_type = admin,
-                trigger_msg  = MsgRef,
-                trigger_resp = undefined,
-                trn_messages = [],
-                attr_last_id = LastAttrId,
-                attr_actions = UpdAttrs,
-                attrs_active = undefined,
-                inst_status  = running,
-                inst_suspend = undefined
-            },
-            NewMessage = #message{
-                id       = MsgId,
-                sender   = TriggerSrc,
-                receiver = {inst, InstId},
-                resp_to  = undefined,
-                date     = Now,
-                body     = resume
-            },
-            {add, NewTransition, NewMessage};
-        {error, Reason} ->
-            {error, Reason}
-    end.
 
 
 

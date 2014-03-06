@@ -23,6 +23,7 @@
 -module(eproc_fsm_attr).
 -compile([{parse_transform, lager_transform}]).
 -export([action/4, action/3, make_event/3]).
+-export([apply_actions/4]).
 -export([init/3, transition_start/4, transition_end/4, event/2]).
 -include("eproc.hrl").
 
@@ -234,13 +235,65 @@ event(_Event, _State) ->
     unknown.
 
 
+
+%% =============================================================================
+%%  Functions for `eproc_store`.
+%% =============================================================================
+
 %%
-%%  Invoked, when the FSM is being resumed.
+%%  Replays actions of the specific transition on initial attributes.
 %%
-resumed(InstId, TrnNr, NextSName, ActionSpecs, LastAttrId, ActiveAttrs) ->
+-spec apply_actions(
+        AttrActions :: [#attr_action{}] | undefined,
+        Attributes  :: [#attribute{}],
+        InstId      :: inst_id(),
+        TrnNr       :: trn_nr()
+    ) ->
+        {ok, [#attribute{}]}.
+
+apply_actions(undefined, Attributes, _InstId, _TrnNr) ->
+    {ok, Attributes};
+
+apply_actions(AttrActions, Attributes, InstId, TrnNr) ->
+    FoldFun = fun (Action, Attrs) ->
+        apply_action(Action, Attrs, InstId, TrnNr)
+    end,
+    NewAttrs = lists:foldl(FoldFun, Attributes, AttrActions),
+    {ok, NewAttrs}.
 
 
-    {ok, NewActions, NewAttrId}.
+%%
+%%  Replays single attribute action.
+%%  Returns a list of active attributes after applying the provided attribute action.
+%%  Its an internal function, helper for `apply_actions/4`.
+%%
+apply_action(#attr_action{module = Module, attr_id = AttrId, action = Action}, Attrs, InstId, TrnNr) ->
+    case Action of
+        {create, Name, Scope, Data} ->
+            NewAttr = #attribute{
+                inst_id = InstId,
+                attr_id = AttrId,
+                module = Module,
+                name = Name,
+                scope = Scope,
+                data = Data,
+                from = TrnNr,
+                upds = [],
+                till = undefined,
+                reason = undefined
+            },
+            [NewAttr | Attrs];
+        {update, NewScope, NewData} ->
+            Attr = #attribute{upds = Upds} = lists:keyfind(AttrId, #attribute.attr_id, Attrs),
+            NewAttr = Attr#attribute{
+                scope = NewScope,
+                data = NewData,
+                upds = [TrnNr | Upds]
+            },
+            lists:keyreplace(AttrId, #attribute.attr_id, Attrs, NewAttr);
+        {remove, _Reason} ->
+            lists:keydelete(AttrId, #attribute.attr_id, Attrs)
+    end.
 
 
 

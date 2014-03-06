@@ -17,6 +17,7 @@
 %%
 %%  ETS-based EProc store implementation.
 %%  Mainly created to simplify management of unit and integration tests.
+%%  Its also a Reference implementation for the store.
 %%
 -module(eproc_store_ets).
 -behaviour(eproc_store).
@@ -32,7 +33,7 @@
     add_transition/3,
     set_instance_killed/3,
     set_instance_suspended/3,
-    set_instance_resumed/4,
+    set_instance_resumed/3,
     set_instance_state/6,
     load_instance/2,
     load_running/2
@@ -42,7 +43,7 @@
 
 -define(INST_TBL, 'eproc_store_ets$instance').
 -define(NAME_TBL, 'eproc_store_ets$inst_name').
--define(SUSP_TBL, 'eproc_store_ets$inst_susp').
+-define(INTR_TBL, 'eproc_store_ets$interrupt').
 -define(TRN_TBL,  'eproc_store_ets$transition').
 -define(MSG_TBL,  'eproc_store_ets$message').
 -define(CNT_TBL,  'eproc_store_ets$counter').
@@ -76,12 +77,12 @@ init({}) ->
     WC = {write_concurrency, true},
     ets:new(?INST_TBL, [set, public, named_table, {keypos, #instance.id},        WC]),
     ets:new(?NAME_TBL, [set, public, named_table, {keypos, #inst_name.name},     WC]),
-    ets:new(?SUSP_TBL, [bag, public, named_table, {keypos, #inst_susp.inst_id},  WC]),
+    ets:new(?INTR_TBL, [bag, public, named_table, {keypos, #interrupt.inst_id},  WC]),
     ets:new(?TRN_TBL,  [bag, public, named_table, {keypos, #transition.inst_id}, WC]),
     ets:new(?MSG_TBL,  [set, public, named_table, {keypos, #message.id},         WC]),
     ets:new(?CNT_TBL,  [set, public, named_table, {keypos, 1}]),
     ets:insert(?CNT_TBL, {inst, 0}),
-    ets:insert(?CNT_TBL, {susp, 0}),
+    ets:insert(?CNT_TBL, {intr, 0}),
     State = undefined,
     {ok, State}.
 
@@ -138,7 +139,7 @@ supervisor_child_specs(_StoreArgs) ->
 %%
 %%  Add new instance to the store.
 %%
-add_instance(_StoreArgs, Instance = #instance{name = Name, group = Group}) ->
+add_instance(_StoreArgs, Instance = #instance{name = Name, group = Group, state = #inst_state{}})->
     InstId = ets:update_counter(?CNT_TBL, inst, 1),
     ResolvedGroup = if
         Group =:= new     -> InstId;
@@ -161,14 +162,15 @@ add_instance(_StoreArgs, Instance = #instance{name = Name, group = Group}) ->
 %%
 %%  Add a transition for an existing instance.
 %%
+%%  TODO: Add suspend on transition.
+%%
 add_transition(_StoreArgs, Transition, Messages) ->
     #transition{
         inst_id      = InstId,
         number       = TrnNr,
         attr_actions = AttrActions,
-        attrs_active = undefined,
         inst_status  = Status,
-        inst_suspend = undefined
+        interrupts   = undefined
     } = Transition,
     true = is_list(AttrActions),
     Instance = #instance{status = OldStatus} = ets:lookup(?INST_TBL, InstId),
@@ -227,7 +229,7 @@ set_instance_suspended(_StoreArgs, FsmRef, Reason) ->
 %%
 %%  Mark instance as running after it was suspended.
 %%
-set_instance_resumed(_StoreArgs, FsmRef, UserAction, TransitionFun) ->
+set_instance_resumed(_StoreArgs, FsmRef, UserAction) ->
     case read_instance(FsmRef, current) of
         {error, FailReason} ->
             {error, FailReason};
@@ -238,7 +240,7 @@ set_instance_resumed(_StoreArgs, FsmRef, UserAction, TransitionFun) ->
                 {false, running} ->
                     {error, running};
                 {false, suspended} ->
-                    case write_instance_resumed(Instance, UserAction, TransitionFun) of
+                    case write_instance_resumed(Instance, UserAction) of
                         ok                  -> {ok, InstId, StartSpec};
                         {error, FailReason} -> {error, FailReason}
                     end
@@ -249,7 +251,7 @@ set_instance_resumed(_StoreArgs, FsmRef, UserAction, TransitionFun) ->
 %%
 %%  Update state for a suspended FSM.
 %%
-set_instance_state(_StoreArgs, FsmRef, UserAction, StateName, StateData, AttrActions) ->
+set_instance_state(_StoreArgs, FsmRef, UserAction, StateName, StateData, Script) ->
     case read_instance(FsmRef, current) of
         {error, FailReason} ->
             {error, FailReason};
@@ -260,7 +262,7 @@ set_instance_state(_StoreArgs, FsmRef, UserAction, StateName, StateData, AttrAct
                 {false, running} ->
                     {error, running};
                 {false, suspended} ->
-                    case write_instance_status_update(Instance, UserAction, StateName, StateData, AttrActions) of
+                    case write_instance_status_update(Instance, UserAction, StateName, StateData, Script) of
                         ok                  -> {ok, InstId};
                         {error, FailReason} -> {error, FailReason}
                     end
@@ -330,45 +332,50 @@ read_instance({name, Name}, Query) ->
 %%  Reads instance related data according to query.
 %%
 read_instance_data(Instance, header) ->
-    {ok, Instance#instance{transitions = undefined}};
+    {ok, Instance#instance{state = undefined, transitions = undefined}};
 
 read_instance_data(Instance, current) ->
-    Transitions = read_transitions(Instance, last),
-    {ok, Instance#instance{transitions = Transitions}}.
+    {ok, CurrentState} = read_state(Instance, current),
+    {ok, Instance#instance{state = CurrentState, transitions = undefined}}.
 
 
 %%
-%%  Read instance transitions according to the query.
+%%  Read instance state according to the query.
 %%
-read_transitions(#instance{id = InstId}, last) ->
-    case ets:lookup(?TRN_TBL, InstId) of
-        [] ->
-            [];
-        Transitions ->
-            SortedTrns = lists:keysort(#transition.number, Transitions),
-            case lists:foldl(fun aggregate_attrs/2, undefined, SortedTrns) of
-                undefined -> [];
-                LastTrn   -> [LastTrn]
-            end
-    end.
+read_state(#instance{id = InstId, state = InstState}, current) ->
+    Transitions = ets:lookup(?TRN_TBL, InstId),
+    SortedTrns = lists:keysort(#transition.number, Transitions),
+    CurrentState = lists:foldl(fun eproc_store:apply_transition/2, InstState, SortedTrns),
+    {ok, CurrentState}.
 
 
 %%
-%%  Reads currently active instance suspend record.
+%%  Reads currently active instance interrupt record.
 %%
-read_active_inst_susp(#instance{id = InstId, transitions = Transitions}) ->
+read_active_interrupt(#instance{id = InstId, transitions = Transitions}) -> % TODO: Transitions
+
+
+
+
+
+
+    % TODO: Get max by intr_id, bet gi cia ne viskas...
+
+
+
+
     TrnNr = case Transitions of
         [] -> 0;
         [#transition{number = N}] -> N
     end,
-    Pattern = #inst_susp{
+    Pattern = #interrupt{
         inst_id = InstId,
         trn_nr = TrnNr,
         resumed = undefined,
         _ = '_'
     },
-    case ets:match_object(?SUSP_TBL, Pattern) of
-        [InstSusp] -> {ok, InstSusp};
+    case ets:match_object(?INTR_TBL, Pattern) of
+        [Interrupt] -> {ok, Interrupt};
         [] -> {error, not_found}
     end.
 
@@ -395,14 +402,14 @@ write_instance_terminated(#instance{id = InstId, name = Name}, Status, Reason) -
 %%
 %%  Mark instance as suspended.
 %%
-write_instance_suspended(#instance{id = InstId, transitions = Transitions}, Reason) ->
+write_instance_suspended(#instance{id = InstId, transitions = Transitions}, Reason) ->  % TODO: Transitions
     true = ets:update_element(?INST_TBL, InstId, {#instance.status, suspended}),
     TrnNr = case Transitions of
         [] -> 0;
         [#transition{number = N}] -> N
     end,
-    SuspId = ets:update_counter(?CNT_TBL, susp, 1),
-    InstSuspension = #inst_susp{
+    SuspId = ets:update_counter(?CNT_TBL, intr, 1),
+    Interrupt = #interrupt{
         id          = SuspId,
         inst_id     = InstId,
         trn_nr      = TrnNr,
@@ -411,116 +418,39 @@ write_instance_suspended(#instance{id = InstId, transitions = Transitions}, Reas
         updated     = undefined,
         upd_sname   = undefined,
         upd_sdata   = undefined,
-        upd_attrs   = undefined,
+        upd_script  = undefined,
         resumed     = undefined
     },
-    true = ets:insert(?SUSP_TBL, InstSuspension),
+    true = ets:insert(?INTR_TBL, Interrupt),
     ok.
 
 
 %%
 %%  Mark instance as resumed.
 %%
-write_instance_resumed(Instance = #instance{id = InstId}, UserAction, TransitionFun) ->
-    {ok, InstSusp} = read_active_inst_susp(Instance),
-    NewInstSusp = InstSusp#inst_susp{resumed = UserAction},
-    TrnAdded = case TransitionFun(Instance, NewInstSusp) of
-        none ->
-            ok;
-        {add, NewTransition, NewMessage} ->
-            ok = handle_attr_actions(Instance, NewTransition, [NewMessage]),
-            true = ets:insert(?TRN_TBL, NewTransition),
-            true = ets:insert(?MSG_TBL, NewMessage),
-            ok;
-        {error, TrnFailReason} ->
-            {error, TrnFailReason}
-    end,
-    case TrnAdded of
-        ok ->
-            true = ets:update_element(?INST_TBL, InstId, {#instance.status, running}),
-            true = ets:delete_object(?SUSP_TBL, InstSusp),
-            true = ets:insert(?SUSP_TBL, NewInstSusp),
-            ok;
-        {error, Reason} ->
-            {error, Reason}
-    end.
+write_instance_resumed(Instance = #instance{id = InstId}, UserAction) ->
+    {ok, Interrupt} = read_active_interrupt(Instance),
+    NewInterrupt = Interrupt#interrupt{resumed = UserAction},
+    true = ets:update_element(?INST_TBL, InstId, {#instance.status, running}),
+    true = ets:delete_object(?INTR_TBL, Interrupt),
+    true = ets:insert(?INTR_TBL, NewInterrupt),
+    ok.
 
 
 %%
 %%  Update instance state "manually".
 %%
-write_instance_status_update(Instance, UserAction, StateName, StateData, AttrActions) ->
-    {ok, InstSusp} = read_active_inst_susp(Instance),
-    NewInstSusp = InstSusp#inst_susp{
+write_instance_status_update(Instance, UserAction, StateName, StateData, Script) ->
+    {ok, Interrupt} = read_active_interrupt(Instance),
+    NewInterrupt = Interrupt#interrupt{
         updated = UserAction,
         upd_sname = StateName,
         upd_sdata = StateData,
-        upd_attrs = AttrActions
+        upd_script = Script
     },
-    true = ets:delete_object(?SUSP_TBL, InstSusp),
-    true = ets:insert(?SUSP_TBL, NewInstSusp),
+    true = ets:delete_object(?INTR_TBL, Interrupt),
+    true = ets:insert(?INTR_TBL, NewInterrupt),
     ok.
-
-
-%%
-%%  Replay all attribute actions, from all transitions.
-%%  Designed to be used with `lists:foldl`.
-%%  TODO: Move this function to `eproc_store`.
-%%
-aggregate_attrs(Transition, undefined) ->
-    #transition{inst_id = InstId, number = TrnNr, attr_actions = AttrActions} = Transition,
-    Transition#transition{attrs_active = apply_attr_actions(AttrActions, [], InstId, TrnNr)};
-
-aggregate_attrs(Transition, #transition{attrs_active = AttrsActive}) ->
-    #transition{inst_id = InstId, number = TrnNr, attr_actions = AttrActions} = Transition,
-    Transition#transition{attrs_active = apply_attr_actions(AttrActions, AttrsActive, InstId, TrnNr)}.
-
-
-%%
-%%  Helper for `aggregate_attrs`.
-%%
-apply_attr_actions(undefined, Attrs, _InstId, _TrnNr) ->
-    Attrs;
-
-apply_attr_actions(AttrActions, Attrs, InstId, TrnNr) ->
-    FoldFun = fun (Act, Lst) ->
-        apply_attr_action(Act, Lst, InstId, TrnNr)
-    end,
-    lists:foldl(FoldFun, Attrs, AttrActions).
-
-
-%%
-%%  Replays single attribute action.
-%%  Returns a list of active attributes after applying the provided attribute action.
-%%  TODO: Move this function to `eproc_store`.
-%%
-apply_attr_action(#attr_action{module = Module, attr_id = AttrId, action = Action}, Attrs, InstId, TrnNr) ->
-    case Action of
-        {create, Name, Scope, Data} ->
-            NewAttr = #attribute{
-                inst_id = InstId,
-                attr_id = AttrId,
-                module = Module,
-                name = Name,
-                scope = Scope,
-                data = Data,
-                from = TrnNr,
-                upds = [],
-                till = undefined,
-                reason = undefined
-            },
-            [NewAttr | Attrs];
-        {update, NewScope, NewData} ->
-            Attr = #attribute{upds = Upds} = lists:keyfind(AttrId, #attribute.attr_id, Attrs),
-            NewAttr = Attr#attribute{
-                scope = NewScope,
-                data = NewData,
-                upds = [TrnNr | Upds]
-            },
-            lists:keyreplace(AttrId, #attribute.attr_id, Attrs, NewAttr);
-        {remove, _Reason} ->
-            lists:keydelete(AttrId, #attribute.attr_id, Attrs)
-    end.
 
 
 %%
@@ -534,7 +464,7 @@ is_instance_terminated(killed)    -> true.
 
 
 %%
-%%  TODO: Handle all attribute actions of the transition.
+%%  TODO: Handle all supported attribute actions.
 %%
 handle_attr_actions(Instance, Transition, Messages) ->
     ok.

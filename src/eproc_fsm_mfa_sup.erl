@@ -48,7 +48,7 @@ start_link(Name) ->
 -spec start_fsm(
         Supervisor  :: otp_ref(),
         FsmRef      :: fsm_ref(),
-        StartMFA    :: {module(), atom(), list()}
+        StartMFA    :: mfargs()
     ) ->
         {ok, pid()}.
 

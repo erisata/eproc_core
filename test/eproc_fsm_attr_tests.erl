@@ -174,11 +174,10 @@ event_test() ->
     meck:unload([Mod]).
 
 
-
 %%
-%%  Check if resume works.
+%%  Check if `apply_actions` works.
 %%
-resume_test() ->
+apply_actions_test() ->
     ?assert(todo).
 
 

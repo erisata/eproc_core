@@ -28,11 +28,12 @@
     add_transition/3,
     set_instance_killed/3,
     set_instance_suspended/3,
-    set_instance_resumed/4,
+    set_instance_resumed/3,
     set_instance_state/6,
     load_instance/2,
     load_running/2
 ]).
+-export([apply_transition/2]).
 -export_type([ref/0]).
 -include("eproc.hrl").
 
@@ -97,17 +98,19 @@
 
 
 %%
+%%  TODO: Review description.
+%%
 %%  This function is invoked when the FSM is resumed. It should
 %%  change data only if the current status of the FSM is `suspended`.
 %%  The following cases shoud be handled here:
 %%
 %%   1. State was not updated while FSM was suspended. In this case
-%%      the FSM status should be changed to "running" and the `inst_susp`
+%%      the FSM status should be changed to "running" and the `interrupt`
 %%      record should be closed by setting the `resumed` field.
 %%
 %%   2. State was updated while FSM was suspended. In this case the
 %%      FSM status should be left unchanged (`suspended`) and the
-%%      `inst_susp` should be closed by adding the user action to the
+%%      `interrupt` should be closed by adding the user action to the
 %%      front of the resume list. The FSM status will be changed later
 %%      with invokation of `add_transition`, used to create new transition
 %%      reflecting updated state.
@@ -115,17 +118,11 @@
 -callback set_instance_resumed(
         StoreArgs   :: term(),
         FsmRef      :: fsm_ref(),
-        UserAction  :: #user_action{},
-        TransitionFun
+        UserAction  :: #user_action{}
     ) ->
         {ok, inst_id(), fsm_start_spec()} |
         {error, not_found | running | terminated} |
-        {error, Reason :: term()}
-    when
-        TransitionFun :: fun (
-                (#instance{}, #inst_susp{}) ->
-                (none | {add, #transition{}, #message{}} | {error, term()})
-            ).
+        {error, Reason :: term()}.
 
 
 %%
@@ -137,7 +134,7 @@
         UserAction  :: #user_action{},
         StateName   :: term(),
         StateData   :: term(),
-        AttrActions :: [#attr_action{}]
+        Script      :: script()
     ) ->
         {ok, inst_id()} |
         {error, Reason :: term()}.
@@ -145,6 +142,8 @@
 
 %%
 %%  TODO: Describe, what should be done here.
+%%
+%%  TODO: `interrupt` for empty FSM and for non-empty.
 %%
 -callback load_instance(
         StoreArgs   :: term(),
@@ -229,8 +228,9 @@ get_instance(Store, InstId, Query) ->
 %%
 %%  Stores new persistent instance, generates id for it,
 %%  assigns a group and a name if not provided.
+%%  Initial state should be provided in the `#instance.state` field.
 %%
-add_instance(Store, Instance) ->
+add_instance(Store, Instance = #instance{state = #inst_state{}}) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
     StoreMod:add_instance(StoreArgs, Instance).
 
@@ -264,28 +264,27 @@ set_instance_suspended(Store, FsmRef, Reason) ->
 %%
 %%  Marks an FSM as running after it was suspended.
 %%
-set_instance_resumed(Store, FsmRef, UserAction, TransitionFun) ->
+set_instance_resumed(Store, FsmRef, UserAction) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:set_instance_resumed(StoreArgs, FsmRef, UserAction, TransitionFun).
+    StoreMod:set_instance_resumed(StoreArgs, FsmRef, UserAction).
 
 
 %%
 %%  Updates state "manually" for a suspended FSM.
 %%
-set_instance_state(Store, FsmRef, UserAction, StateName, StateData, AttrActions) ->
+set_instance_state(Store, FsmRef, UserAction, StateName, StateData, Script) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:set_instance_state(StoreArgs, FsmRef, UserAction, StateName, StateData, AttrActions).
+    StoreMod:set_instance_state(StoreArgs, FsmRef, UserAction, StateName, StateData, Script).
 
 
 %%
 %%  Loads an instance and its current state.
-%%  This function returns an instance with single (or zero) transitions.
-%%  The transition, if returned, stands for the current state of the FSM.
-%%  The transition is also filled with the active props, keys and timers.
+%%  This function returns an instance with latest state.
 %%
 load_instance(Store, InstId) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
     StoreMod:load_instance(StoreArgs, InstId).
+
 
 
 %%
@@ -296,6 +295,40 @@ load_instance(Store, InstId) ->
 load_running(Store, PartitionPred) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
     StoreMod:load_running(StoreArgs, PartitionPred).
+
+
+
+%% =============================================================================
+%%  Functions for `eproc_store` implementations.
+%% =============================================================================
+
+%%
+%%  Replay transition on a specified state.
+%%  Designed to be used with `lists:foldl`.
+%%
+apply_transition(Transition, InstState) ->
+    #inst_state{
+        inst_id = InstId,
+        trn_nr = OldTrnNr,
+        attrs_active = Attrs
+    } = InstState,
+    #transition{
+        inst_id = InstId,
+        number = TrnNr,
+        sname = SName,
+        sdata = SData,
+        attr_last_id = AttrLastId,
+        attr_actions = AttrActions
+    } = Transition,
+    TrnNr = OldTrnNr + 1,
+    {ok, NewAttrs} = eproc_fsm_attr:apply_actions(AttrActions, Attrs, InstId, TrnNr),
+    InstState#inst_state{   % TODO: Interrupt?
+        trn_nr = TrnNr,
+        sname = SName,
+        sdata = SData,
+        attr_last_id = AttrLastId,
+        attrs_active = NewAttrs
+    }.
 
 
 

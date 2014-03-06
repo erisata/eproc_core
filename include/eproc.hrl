@@ -22,6 +22,7 @@
 -type datetime()        :: calendar:datetime().     % {Date, Time} in UTC
 -type timestamp()       :: erlang:timestamp().      % {Mega, Secs, Micro}
 -type duration()        :: integer().               % in ms.
+-type mfargs()          :: {Module :: module(), Function :: atom(), Args :: [term()]}.
 
 %%
 %%  OTP standard process reference. See `gen_server` or
@@ -52,6 +53,8 @@
 -type msg_id()          :: term().
 -type party()           :: {inst, inst_id()} | {ext, term()}.
 -type scope()           :: list().
+-type script()          :: [(Call :: mfargs() | {Response :: term(), Call :: mfargs()})].
+
 
 %%
 %%  This record is modelled after the LDAP `inetOrgPersor` object class,
@@ -185,9 +188,9 @@
 %%  An administrator can update the process state and its atributes
 %%  while the FSM is in the suspended mode. This record collect these changes.
 %%
-%%  TODO: The `inst_susp` record is not used in runtime. This record collects
+%%  TODO: The `interrupt` record is not used in runtime. This record collects
 %%  information (state updates) while FSM is suspended. When resuming
-%%  the FSM, the `inst_susp` record is updated by providing value for the
+%%  the FSM, the `interrupt` record is updated by providing value for the
 %%  `resumed` field (become closed). If the state was updated by the
 %%  administrator while the FSM was suspended, new transition is created
 %%  on resume with updated state data.
@@ -212,7 +215,7 @@
 %%
 %%  TODO: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 %%
--record(inst_susp, {
+-record(interrupt, {
     id          :: integer(),       %% Suspension ID, must not be used for record sorting.
     inst_id     :: inst_id(),       %% FSM instance, that was suspended.
     trn_nr      :: trn_nr(),        %% Transition at which the instance was suspended or 0, if in the initial state.
@@ -221,7 +224,7 @@
     updated     :: #user_action{} | undefined,  %% Who, when, why updated the state.
     upd_sname   :: term() | undefined,          %% FSM state name set by an administrator.
     upd_sdata   :: term() | undefined,          %% FSM state data set by an administrator.
-    upd_attrs   :: [#attr_action{}] | undefined,%% Manual attribute changes.
+    upd_script  :: script() | undefined,        %% Update script, can be attribute API functions.
     resumed     :: #user_action{} | undefined   %% Who, when, why resumed the FSM.
 }).
 
@@ -243,10 +246,27 @@
     trn_messages    :: [msg_ref],                       %% Messages sent and received during transition, not including trigger and its response.
     attr_last_id    :: integer(),                       %% Last action id.
     attr_actions    :: [#attr_action{}],                %% All attribute actions performed in this transition.
-    attrs_active    :: [#attribute{}] | undefined,      %% Active props, keys and timers at the target state, Calculated field.
     inst_status     :: inst_status(),                   %% Instance status, after the transition.
-    inst_suspend    :: #inst_susp{} | undefined         %% Filled, if the instance was suspended and its state updated.
+    interrupts      :: [#interrupt{}] | undefined       %% Filled, if the instance was suspended at this transition.
 }).
+
+
+%%
+%%  Describes particular state of the FSM. If `#transition{}` corresponds to the
+%%  transition arrow in the FSM diagram, the `#inst_state{}` stands for the
+%%  named state of an object. This state record can be reconstructed from
+%%  all the transitions by replaying them on the initial FSM state.
+%%
+-record(inst_state, {
+    inst_id         :: inst_id(),                   %% Id of an instance whos state is described here.
+    trn_nr          :: trn_nr(),                    %% Identifies a transition by which the state was reached.
+    sname           :: term(),                      %% FSM state name.
+    sdata           :: term(),                      %% FSM state data.
+    attr_last_id    :: integer(),                   %% Last used FSM attribute ID.
+    attrs_active    :: [#attribute{}] | undefined,  %% List of attributes, that are active at this state.
+    interrupt       :: #interrupt{} | undefined     %% Interrupt information, if the FSM is currently interrupted.
+}).
+
 
 %%
 %%  Describes single instance of the `eproc_fsm`.
@@ -258,15 +278,14 @@
     module      :: module(),            %% Callback module implementing the FSM.
     args        :: term(),              %% Arguments, passed when creating the FSM.
     opts        :: proplist(),          %% Options, used by the `eproc_fsm` behaviour (limits, etc).
-    init        :: term(),              %% Initial state data, as returned by init/1.
     start_spec  :: fsm_start_spec() | undefined,    %% Optional FSM start specification.
     status      :: inst_status(),                   %% Current status if the FSM instance.
     created     :: datetime(),                      %% Time, when the instance was created.
     terminated  :: datetime() | undefined,                  %% Time, when the instance was terminated.
     term_reason :: #user_action{} | normal | undefined,     %% Reason, why the instance was terminated.
     archived    :: datetime() | undefined,                  %% Time, when the instance was archived.
-    transitions :: [#transition{}] | undefined              %% Instance transitions. Calculated field.
+    state       :: #inst_state{} | undefined,               %% Current state of the instance. Filled if requested.
+    transitions :: [#transition{}] | undefined              %% Instance transitions till the state. Filled if requested.
 }).
-
 
 
