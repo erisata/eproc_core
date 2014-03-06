@@ -1126,7 +1126,10 @@ resume(FsmRef, Options) ->
 %%  TODO: Add spec.
 %%
 set_state(FsmRef, NewStateName, NewStateData, Options) ->
-    % TODO: Make it offline.
+    %%
+    %%  TODO: Make it offline.
+    %%  TODO: Check if not online, before updating.
+    %%
     {ok, ResolvedFsmRef} = resolve_fsm_ref(FsmRef, Options),
     gen_server:call(ResolvedFsmRef, {'eproc_fsm$set_state', NewStateName, NewStateData}).
 
@@ -1637,7 +1640,12 @@ start_loaded(Instance, StartOpts, State) ->
         undefined ->
             {ok, _NewState} = init_loaded(Instance, LastSName, LastSData, State);
         #interrupt{updated = undefined} ->
-            {ok, _NewState} = init_loaded(Instance, LastSName, LastSData, State);
+            {ok, NewState} = init_loaded(Instance, LastSName, LastSData, State),
+            %%
+            %%  TODO: call eproc_store:set_instance_running().
+            %%  TODO: Reset limit counters.
+            %%
+            {ok, NewState};
         #interrupt{upd_sname = UpdSName, upd_sdata = UpdSData, resumed = #user_action{user = ResumedUser}} ->
             {ok, NewState} = init_loaded(Instance, UpdSName, UpdSData, State),
             Trigger = #trigger_spec{
@@ -1648,6 +1656,9 @@ start_loaded(Instance, StartOpts, State) ->
                 reply_fun = undefined,
                 src_arg = false
             },
+            %%
+            %%  TODO: Reset limit counters.
+            %%
             TransitionFun = fun (T, S) -> perform_resume_transition(T, Interrupt, S) end,
             case perform_transition(Trigger, TransitionFun, NewState) of
                 {cont, noreply, ResumedState} -> {ok, ResumedState};
