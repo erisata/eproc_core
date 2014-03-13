@@ -1101,6 +1101,7 @@ suspend(FsmRef, Options) ->
 resume(FsmRef, Options) ->
     %%
     %%  TODO: Check if not online, before resuming.
+    %%  TODO: Check if it is online after resume.
     %%
     case is_fsm_ref(FsmRef) of
         false ->
