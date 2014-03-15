@@ -19,7 +19,8 @@
 %%
 -module(eproc_codec_xml).
 -behaviour(eproc_codec).
--export([encode/2, decode/1]).
+-export([encode/2, decode/2, get_xmerl_elem_text/1]).
+-include_lib("xmerl/include/xmerl.hrl").
 
 
 %% =============================================================================
@@ -37,9 +38,10 @@ encode(_CodecArgs, Term) ->
 %%
 %%  Decode XML to Erlang term.
 %%
-decode(_Xml) ->
-    % TODO: Implement.
-    {error, not_implemented}.
+decode(_CodecArgs, Xml) when is_list(Xml) ->
+    {RootElement, []} = xmerl_scan:string(Xml),
+    Term = decode_xmerl(RootElement),
+    {ok, Term}.
 
 
 
@@ -47,6 +49,9 @@ decode(_Xml) ->
 %%  Internal functions.
 %% =============================================================================
 
+%%
+%%  Encode to xmerl tuples.
+%%
 encode(Term) when is_tuple(Term) ->
     L = tuple_to_list(Term),
     {tuple, [encode(E) || E <- L]};
@@ -64,7 +69,47 @@ encode(Term) when is_atom(Term) ->
 encode(Term) when is_integer(Term) ->
     I = integer_to_list(Term),
     {integer, [I]};
-    
+
 encode(Term) when is_binary(Term) ->
     B = binary_to_list(Term),
     {binary, [B]}.
+    
+    
+%%
+%%  Decode to xmerl tuples.
+%%
+decode_xmerl(#xmlElement{name = integer, content = Content}) ->
+    erlang:list_to_integer(get_xmerl_elem_text(Content));
+    
+decode_xmerl(#xmlElement{name = tuple, content = Content}) ->
+    Decoded = [decode_xmerl(C) || C <- Content],
+    erlang:list_to_tuple(Decoded);
+    
+decode_xmerl(#xmlElement{name = binary, content = Content}) ->
+    [#xmlText{value = Value}] = Content,
+    erlang:list_to_binary(Value);
+    
+decode_xmerl(#xmlElement{name = list, content = Content}) ->
+    [decode_xmerl(C) || C <- Content];
+    
+decode_xmerl(#xmlElement{name = string, content = Content}) ->
+    [#xmlText{value = Value}] = Content,
+    Value;
+    
+decode_xmerl(#xmlElement{name = atom, content = Content}) ->
+    erlang:list_to_atom(get_xmerl_elem_text(Content)).
+
+
+%%
+%%  Extract text from an element.
+%%
+get_xmerl_elem_text([]) ->
+    "";
+
+get_xmerl_elem_text([#xmlText{value = Value} | T]) ->
+    Value ++ get_xmerl_elem_text(T);
+ 
+get_xmerl_elem_text([#xmlComment{} | T]) ->
+    get_xmerl_elem_text(T).
+
+

@@ -22,7 +22,7 @@
 %%  Test primitive encoding rules.
 %%
 encode_test() ->
-    {ok, Codec}= eproc_codec:ref(eproc_codec_xml, []),
+    {ok, Codec} = eproc_codec:ref(eproc_codec_xml, []),
     {ok, Xml1} = eproc_codec:encode(Codec, 1),
     {ok, Xml2} = eproc_codec:encode(Codec, asd),
     {ok, Xml3} = eproc_codec:encode(Codec, "asd"),
@@ -42,12 +42,13 @@ encode_test() ->
 %%  Test primitive decoding rules.
 %%
 decode_test() ->
-    {ok, 1}         = eproc_codec_xml:decode(<<"<integer>1</integer>">>),
-    {ok, asd}       = eproc_codec_xml:decode(<<"<atom>asd</atom>">>),
-    {ok, "asd"}     = eproc_codec_xml:decode(<<"<string>asd</string>">>),
-    {ok, {}}        = eproc_codec_xml:decode(<<"<tuple></tuple>">>),
-    {ok, []}        = eproc_codec_xml:decode(<<"<list></list>">>),
-    {ok, <<"asd">>} = eproc_codec_xml:decode(<<"<binary>asd</binary>">>),
+    {ok, Codec} = eproc_codec:ref(eproc_codec_xml, []),
+    {ok, 1}         = eproc_codec:decode(Codec, "<integer>1</integer>"),
+    {ok, asd}       = eproc_codec:decode(Codec, "<atom>asd</atom>"),
+    {ok, "asd"}     = eproc_codec:decode(Codec, "<string>asd</string>"),
+    {ok, {}}        = eproc_codec:decode(Codec, "<tuple/>"),
+    {ok, []}        = eproc_codec:decode(Codec, "<list/>"),
+    {ok, <<"asd">>} = eproc_codec:decode(Codec, "<binary>asd</binary>"),
     ok.
 
 
