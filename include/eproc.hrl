@@ -46,7 +46,7 @@
 -type fsm_start_spec()  :: eproc_fsm:start_spec().
 -type inst_name()       :: term().
 -type inst_group()      :: eproc_fsm:group().
--type inst_status()     :: running | suspended | done | failed | killed.
+-type inst_status()     :: running | suspended | resuming | completed | killed | failed.
 -type store_ref()       :: eproc_store:ref().
 -type registry_ref()    :: eproc_registry:ref().
 -type trn_nr()          :: integer().
@@ -68,7 +68,7 @@
 
 
 %%
-%%  TODO: Docs.
+%%  Describes action made by a used.
 %%
 -record(user_action, {
     user    :: #user{},
@@ -137,7 +137,6 @@
 %%      #trigger_spec{type = timer, source = my_timer,         message = timeout,         sync = false},
 %%      #trigger_spec{type = admin, source = "John Doe",       message = "Problem fixed", sync = false}.
 %%
-%%  TODO: Rename `{inst, inst_id()}` to `{fsm, inst_id()}`.
 %%  This structure is transient, not intended for storing in a DB.
 %%
 -record(trigger_spec, {
@@ -151,14 +150,16 @@
 
 
 %%
-%%  TODO: Docs
+%%  An attribute is main mechanism for extending FSM behaviour. This structure
+%%  define common structure for attributes, that can be attached to FSM for
+%%  some period of its lifecycle.
 %%
 -record(attribute, {
-    inst_id,
-    attr_id,
-    module,
-    name,
-    scope,
+    inst_id     :: inst_id(),               %% Instane Id of the FSM, to which the attribute is attached.
+    attr_id     :: integer(),               %% Id of an attribute, unique within FSM instance.
+    module      :: module(),                %% Attribute implementation callback module.
+    name        :: term() | undefined,      %% Attributes can be named or unnamed.
+    scope       :: term(),                  %% Each attribute has its validity scope.
     data        :: term(),                  %% Custom attribute data.
     from        :: trn_nr(),                %% Transition at which the attribute was set.
     upds = []   :: [trn_nr()],              %% Transitions at which the attribute was updated.
@@ -168,7 +169,10 @@
 
 
 %%
-%%  TODO: Docs
+%%  Each transition can create, update or remove attributes.
+%%  This structure describes such actions. They are attached to transitions
+%%  and can be used to replay them to calculate a list of active attributes
+%%  at a specific transition.
 %%
 -record(attr_action, {
     module,
@@ -184,48 +188,30 @@
 
 
 %%
-%%  Describes single process suspend action and a manual state update.
-%%  An administrator can update the process state and its atributes
-%%  while the FSM is in the suspended mode. This record collect these changes.
+%%  Resume attempt of an interrupt.
 %%
-%%  TODO: The `interrupt` record is not used in runtime. This record collects
-%%  information (state updates) while FSM is suspended. When resuming
-%%  the FSM, the `interrupt` record is updated by providing value for the
-%%  `resumed` field (become closed). If the state was updated by the
-%%  administrator while the FSM was suspended, new transition is created
-%%  on resume with updated state data.
-%%
-%%  TODO: Suspend instances are not numbered. The active record should be
-%%  recognized by `resumed =:= undefined`.
-%%
-%%
-%%  An instance of this record is considered active if:
-%%
-%%    * It is for the current (last) transition
-%%    * AND updated = #user_action{}
-%%    * OR resumed = []
-%%
-%%  I.e, the record is inactive if:
-%%
-%%    * updated == undefined && resumed = [_|_]
-%%    * updated == #user_action{}
-%%
-%%  TODO: How to identify all suspends and all resumes.
-%%  TODO: Do we need an order in suspensions? Maybe auto numbering and links to older version?
-%%
-%%  TODO: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-%%
--record(interrupt, {
-    id          :: integer(),       %% Suspension ID, must not be used for record sorting.
-    inst_id     :: inst_id(),       %% FSM instance, that was suspended.
-    trn_nr      :: trn_nr(),        %% Transition at which the instance was suspended or 0, if in the initial state.
-    suspended   :: timestamp(),     %% When the FSM was suspended.
-    reason      :: #user_action{} | {fault, Reason :: term()} | {impl, Reason :: binary()},
-    updated     :: #user_action{} | undefined,  %% Who, when, why updated the state.
+-record(resume_attempt, {
+    number      :: integer(),                   %% Number of the resume attempt.
     upd_sname   :: term() | undefined,          %% FSM state name set by an administrator.
     upd_sdata   :: term() | undefined,          %% FSM state data set by an administrator.
     upd_script  :: script() | undefined,        %% Update script, can be attribute API functions.
-    resumed     :: #user_action{} | undefined   %% Who, when, why resumed the FSM.
+    resumed     :: #user_action{}               %% Who, when, why resumed/updated the FSM.
+}).
+
+
+%%
+%%  Describes single FSM interrupt with possibly several resume attempts.
+%%  An administrator can update the process state and its atributes
+%%  when resuming the FSM.
+%%
+-record(interrupt, {
+    id          :: integer(),           %% Suspension ID, must not be used for record sorting.
+    inst_id     :: inst_id(),           %% FSM instance, that was suspended.
+    trn_nr      :: trn_nr(),            %% Transition at which the FSM was suspended or 0, if in the initial state.
+    status      :: active | closed,     %% Interrupt status.
+    suspended   :: timestamp(),         %% When the FSM was suspended.
+    reason      :: #user_action{} | {fault, Reason :: term()} | {impl, Reason :: binary()},
+    resumes     :: [#resume_attempt{}]  %% Last resume attempt in the head of the list.
 }).
 
 

@@ -248,7 +248,7 @@ eproc_store_core_test_suspend_resume(Config) ->
     F2a = fun (_Instance, _InstSusp) ->
         {error, bad_state}
     end,
-    F2b = fun (#instance{id = IID}, #interrupt{upd_sname = [s2], upd_sdata = {s2}}) ->
+    F2b = fun (#instance{id = IID}, #interrupt{resumes = [#resume_attempt{upd_sname = [s2], upd_sdata = {s2}}]}) ->
         {add, #transition{inst_id = IID}, #message{}}
     end,
     {ok, Inst1Suspended} = eproc_store:get_instance(Store, {inst, IID1}, current),

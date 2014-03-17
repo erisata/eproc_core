@@ -33,8 +33,8 @@
     add_transition/3,
     set_instance_killed/3,
     set_instance_suspended/3,
+    set_instance_resuming/4,
     set_instance_resumed/3,
-    set_instance_state/6,
     load_instance/2,
     load_running/2
 ]).
@@ -227,9 +227,9 @@ set_instance_suspended(_StoreArgs, FsmRef, Reason) ->
 
 
 %%
-%%  Mark instance as running after it was suspended.
+%%  Mark instance as resuming after it was suspended.
 %%
-set_instance_resumed(_StoreArgs, FsmRef, UserAction) ->
+set_instance_resuming(_StoreArgs, FsmRef, StateAction, UserAction) ->
     case read_instance(FsmRef, current) of
         {error, FailReason} ->
             {error, FailReason};
@@ -240,7 +240,7 @@ set_instance_resumed(_StoreArgs, FsmRef, UserAction) ->
                 {false, running} ->
                     {error, running};
                 {false, suspended} ->
-                    case write_instance_resumed(Instance, UserAction) of
+                    case write_instance_resuming(Instance, StateAction, UserAction) of
                         ok                  -> {ok, InstId, StartSpec};
                         {error, FailReason} -> {error, FailReason}
                     end
@@ -249,24 +249,12 @@ set_instance_resumed(_StoreArgs, FsmRef, UserAction) ->
 
 
 %%
-%%  Update state for a suspended FSM.
+%%  Mark instance as successfully resumed.
 %%
-set_instance_state(_StoreArgs, FsmRef, UserAction, StateName, StateData, Script) ->
-    case read_instance(FsmRef, current) of
-        {error, FailReason} ->
-            {error, FailReason};
-        {ok, Instance = #instance{id = InstId, status = Status}} ->
-            case {is_instance_terminated(Status), Status} of
-                {true, _} ->
-                    {error, terminated};
-                {false, running} ->
-                    {error, running};
-                {false, suspended} ->
-                    case write_instance_status_update(Instance, UserAction, StateName, StateData, Script) of
-                        ok                  -> {ok, InstId};
-                        {error, FailReason} -> {error, FailReason}
-                    end
-            end
+set_instance_resumed(_StoreArgs, InstId, TrnNr) ->
+    case write_instance_resumed(InstId, TrnNr) of
+        ok -> ok;
+        {error, Reason} -> {error, Reason}
     end.
 
 
@@ -352,26 +340,10 @@ read_state(#instance{id = InstId, state = InstState}, current) ->
 %%
 %%  Reads currently active instance interrupt record.
 %%
-read_active_interrupt(#instance{id = InstId, transitions = Transitions}) -> % TODO: Transitions
-
-
-
-
-
-
-    % TODO: Get max by intr_id, bet gi cia ne viskas...
-
-
-
-
-    TrnNr = case Transitions of
-        [] -> 0;
-        [#transition{number = N}] -> N
-    end,
+read_active_interrupt(InstId) ->
     Pattern = #interrupt{
         inst_id = InstId,
-        trn_nr = TrnNr,
-        resumed = undefined,
+        status = active,
         _ = '_'
     },
     case ets:match_object(?INTR_TBL, Pattern) of
@@ -402,52 +374,87 @@ write_instance_terminated(#instance{id = InstId, name = Name}, Status, Reason) -
 %%
 %%  Mark instance as suspended.
 %%
-write_instance_suspended(#instance{id = InstId, transitions = Transitions}, Reason) ->  % TODO: Transitions
+write_instance_suspended(#instance{id = InstId}, Reason) ->
     true = ets:update_element(?INST_TBL, InstId, {#instance.status, suspended}),
-    TrnNr = case Transitions of
-        [] -> 0;
-        [#transition{number = N}] -> N
-    end,
     SuspId = ets:update_counter(?CNT_TBL, intr, 1),
     Interrupt = #interrupt{
         id          = SuspId,
         inst_id     = InstId,
-        trn_nr      = TrnNr,
+        trn_nr      = undefined,
+        status      = active,
         suspended   = erlang:now(),
         reason      = Reason,
-        updated     = undefined,
-        upd_sname   = undefined,
-        upd_sdata   = undefined,
-        upd_script  = undefined,
-        resumed     = undefined
+        resumes     = []
     },
     true = ets:insert(?INTR_TBL, Interrupt),
     ok.
 
 
 %%
-%%  Mark instance as resumed.
+%%  Mark instance as resuming.
 %%
-write_instance_resumed(Instance = #instance{id = InstId}, UserAction) ->
-    {ok, Interrupt} = read_active_interrupt(Instance),
-    NewInterrupt = Interrupt#interrupt{resumed = UserAction},
-    true = ets:update_element(?INST_TBL, InstId, {#instance.status, running}),
+write_instance_resuming(#instance{id = InstId}, StateAction, UserAction) ->
+    {ok, Interrupt = #interrupt{resumes = Resumes}} = read_active_interrupt(InstId),
+    LastResNumber = case Resumes of
+        [] -> 0;
+        [#resume_attempt{number = N} | _] -> N
+    end,
+    ResumeAttempt = case StateAction of
+        unchanged ->
+            #resume_attempt{
+                number = LastResNumber + 1,
+                upd_sname = undefined,
+                upd_sdata = undefined,
+                upd_script = undefined,
+                resumed = UserAction
+            };
+        retry_last ->
+            case Resumes of
+                [] ->
+                    #resume_attempt{
+                        number = LastResNumber + 1,
+                        upd_sname = undefined,
+                        upd_sdata = undefined,
+                        upd_script = undefined,
+                        resumed = UserAction
+                    };
+                [#resume_attempt{upd_sname = LastSName, upd_sdata = LastSData, upd_script = LastScript} | _] ->
+                    #resume_attempt{
+                        number = LastResNumber + 1,
+                        upd_sname = LastSName,
+                        upd_sdata = LastSData,
+                        upd_script = LastScript,
+                        resumed = UserAction
+                    }
+            end;
+        {set, NewStateName, NewStateData, ResumeScript} ->
+            #resume_attempt{
+                number = LastResNumber + 1,
+                upd_sname = NewStateName,
+                upd_sdata = NewStateData,
+                upd_script = ResumeScript,
+                resumed = UserAction
+            }
+    end,
+    NewInterrupt = Interrupt#interrupt{
+        resumes = [ResumeAttempt | Resumes]
+    },
+    true = ets:update_element(?INST_TBL, InstId, {#instance.status, resuming}),
     true = ets:delete_object(?INTR_TBL, Interrupt),
     true = ets:insert(?INTR_TBL, NewInterrupt),
     ok.
 
 
 %%
-%%  Update instance state "manually".
+%%  Mark instance as running (resumed).
 %%
-write_instance_status_update(Instance, UserAction, StateName, StateData, Script) ->
-    {ok, Interrupt} = read_active_interrupt(Instance),
+write_instance_resumed(InstId, TrnNr) ->
+    {ok, Interrupt} = read_active_interrupt(InstId),
     NewInterrupt = Interrupt#interrupt{
-        updated = UserAction,
-        upd_sname = StateName,
-        upd_sdata = StateData,
-        upd_script = Script
+        trn_nr = TrnNr,
+        status = closed
     },
+    true = ets:update_element(?INST_TBL, InstId, {#instance.status, running}),
     true = ets:delete_object(?INTR_TBL, Interrupt),
     true = ets:insert(?INTR_TBL, NewInterrupt),
     ok.
@@ -458,7 +465,8 @@ write_instance_status_update(Instance, UserAction, StateName, StateData, Script)
 %%
 is_instance_terminated(running)   -> false;
 is_instance_terminated(suspended) -> false;
-is_instance_terminated(done)      -> true;
+is_instance_terminated(resuming)  -> false;
+is_instance_terminated(completed) -> true;
 is_instance_terminated(failed)    -> true;
 is_instance_terminated(killed)    -> true.
 

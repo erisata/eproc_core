@@ -129,7 +129,7 @@
 %%
 %%  `{user, (User :: binary() | {User :: binary(), Comment :: binary()})}`
 %%  :   indicates a user initiaten an action. This option is mainly
-%%      used for administrative actions: kill, suspend, resume and set_state.
+%%      used for administrative actions: kill, suspend and resume.
 %%
 -module(eproc_fsm).
 -behaviour(gen_server).
@@ -144,7 +144,7 @@
     send_create_event/4, sync_send_create_event/4,
     send_event/3, send_event/2,
     sync_send_event/3, sync_send_event/2,
-    kill/2, suspend/2, resume/2, set_state/4,
+    kill/2, suspend/2, resume/3,
     is_online/2, is_online/1
 ]).
 
@@ -1083,6 +1083,12 @@ suspend(FsmRef, Options) ->
 %%  :   References particular FSM instance. The reference must be either
 %%      `{inst, _}` or `{name, _}`. Erlang process ids or names are not
 %%      supported here. See `send_event/3` for more details.
+%%  `StateAction`
+%%  :   When resuming the FSM, the administrator can cange its internal state.
+%%      This parameter specifies, which state to use in the resumed FSM.
+%%      `unchanged` - says to use FSM's original state, as it was when the
+%%      FSM was suspended. `retry_last` - says to use state of the last resume
+%%      attempt. And the `{set, ..}` specifies the new state explicitly.
 %%  `Options`
 %%  :   Any of the Common FSM Options can be provided here.
 %%      Only `store`, `registry` and `user` options will be used
@@ -1091,48 +1097,42 @@ suspend(FsmRef, Options) ->
 %%  This function depends on `eproc_registry`.
 %%
 -spec resume(
-        FsmRef  :: fsm_ref() | otp_ref(),
-        Options :: list()
+        FsmRef      :: fsm_ref(),
+        StateAction :: unchanged | retry_last | {set, NewStateName, NewStateData, ResumeScript},
+        Options     :: list()
     ) ->
         ok |
         {error, bad_ref} |
-        {error, Reason :: term()}.
+        {error, Reason :: term()}
+    when
+        NewStateName :: state_name(),
+        NewStateData :: state_data(),
+        ResumeScript :: script().
 
-resume(FsmRef, Options) ->
-    %%
-    %%  TODO: Check if not online, before resuming.
-    %%  TODO: Check if it is online after resume.
-    %%
-    case is_fsm_ref(FsmRef) of
-        false ->
+resume(FsmRef, StateAction, Options) ->
+    case {is_fsm_ref(FsmRef), is_online(FsmRef)} of
+        {false, _} ->
             {error, bad_ref};
-        true ->
+        {true, false} ->
+            {error, running};
+        {true, true} ->
             Store = resolve_store(Options),
             UserAction = resolve_user_action(Options),
-            case eproc_store:set_instance_resumed(Store, FsmRef, UserAction) of
+            case eproc_store:set_instance_resuming(Store, FsmRef, StateAction, UserAction) of
                 {ok, InstId, StartSpec} ->
                     Registry = resolve_registry(Options),
                     {ok, ResolvedFsmRef} = eproc_registry:make_new_fsm_ref(Registry, {inst, InstId}, StartSpec),
                     true = gen_server:call(ResolvedFsmRef, {'eproc_fsm$is_online'}),
-                    ok;
+                    case is_online(FsmRef) of
+                        true -> ok;
+                        false -> {error, resume_failed}
+                    end;
                 {error, running} ->
                     ok;
                 {error, Reason} ->
                     {error, Reason}
             end
     end.
-
-
-%%
-%%  TODO: Add spec.
-%%
-set_state(FsmRef, NewStateName, NewStateData, Options) ->
-    %%
-    %%  TODO: Make it offline.
-    %%  TODO: Check if not online, before updating.
-    %%
-    {ok, ResolvedFsmRef} = resolve_fsm_ref(FsmRef, Options),
-    gen_server:call(ResolvedFsmRef, {'eproc_fsm$set_state', NewStateName, NewStateData}).
 
 
 %%
@@ -1640,30 +1640,33 @@ start_loaded(Instance, StartOpts, State) ->
     case Interrupt of
         undefined ->
             {ok, _NewState} = init_loaded(Instance, LastSName, LastSData, State);
-        #interrupt{updated = undefined} ->
-            {ok, NewState} = init_loaded(Instance, LastSName, LastSData, State),
-            %%
-            %%  TODO: call eproc_store:set_instance_running().
-            %%  TODO: Reset limit counters.
-            %%
-            {ok, NewState};
-        #interrupt{upd_sname = UpdSName, upd_sdata = UpdSData, resumed = #user_action{user = ResumedUser}} ->
-            {ok, NewState} = init_loaded(Instance, UpdSName, UpdSData, State),
-            Trigger = #trigger_spec{
-                type = admin,
-                source = ResumedUser,
-                message = resume,
-                sync = false,
-                reply_fun = undefined,
-                src_arg = false
-            },
-            %%
-            %%  TODO: Reset limit counters.
-            %%
-            TransitionFun = fun (T, S) -> perform_resume_transition(T, Interrupt, S) end,
-            case perform_transition(Trigger, TransitionFun, NewState) of
-                {cont, noreply, ResumedState} -> {ok, ResumedState};
-                {error, Reason}               -> {error, Reason}
+        #interrupt{status = active, resumes = [ResumeAttempt | _]} ->
+            case ResumeAttempt of
+                #resume_attempt{upd_sname = undefined, upd_sdata = undefined, upd_script = undefined} ->
+                    {ok, NewState} = init_loaded(Instance, LastSName, LastSData, State),
+                    %%
+                    %%  TODO: call eproc_store:set_instance_running().
+                    %%  TODO: Reset limit counters.
+                    %%
+                    {ok, NewState};
+                #resume_attempt{upd_sname = UpdSName, upd_sdata = UpdSData, resumed = #user_action{user = ResumedUser}} ->
+                    {ok, NewState} = init_loaded(Instance, UpdSName, UpdSData, State),
+                    Trigger = #trigger_spec{
+                        type = admin,
+                        source = ResumedUser,
+                        message = resume,
+                        sync = false,
+                        reply_fun = undefined,
+                        src_arg = false
+                    },
+                    %%
+                    %%  TODO: Reset limit counters.
+                    %%
+                    TransitionFun = fun (T, S) -> perform_resume_transition(T, ResumeAttempt, S) end,
+                    case perform_transition(Trigger, TransitionFun, NewState) of
+                        {cont, noreply, ResumedState} -> {ok, ResumedState};
+                        {error, Reason}               -> {error, Reason}
+                    end
             end
     end.
 
@@ -1813,7 +1816,7 @@ perform_transition(Trigger, TransitionFun, State) ->
     %%  Save transition.
     InstStatus = case ProcAction of
         cont -> running;
-        stop -> done
+        stop -> completed
     end,
     Transition = #transition{
         inst_id = InstId,
@@ -1851,14 +1854,14 @@ perform_transition(Trigger, TransitionFun, State) ->
 %%
 %%  Performs actions specific for the resume-initiated transition.
 %%
-perform_resume_transition(_Trigger, Interrupt, State) ->
+perform_resume_transition(_Trigger, ResumeAttempt, State) ->
     #state{
         sname = SName,
         sdata = SData
     } = State,
-    #interrupt{
+    #resume_attempt{
         upd_script = UpdScript
-    } = Interrupt,
+    } = ResumeAttempt,
     case UpdScript of
         undefined ->
             ok;

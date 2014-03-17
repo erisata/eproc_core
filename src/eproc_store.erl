@@ -28,8 +28,8 @@
     add_transition/3,
     set_instance_killed/3,
     set_instance_suspended/3,
+    set_instance_resuming/4,
     set_instance_resumed/3,
-    set_instance_state/6,
     load_instance/2,
     load_running/2
 ]).
@@ -98,45 +98,43 @@
 
 
 %%
-%%  TODO: Review description.
-%%
-%%  This function is invoked when the FSM is resumed. It should
-%%  change data only if the current status of the FSM is `suspended`.
+%%  This function is invoked when an attempt to resume the FSM made.
+%%  It should check if the current status of the FSM is `suspended`
+%%  or `resuming`. In other cases it should exit with an error.
 %%  The following cases shoud be handled here:
 %%
-%%   1. State was not updated while FSM was suspended. In this case
-%%      the FSM status should be changed to "running" and the `interrupt`
-%%      record should be closed by setting the `resumed` field.
+%%   1. Change `#instance.status` from `suspended` to `resuming`.
+%%   2. Add the resume attempt to the active interrupt.
 %%
-%%   2. State was updated while FSM was suspended. In this case the
-%%      FSM status should be left unchanged (`suspended`) and the
-%%      `interrupt` should be closed by adding the user action to the
-%%      front of the resume list. The FSM status will be changed later
-%%      with invokation of `add_transition`, used to create new transition
-%%      reflecting updated state.
-%%
--callback set_instance_resumed(
+-callback set_instance_resuming(
         StoreArgs   :: term(),
         FsmRef      :: fsm_ref(),
+        StateAction :: unchanged | retry_last | {set, NewStateName, NewStateData, ResumeScript},
         UserAction  :: #user_action{}
     ) ->
         {ok, inst_id(), fsm_start_spec()} |
         {error, not_found | running | terminated} |
-        {error, Reason :: term()}.
+        {error, Reason :: term()}
+    when
+        NewStateName :: term(),
+        NewStateData :: term(),
+        ResumeScript :: script().
 
 
 %%
-%%  TODO: Describe, what should be done here.
+%%  This function transfers the FSM from the `resuming` state to `running`.
+%%  The following steps should be done for that:
 %%
--callback set_instance_state(
+%%   1. Change `#instance.status` from `resuming` to `running`.
+%%   2. Set transition number for the active interrupt number.
+%%   3. The active interrupt should be marked as closed.
+%%
+-callback set_instance_resumed(
         StoreArgs   :: term(),
-        FsmRef      :: fsm_ref(),
-        UserAction  :: #user_action{},
-        StateName   :: term(),
-        StateData   :: term(),
-        Script      :: script()
+        InstId      :: inst_id(),
+        TrnNr       :: trn_nr()
     ) ->
-        {ok, inst_id()} |
+        ok |
         {error, Reason :: term()}.
 
 
@@ -262,28 +260,29 @@ set_instance_suspended(Store, FsmRef, Reason) ->
 
 
 %%
+%%  Marks an FSM as resuming after it was suspended.
+%%
+set_instance_resuming(Store, FsmRef, StateAction, UserAction) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
+    StoreMod:set_instance_resuming(StoreArgs, FsmRef, StateAction, UserAction).
+
+
+%%
 %%  Marks an FSM as running after it was suspended.
+%%  This function is called from the running FSM process.
 %%
-set_instance_resumed(Store, FsmRef, UserAction) ->
+set_instance_resumed(Store, InstId, TrnNr) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:set_instance_resumed(StoreArgs, FsmRef, UserAction).
-
-
-%%
-%%  Updates state "manually" for a suspended FSM.
-%%
-set_instance_state(Store, FsmRef, UserAction, StateName, StateData, Script) ->
-    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:set_instance_state(StoreArgs, FsmRef, UserAction, StateName, StateData, Script).
+    StoreMod:set_instance_resumed(StoreArgs, InstId, TrnNr).
 
 
 %%
 %%  Loads an instance and its current state.
 %%  This function returns an instance with latest state.
 %%
-load_instance(Store, InstId) ->
+load_instance(Store, FsmRef) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:load_instance(StoreArgs, InstId).
+    StoreMod:load_instance(StoreArgs, FsmRef).
 
 
 
