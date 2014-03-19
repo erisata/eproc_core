@@ -56,9 +56,9 @@ decode_test() ->
 %%  Test encoding/decoding cycle.
 %%
 codec_test() ->
-    Decoded = {[1, 2, "123"], [{{{ok, 1, "qwe"}, [asd]}}]},
-    {ok, Encoded} = eproc_codec_xml:encode(Decoded),
-    {ok, Decoded} = eproc_codec_xml:decode(Encoded),
+    Decoded = {[a, 1, 2, "123"], [{{{ok, 1, "qwe"}, [asd]}}]},
+    {ok, Encoded} = eproc_codec_xml:encode(1, Decoded),
+    {ok, Decoded} = eproc_codec_xml:decode(1, erlang:iolist_to_binary(Encoded)),
     ok.
 
 

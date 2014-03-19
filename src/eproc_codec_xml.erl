@@ -19,7 +19,7 @@
 %%
 -module(eproc_codec_xml).
 -behaviour(eproc_codec).
--export([encode/2, decode/2, get_xmerl_elem_text/1]).
+-export([encode/2, decode/2]).
 -include_lib("xmerl/include/xmerl.hrl").
 
 
@@ -38,6 +38,9 @@ encode(_CodecArgs, Term) ->
 %%
 %%  Decode XML to Erlang term.
 %%
+decode(CodecArgs, Xml) when is_binary(Xml) ->
+    decode(CodecArgs, erlang:binary_to_list(Xml));
+
 decode(_CodecArgs, Xml) when is_list(Xml) ->
     {RootElement, []} = xmerl_scan:string(Xml),
     Term = decode_xmerl(RootElement),
