@@ -105,7 +105,7 @@ create_state_test() ->
     ok = meck:new(eproc_store, []),
     ok = meck:new(eproc_fsm__void),
     ok = meck:expect(eproc_store, add_instance, fun
-        (_StoreRef, #instance{args = {a, b}, init = {state, a, b}}) -> {ok, iid1}
+        (_StoreRef, #instance{args = {a, b}, state = #inst_state{sname = [], sdata = {state, a, b}}}) -> {ok, iid1}
     end),
     ok = meck:expect(eproc_fsm__void, init, fun ({A, B}) -> {ok, {state, A, B}} end),
     {ok, {inst, iid1}} = eproc_fsm:create(eproc_fsm__void, {a, b}, []),
@@ -129,8 +129,8 @@ start_link_new_by_inst_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 id = 100, group = 200, name = name, module = eproc_fsm__void,
-                args = {a}, opts = [], init = {state, a}, status = running,
-                created = erlang:now(), transitions = []
+                args = {a}, opts = [], status = running, created = erlang:now(),
+                state = #inst_state{sname = [], sdata = {state, a}, attr_last_id = 0, attrs_active = []}
             }}
     end),
     ok = meck:expect(eproc_fsm_attr, init, fun
@@ -157,8 +157,8 @@ start_link_new_by_name_test() ->
         (store, {name, N = start_link_by_name_test}) ->
             {ok, #instance{
                 id = 100, group = 200, name = N, module = eproc_fsm__void,
-                args = {a}, opts = [], init = {state, a}, status = running,
-                created = erlang:now(), transitions = []
+                args = {a}, opts = [], status = running, created = erlang:now(),
+                state = #inst_state{sname = [], sdata = {state, a}, attr_last_id = 0, attrs_active = []}
             }}
     end),
     {ok, PID} = eproc_fsm:start_link({name, start_link_by_name_test}, []),
@@ -183,14 +183,19 @@ start_link_existing_test() ->
         (store, {inst, I = 100}) ->
             {ok, #instance{
                 id = I, group = I, name = name, module = eproc_fsm__void,
-                args = {a}, opts = [], init = {state, a}, status = running,
-                created = erlang:now(), transitions = [#transition{
-                    inst_id = I, number = 1, sname = [some], sdata = {state, b},
-                    attr_last_id = 2, attr_actions = [], attrs_active = [
+                args = {a}, opts = [], state = #inst_state{
+                    inst_id = I,
+                    trn_nr = 1,
+                    sname = [some],
+                    sdata = {state, b},
+                    attr_last_id = 2,
+                    attrs_active = [
                         #attribute{attr_id = 1},
                         #attribute{attr_id = 2}
                     ]
-                }]
+                },
+                status = running,
+                created = erlang:now()
             }}
     end),
     ok = meck:expect(eproc_fsm_attr, init, fun
@@ -217,8 +222,8 @@ start_link_get_id_group_name_test() ->
         (store, {inst, I = 1000}) ->
             {ok, #instance{
                 id = I, group = 2000, name = name, module = eproc_fsm__void,
-                args = {a}, opts = [], init = {state, a}, status = running,
-                created = erlang:now(), transitions = []
+                args = {a}, opts = [], status = running, created = erlang:now(),
+                state = #inst_state{sname = [], sdata = {state, a}, attr_last_id = 0, attrs_active = []}
             }}
     end),
     ok = meck:expect(eproc_fsm__void, init, fun
@@ -250,8 +255,8 @@ start_link_init_runtime_test() ->
         (store, {inst, I = 1000}) ->
             {ok, #instance{
                 id = I, group = 2000, name = name, module = eproc_fsm__void,
-                args = {a}, opts = [], init = {state, a, undefined}, status = running,
-                created = erlang:now(), transitions = []
+                args = {a}, opts = [], status = running, created = erlang:now(),
+                state = #inst_state{sname = [], sdata = {state, a, undefined}, attr_last_id = 0, attrs_active = []}
             }}
     end),
     ok = meck:expect(eproc_fsm__void, init, fun
@@ -278,8 +283,8 @@ start_link_fsmname_test() ->
         (store, {inst, I = 1000}) ->
             {ok, #instance{
                 id = I, group = 2000, name = name, module = eproc_fsm__void,
-                args = {a}, opts = [], init = {state, a}, status = running,
-                created = erlang:now(), transitions = []
+                args = {a}, opts = [], status = running, created = erlang:now(),
+                state = #inst_state{sname = [], sdata = {state, a}, attr_last_id = 0, attrs_active = []}
             }}
     end),
     {ok, PID} = eproc_fsm:start_link({local, start_link_fsmname_test}, {inst, 1000}, []),
@@ -297,8 +302,8 @@ start_link_fsmname_test() ->
 start_link_opts_register_test() ->
     GenInst = fun (I, N) -> #instance{
         id = I, group = I, name = N, module = eproc_fsm__void,
-        args = {a}, opts = [], init = {state, a}, status = running,
-        created = erlang:now(), transitions = []
+        args = {a}, opts = [], status = running, created = erlang:now(),
+        state = #inst_state{sname = [], sdata = {state, a}, attr_last_id = 0, attrs_active = []}
     } end,
     ok = meck:new(eproc_store, []),
     ok = meck:new(eproc_registry, []),
@@ -354,8 +359,8 @@ start_link_opts_restart_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 id = 100, group = 200, name = name, module = eproc_fsm__void,
-                args = {a}, opts = [], init = {state, a}, status = running,
-                created = erlang:now(), transitions = []
+                args = {a}, opts = [], status = running, created = erlang:now(),
+                state = #inst_state{sname = [], sdata = {state, a}, attr_last_id = 0, attrs_active = []}
             }}
     end),
     ok = meck:expect(eproc_restart, restarted, fun
@@ -385,8 +390,8 @@ start_link_restart_suspend_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 id = 100, group = 200, name = name, module = eproc_fsm__void,
-                args = {}, opts = [], init = {state, undefined}, status = running,
-                created = erlang:now(), transitions = []
+                args = {a}, opts = [], status = running, created = erlang:now(),
+                state = #inst_state{sname = [], sdata = {state, undefined}, attr_last_id = 0, attrs_active = []}
             }}
     end),
     ok = meck:expect(eproc_store, set_instance_suspended, fun
@@ -423,8 +428,8 @@ send_event_final_state_from_init_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 id = 100, group = 200, name = name, module = eproc_fsm__void,
-                args = {a}, opts = [], init = {state, a}, status = running,
-                created = erlang:now(), transitions = []
+                args = {a}, opts = [], status = running, created = erlang:now(),
+                state = #inst_state{trn_nr = 0, sname = [], sdata = {state, a}, attr_last_id = 0, attrs_active = []}
             }}
     end),
     ok = meck:expect(eproc_store, add_transition, fun
@@ -442,9 +447,7 @@ send_event_final_state_from_init_test() ->
                 trn_messages = [],
                 attr_last_id = 0,
                 attr_actions = [],
-                attrs_active = undefined,
-                inst_status  = done,
-                inst_suspend = undefined
+                inst_status  = completed
             } = Transition,
             ?assert(is_integer(Duration)),
             ?assert(Duration >= 0),
@@ -473,11 +476,10 @@ send_event_final_state_from_ordinary_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], init = {state, undefined}, status = running,
-                created = erlang:now(), transitions = [#transition{
-                    inst_id = 100, number = 1, sname = [incrementing], sdata = {state, 5},
-                    attr_last_id = 0, attr_actions = [], attrs_active = []
-                }]
+                args = {}, opts = [], status = running, created = erlang:now(), state = #inst_state{
+                    inst_id = 100, trn_nr = 1, sname = [incrementing], sdata = {state, 5},
+                    attr_last_id = 0, attrs_active = []
+                }
             }}
     end),
     ok = meck:expect(eproc_store, add_transition, fun
@@ -486,7 +488,7 @@ send_event_final_state_from_ordinary_test() ->
                 trigger_type = event,
                 trigger_msg  = #msg_ref{id = {InstId, TrnNr, 0}, peer = {test, test}},
                 trigger_resp = undefined,
-                inst_status  = done
+                inst_status  = completed
             } = Transition,
             {ok, InstId, TrnNr}
     end),
@@ -515,8 +517,10 @@ send_event_next_state_from_init_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], init = {state, undefined}, status = running,
-                created = erlang:now(), transitions = []
+                args = {a}, opts = [], status = running, created = erlang:now(), state = #inst_state{
+                    inst_id = 100, trn_nr = 0, sname = [], sdata = {state, undefined},
+                    attr_last_id = 0, attrs_active = []
+                }
             }}
     end),
     ok = meck:expect(eproc_store, add_transition, fun
@@ -552,11 +556,15 @@ send_event_next_state_from_ordinary_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], init = {state, undefined}, status = running,
-                created = erlang:now(), transitions = [#transition{
-                    inst_id = 100, number = 1, sname = [incrementing], sdata = {state, 5},
-                    attr_last_id = 0, attr_actions = [], attrs_active = []
-                }]
+                args = {}, opts = [], status = running, created = erlang:now(),
+                state = #inst_state{
+                    inst_id = 100,
+                    trn_nr = 1,
+                    sname = [incrementing],
+                    sdata = {state, 5},
+                    attr_last_id = 1,
+                    attrs_active = []
+                }
             }}
     end),
     ok = meck:expect(eproc_store, add_transition, fun
@@ -593,8 +601,10 @@ send_event_same_state_from_init_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], init = {state, undefined}, status = running,
-                created = erlang:now(), transitions = []
+                args = {a}, opts = [], status = running, created = erlang:now(), state = #inst_state{
+                    inst_id = 100, trn_nr = 0, sname = [], sdata = {state, undefined},
+                    attr_last_id = 0, attrs_active = []
+                }
             }}
     end),
     ok = meck:expect(eproc_store, add_transition, fun
@@ -629,11 +639,15 @@ send_event_same_state_from_ordinary_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], init = {state, undefined}, status = running,
-                created = erlang:now(), transitions = [#transition{
-                    inst_id = 100, number = 1, sname = [incrementing], sdata = {state, 5},
-                    attr_last_id = 0, attr_actions = [], attrs_active = []
-                }]
+                args = {}, opts = [], status = running, created = erlang:now(),
+                state = #inst_state{
+                    inst_id = 100,
+                    trn_nr = 1,
+                    sname = [incrementing],
+                    sdata = {state, 5},
+                    attr_last_id = 0,
+                    attrs_active = []
+                }
             }}
     end),
     ok = meck:expect(eproc_store, add_transition, fun
@@ -668,11 +682,15 @@ send_event_reply_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], init = {state, undefined}, status = running,
-                created = erlang:now(), transitions = [#transition{
-                    inst_id = 100, number = 1, sname = [incrementing], sdata = {state, 5},
-                    attr_last_id = 0, attr_actions = [], attrs_active = []
-                }]
+                args = {}, opts = [], status = running, created = erlang:now(),
+                state = #inst_state{
+                    inst_id = 100,
+                    trn_nr = 1,
+                    sname = [incrementing],
+                    sdata = {state, 5},
+                    attr_last_id = 0,
+                    attrs_active = []
+                }
             }}
     end),
     ok = meck:expect(eproc_store, add_transition, fun
@@ -708,8 +726,10 @@ send_event_save_runtime_test() ->
         (store, {inst, I = 1000}) ->
             {ok, #instance{
                 id = I, group = 2000, name = name, module = eproc_fsm__void,
-                args = {a}, opts = [], init = {state, a, this_is_empty}, status = running,
-                created = erlang:now(), transitions = []
+                args = {a}, opts = [], status = running, created = erlang:now(), state = #inst_state{
+                    inst_id = 100, trn_nr = 0, sname = [], sdata = {state, a, this_is_empty},
+                    attr_last_id = 0, attrs_active = []
+                }
             }}
     end),
     ok = meck:expect(eproc_fsm__void, init, fun
@@ -745,11 +765,15 @@ send_event_handle_attrs_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], init = {state, undefined}, status = running,
-                created = erlang:now(), transitions = [#transition{
-                    inst_id = 100, number = 1, sname = [incrementing], sdata = {state, 5},
-                    attr_last_id = 0, attr_actions = [], attrs_active = []
-                }]
+                args = {}, opts = [], status = running, created = erlang:now(),
+                state = #inst_state{
+                    inst_id = 100,
+                    trn_nr = 1,
+                    sname = [incrementing],
+                    sdata = {state, 5},
+                    attr_last_id = 0,
+                    attrs_active = []
+                }
             }}
     end),
     ok = meck:expect(eproc_store, add_transition, fun
@@ -785,8 +809,10 @@ send_event_restart_unreg_test() ->
         (store, {inst, IID}) ->
             {ok, #instance{
                 id = IID, group = 200, name = name, module = eproc_fsm__void,
-                args = {a}, opts = [], init = {state, IID}, status = running,
-                created = erlang:now(), transitions = []
+                args = {a}, opts = [], status = running, created = erlang:now(), state = #inst_state{
+                    inst_id = 100, trn_nr = 0, sname = [], sdata = {state, IID},
+                    attr_last_id = 0, attrs_active = []
+                }
             }}
     end),
     ok = meck:expect(eproc_store, add_transition, fun
@@ -831,11 +857,15 @@ sync_send_event_final_state_from_ordinary_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], init = {state, undefined}, status = running,
-                created = erlang:now(), transitions = [#transition{
-                    inst_id = 100, number = 1, sname = [incrementing], sdata = {state, 5},
-                    attr_last_id = 0, attr_actions = [], attrs_active = []
-                }]
+                args = {}, opts = [], status = running, created = erlang:now(),
+                state = #inst_state{
+                    inst_id = 100,
+                    trn_nr = 1,
+                    sname = [incrementing],
+                    sdata = {state, 5},
+                    attr_last_id = 0,
+                    attrs_active = []
+                }
             }}
     end),
     ok = meck:expect(eproc_store, add_transition, fun
@@ -844,7 +874,7 @@ sync_send_event_final_state_from_ordinary_test() ->
                 trigger_type = sync,
                 trigger_msg  = #msg_ref{id = {InstId, TrnNr, 0}, peer = {test, test}},
                 trigger_resp = #msg_ref{id = {InstId, TrnNr, 1}, peer = {test, test}},
-                inst_status  = done
+                inst_status  = completed
             } = Transition,
             {ok, InstId, TrnNr}
     end),
@@ -873,11 +903,15 @@ sync_send_event_next_state_from_ordinary_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], init = {state, undefined}, status = running,
-                created = erlang:now(), transitions = [#transition{
-                    inst_id = 100, number = 1, sname = [incrementing], sdata = {state, 5},
-                    attr_last_id = 0, attr_actions = [], attrs_active = []
-                }]
+                args = {}, opts = [], status = running, created = erlang:now(),
+                state = #inst_state{
+                    inst_id = 100,
+                    trn_nr = 1,
+                    sname = [incrementing],
+                    sdata = {state, 5},
+                    attr_last_id = 0,
+                    attrs_active = []
+                }
             }}
     end),
     ok = meck:expect(eproc_store, add_transition, fun
@@ -914,11 +948,15 @@ sync_send_event_same_state_from_ordinary_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], init = {state, undefined}, status = running,
-                created = erlang:now(), transitions = [#transition{
-                    inst_id = 100, number = 1, sname = [incrementing], sdata = {state, 5},
-                    attr_last_id = 0, attr_actions = [], attrs_active = []
-                }]
+                args = {}, opts = [], status = running, created = erlang:now(),
+                state = #inst_state{
+                    inst_id = 100,
+                    trn_nr = 1,
+                    sname = [incrementing],
+                    sdata = {state, 5},
+                    attr_last_id = 0,
+                    attrs_active = []
+                }
             }}
     end),
     ok = meck:expect(eproc_store, add_transition, fun
@@ -953,11 +991,15 @@ sync_send_event_reply_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], init = {state, undefined}, status = running,
-                created = erlang:now(), transitions = [#transition{
-                    inst_id = 100, number = 1, sname = [incrementing], sdata = {state, 5},
-                    attr_last_id = 0, attr_actions = [], attrs_active = []
-                }]
+                args = {}, opts = [], status = running, created = erlang:now(),
+                state = #inst_state{
+                    inst_id = 100,
+                    trn_nr = 1,
+                    sname = [incrementing],
+                    sdata = {state, 5},
+                    attr_last_id = 0,
+                    attrs_active = []
+                }
             }}
     end),
     ok = meck:expect(eproc_store, add_transition, fun
@@ -997,11 +1039,15 @@ unknown_message_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], init = {state, undefined}, status = running,
-                created = erlang:now(), transitions = [#transition{
-                    inst_id = 100, number = 1, sname = [incrementing], sdata = {state, 5},
-                    attr_last_id = 0, attr_actions = [], attrs_active = []
-                }]
+                args = {}, opts = [], status = running, created = erlang:now(),
+                state = #inst_state{
+                    inst_id = 100,
+                    trn_nr = 1,
+                    sname = [incrementing],
+                    sdata = {state, 5},
+                    attr_last_id = 0,
+                    attrs_active = []
+                }
             }}
     end),
     ok = meck:expect(eproc_store, add_transition, fun
@@ -1099,8 +1145,10 @@ kill_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], init = {state, undefined}, status = running,
-                created = erlang:now(), transitions = []
+                args = {a}, opts = [], status = running, created = erlang:now(), state = #inst_state{
+                    inst_id = 100, trn_nr = 0, sname = [], sdata = {state, undefined},
+                    attr_last_id = 0, attrs_active = []
+                }
             }}
     end),
     ok = meck:expect(eproc_store, set_instance_killed, fun
@@ -1138,8 +1186,10 @@ suspend_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], init = {state, undefined}, status = running,
-                created = erlang:now(), transitions = []
+                args = {a}, opts = [], status = running, created = erlang:now(), state = #inst_state{
+                    inst_id = 100, trn_nr = 0, sname = [], sdata = {state, undefined},
+                    attr_last_id = 0, attrs_active = []
+                }
             }}
     end),
     ok = meck:expect(eproc_store, set_instance_suspended, fun
@@ -1182,14 +1232,14 @@ resume_test() ->
     Target104 = spawn_link(TargetFun),
     DefaultInst = #instance{
         id = undefined, group = 123, name = name, module = eproc_fsm__seq,
-        args = {}, opts = [], init = {state, undefined}, status = running,
+        args = {}, opts = [], state = #inst_state{sname = [], sdata = {state, undefined}}, status = running,
         created = erlang:now(), transitions = []
     },
     Inst102 = DefaultInst#instance{id = 102, transitions = []},
     Inst103 = DefaultInst#instance{id = 103, transitions = []},
     Inst104 = DefaultInst#instance{id = 104, transitions = [#transition{
         inst_id = 104, number = 1, sname = [incrementing], sdata = {state, 5},
-        attr_last_id = 17, attr_actions = [], attrs_active = []
+        attr_last_id = 17, attr_actions = []
     }]},
     Inst105 = DefaultInst#instance{id = 105, transitions = []},
 
