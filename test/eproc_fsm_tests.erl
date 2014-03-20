@@ -1239,9 +1239,9 @@ resume_test() ->
         (store, {inst, InstId = 102}, retry_last,     #user_action{}) -> {ok, InstId, {default, []}};
         (store, {inst, InstId = 103}, {set, a, b, c}, #user_action{}) -> {ok, InstId, {default, []}}
     end),
-    ok = eproc_fsm:resume({inst, 101}, [{start, no}, {state, unchanged}]),
-    ok = eproc_fsm:resume({inst, 102}, [{start, no}, {state, retry_last}]),
-    ok = eproc_fsm:resume({inst, 103}, [{start, no}, {state, {set, a, b, c}}]),
+    ok = eproc_fsm:resume(resume_test_a, [{store, store}, {start, no}, {fsm_ref, {inst, 101}}, {state, unchanged}]),
+    ok = eproc_fsm:resume(resume_test_b, [{store, store}, {start, no}, {fsm_ref, {inst, 102}}, {state, retry_last}]),
+    ok = eproc_fsm:resume(resume_test_c, [{store, store}, {start, no}, {fsm_ref, {inst, 103}}, {state, {set, a, b, c}}]),
     ?assertEqual(1, meck:num_calls(eproc_store, set_instance_resuming, [store, {inst, 101}, '_', '_'])),
     ?assertEqual(1, meck:num_calls(eproc_store, set_instance_resuming, [store, {inst, 102}, '_', '_'])),
     ?assertEqual(1, meck:num_calls(eproc_store, set_instance_resuming, [store, {inst, 103}, '_', '_'])),

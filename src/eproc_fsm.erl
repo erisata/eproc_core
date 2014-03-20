@@ -1119,8 +1119,16 @@ suspend(FsmRef, Options) ->
 %%          provided explicitly will be used instead of the specification provided
 %%          when creating the FSM.
 %%
+%%  `{fsm_ref, fsm_ref()}`
+%%  :   This option can be used to provide FSM reference. This is only meaningfull,
+%%      if the `FsmRef` parameter is `otp_ref()`. Altrough FSM cannot be started with
+%%      `FsmRef :: otp_ref()`, one can use this option with standalone FSM, to resume
+%%      it not using EProc Registry. If this option is provided, the FsmRef parameter
+%%      will only be used to check if the FSM is online or not. All other actions will
+%%      be performed using the reference provided by this option.
+%%
 -spec resume(
-        FsmRef      :: fsm_ref(),
+        FsmRef      :: fsm_ref() | otp_ref(),
         Options     :: list()
     ) ->
         ok |
@@ -1129,17 +1137,18 @@ suspend(FsmRef, Options) ->
         {error, Reason :: term()}.
 
 resume(FsmRef, Options) ->
-    case {is_fsm_ref(FsmRef), is_online(FsmRef)} of
+    FsmRefInStore = proplists:get_value(fsm_ref, Options, FsmRef),
+    case {is_fsm_ref(FsmRefInStore), is_online(FsmRef)} of
         {false, _} ->
             {error, bad_ref};
-        {true, false} ->
-            {error, running};
         {true, true} ->
+            {error, running};
+        {true, false} ->
             Store = resolve_store(Options),
             UserAction = resolve_user_action(Options),
             StateAction = proplists:get_value(state, Options, retry_last),
             StartAction = proplists:get_value(start, Options, yes),
-            case eproc_store:set_instance_resuming(Store, FsmRef, StateAction, UserAction) of
+            case eproc_store:set_instance_resuming(Store, FsmRefInStore, StateAction, UserAction) of
                 {ok, InstId, StoredStartSpec} ->
                     case StartAction of
                         no -> ok;
