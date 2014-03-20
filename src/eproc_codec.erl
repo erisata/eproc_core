@@ -14,4 +14,86 @@
 %| limitations under the License.
 %\--------------------------------------------------------------------
 
+%%
+%%  Main interface for codecs. Codecs are used to convert Erlang terms
+%%  to some external format and vice versa.
+%%
 -module(eproc_codec).
+-compile([{parse_transform, lager_transform}]).
+-export([ref/2]).
+-export([encode/2, decode/2]).
+-export_type([ref/0]).
+-include("eproc.hrl").
+
+-opaque ref() :: {Callback :: module(), Args :: term()}.
+
+
+%% =============================================================================
+%%  Callback definitions.
+%% =============================================================================
+
+%%
+%%  Encode term to an external format (iolist).
+%%
+-callback encode(
+        CodecArgs   :: term(),
+        Term        :: term()
+    ) ->
+        {ok, Encoded :: iolist()} |
+        {error, Reason :: term()}.
+
+
+%%
+%%  Decode term from an external format (iolist).
+%%
+-callback decode(
+        CodecArgs   :: term(),
+        Encoded     :: iolist()
+    ) ->
+        {ok, Term :: term()} |
+        {error, Reason :: term()}.
+
+
+
+%% =============================================================================
+%%  Public API.
+%% =============================================================================
+
+%%
+%%  Create a codec reference.
+%%
+-spec ref(module(), term()) -> {ok, codec_ref()}.
+
+ref(Module, Args) ->
+    {ok, {Module, Args}}.
+
+
+%%
+%%  Encode term to an external format (iolist).
+%%
+encode(Codec, Term) ->
+    {ok, {CodecMod, CodecArgs}} = resolve_ref(Codec),
+    CodecMod:encode(CodecArgs, Term).
+
+
+%%
+%%  Decode term from an external format (iolist).
+%%
+decode(Codec, Encoded) ->
+    {ok, {CodecMod, CodecArgs}} = resolve_ref(Codec),
+    CodecMod:decode(CodecArgs, Encoded).
+
+
+
+%% =============================================================================
+%%  Internal functions.
+%% =============================================================================
+
+
+%%
+%%  Resolve the provided codec reference.
+%%
+resolve_ref({CodecMod, CodecArgs}) ->
+    {ok, {CodecMod, CodecArgs}}.
+
+

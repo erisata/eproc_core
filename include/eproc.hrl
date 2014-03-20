@@ -47,6 +47,7 @@
 -type inst_name()       :: term().
 -type inst_group()      :: eproc_fsm:group().
 -type inst_status()     :: running | suspended | resuming | completed | killed | failed.
+-type codec_ref()       :: eproc_codec:ref().
 -type store_ref()       :: eproc_store:ref().
 -type registry_ref()    :: eproc_registry:ref().
 -type trn_nr()          :: integer().
