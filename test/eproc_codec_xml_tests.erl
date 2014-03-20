@@ -22,12 +22,19 @@
 %%  Test primitive encoding rules.
 %%
 encode_test() ->
-    {ok, <<"<integer>1</integer>">>} = eproc_codec_xml:encode(1),
-    {ok, <<"<atom>asd</atom>">>}     = eproc_codec_xml:encode(asd),
-    {ok, <<"<string>asd</string>">>} = eproc_codec_xml:encode("asd"),
-    {ok, <<"<tuple></tuple>">>}      = eproc_codec_xml:encode({}),
-    {ok, <<"<list></list>">>}        = eproc_codec_xml:encode([]),
-    {ok, <<"<binary>asd</binary>">>} = eproc_codec_xml:encode(<<"asd">>),
+    {ok, Codec} = eproc_codec:ref(eproc_codec_xml, []),
+    {ok, Xml1} = eproc_codec:encode(Codec, 1),
+    {ok, Xml2} = eproc_codec:encode(Codec, asd),
+    {ok, Xml3} = eproc_codec:encode(Codec, "asd"),
+    {ok, Xml4} = eproc_codec:encode(Codec, {}),
+    {ok, Xml5} = eproc_codec:encode(Codec, []),
+    {ok, Xml6} = eproc_codec:encode(Codec, <<"asd">>),
+    ?assertEqual("<?xml version=\"1.0\"?><integer>1</integer>", lists:flatten(Xml1)),
+    ?assertEqual("<?xml version=\"1.0\"?><atom>asd</atom>", lists:flatten(Xml2)),
+    ?assertEqual("<?xml version=\"1.0\"?><string>asd</string>", lists:flatten(Xml3)),
+    ?assertEqual("<?xml version=\"1.0\"?><tuple/>", lists:flatten(Xml4)),
+    ?assertEqual("<?xml version=\"1.0\"?><list/>", lists:flatten(Xml5)),
+    ?assertEqual("<?xml version=\"1.0\"?><binary>asd</binary>", lists:flatten(Xml6)),
     ok.
 
 
@@ -35,12 +42,13 @@ encode_test() ->
 %%  Test primitive decoding rules.
 %%
 decode_test() ->
-    {ok, 1}         = eproc_codec_xml:decode(<<"<integer>1</integer>">>),
-    {ok, asd}       = eproc_codec_xml:decode(<<"<atom>asd</atom>">>),
-    {ok, "asd"}     = eproc_codec_xml:decode(<<"<string>asd</string>">>),
-    {ok, {}}        = eproc_codec_xml:decode(<<"<tuple></tuple>">>),
-    {ok, []}        = eproc_codec_xml:decode(<<"<list></list>">>),
-    {ok, <<"asd">>} = eproc_codec_xml:decode(<<"<binary>asd</binary>">>),
+    {ok, Codec} = eproc_codec:ref(eproc_codec_xml, []),
+    {ok, 1}         = eproc_codec:decode(Codec, "<integer>1</integer>"),
+    {ok, asd}       = eproc_codec:decode(Codec, "<atom>asd</atom>"),
+    {ok, "asd"}     = eproc_codec:decode(Codec, "<string>asd</string>"),
+    {ok, {}}        = eproc_codec:decode(Codec, "<tuple/>"),
+    {ok, []}        = eproc_codec:decode(Codec, "<list/>"),
+    {ok, <<"asd">>} = eproc_codec:decode(Codec, "<binary>asd</binary>"),
     ok.
 
 
@@ -48,9 +56,9 @@ decode_test() ->
 %%  Test encoding/decoding cycle.
 %%
 codec_test() ->
-    Decoded = {[1, 2, "123"], [{{{ok, 1, "qwe"}, [asd]}}]},
-    {ok, Encoded} = eproc_codec_xml:encode(Decoded),
-    {ok, Decoded} = eproc_codec_xml:decode(Encoded),
+    Decoded = {[a, 1, 2, "123"], [{{{ok, 1, "qwe"}, [asd]}}]},
+    {ok, Encoded} = eproc_codec_xml:encode(1, Decoded),
+    {ok, Decoded} = eproc_codec_xml:decode(1, erlang:iolist_to_binary(Encoded)),
     ok.
 
 
