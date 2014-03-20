@@ -1219,111 +1219,140 @@ suspend_test() ->
 
 %%
 %%  Check if resume/* works in the cases when:
-%%    * state was not updated.
-%%    * instance is already resumed.
-%%    * state was updated and new state is valid for new instance.
-%%    * state was updated and new state is valid for existing instance (with transitions).
-%%    * state was updated and new state is invalid.
+%%    * state
+%%        * with original state.
+%%        * with new state.
+%%        * with new bad state.
+%%        * with state from the previous resume.
+%%        * with state from the previous with no previous.
+%%    * start
+%%        * no startup
+%%        * start stored
+%%        * start provided
+%%    * FSM is online
+%%    * FSM is offline but not suspended.
 %%
 resume_test() ->
-    TargetFun = fun () -> receive {'$gen_call', From, {'eproc_fsm$is_online'}} -> gen_server:reply(From, true) end end,
-    Target102 = spawn_link(TargetFun),
-    Target103 = spawn_link(TargetFun),
-    Target104 = spawn_link(TargetFun),
-    DefaultInst = #instance{
-        id = undefined, group = 123, name = name, module = eproc_fsm__seq,
-        args = {}, opts = [], state = #inst_state{sname = [], sdata = {state, undefined}}, status = running,
-        created = erlang:now(), transitions = []
-    },
-    Inst102 = DefaultInst#instance{id = 102, transitions = []},
-    Inst103 = DefaultInst#instance{id = 103, transitions = []},
-    Inst104 = DefaultInst#instance{id = 104, transitions = [#transition{
-        inst_id = 104, number = 1, sname = [incrementing], sdata = {state, 5},
-        attr_last_id = 17, attr_actions = []
-    }]},
-    Inst105 = DefaultInst#instance{id = 105, transitions = []},
-
-    {ok, Store} = eproc_store:ref(eproc_store_ets, store_args),
-    {ok, Registry} = eproc_registry:ref(eproc_reg_gproc, reg_args),
-    Opts = [{store, store}, {registry, Registry}],
     ok = meck:new(eproc_store, []),
-    ok = meck:new(eproc_reg_gproc, []),
-    ok = meck:new(eproc_fsm__seq, []),
-    ok = meck:expect(eproc_fsm__seq, code_change, fun
-        (state, [sname103], {sdata103}, undefined) -> {ok, [sname103x], {sdata103x}};
-        (state, [sname104], {sdata104}, undefined) -> {ok, [sname104x], {sdata104x}};
-        (state, [sname105], {sdata105}, undefined) -> {error, bad_state}
+    ok = meck:expect(eproc_store, set_instance_resuming, fun
+        (store, {inst, InstId = 101}, unchanged,      #user_action{}) -> {ok, InstId, {default, []}};
+        (store, {inst, InstId = 102}, retry_last,     #user_action{}) -> {ok, InstId, {default, []}};
+        (store, {inst, InstId = 103}, {set, a, b, c}, #user_action{}) -> {ok, InstId, {default, []}}
     end),
-    ok = meck:expect(eproc_store, set_instance_resumed, fun
-        (store, {inst, unknown}, #user_action{}, _F) ->
-            {error, not_found};
-        (store, {inst, 101}, #user_action{}, _F) ->
-            {error, running};
-        (store, {inst, InstId = 102}, UA = #user_action{comment = <<"Hmm2">>}, F) ->
-            none = F(Inst102, #inst_susp{
-                updated = undefined,
-                resumed = UA
-            }),
-            {ok, InstId, {default, [aaa]}};
-        (store, {inst, InstId = 103}, UA = #user_action{comment = <<"Hmm3">>}, F) ->
-            {add, NewTrn, NewMsg} = F(Inst103, #inst_susp{
-                updated = UA,
-                upd_sname = [sname103],
-                upd_sdata = {sdata103},
-                upd_attrs = [#attr_action{attr_id = 103001}],
-                resumed = UA
-            }),
-            #transition{inst_id = 103, number = 1, sname = [sname103x], sdata = {sdata103x}} = NewTrn,
-            #message{body = resume} = NewMsg,
-            {ok, InstId, {default, [aaa]}};
-        (store, {inst, InstId = 104}, UA = #user_action{comment = <<"Hmm4">>}, F) ->
-            {add, NewTrn, NewMsg} = F(Inst104, #inst_susp{
-                updated = UA,
-                upd_sname = [sname104],
-                upd_sdata = {sdata104},
-                upd_attrs = [],
-                resumed = UA
-            }),
-            #transition{inst_id = 104, number = 2, sname = [sname104x], sdata = {sdata104x}} = NewTrn,
-            #message{body = resume} = NewMsg,
-            {ok, InstId, {default, [aaa]}};
-        (store, {inst, InstId = 105}, UA = #user_action{comment = <<"Hmm5">>}, F) ->
-            {error, bad_state} = F(Inst105, #inst_susp{
-                updated = UA,
-                upd_sname = [sname105],
-                upd_sdata = {sdata105},
-                upd_attrs = [],
-                resumed = UA
-            }),
-            {error, bad_state}
-    end),
-    ok = meck:expect(eproc_reg_gproc, whereis_name, fun
-        ({new, reg_args, {inst, 102}, {default, [aaa]}}) -> Target102;
-        ({new, reg_args, {inst, 103}, {default, [aaa]}}) -> Target103;
-        ({new, reg_args, {inst, 104}, {default, [aaa]}}) -> Target104
-    end),
-    ?assertEqual({error, bad_ref},   eproc_fsm:resume(some,            Opts)),
-    ?assertEqual({error, not_found}, eproc_fsm:resume({inst, unknown}, [{user, <<"SomeUser">>} | Opts])),
-    ?assertEqual(ok,                 eproc_fsm:resume({inst, 101},     [{user, {<<"SomeUser">>, <<"Hmm1">>}} | Opts])), % Already running.
-    ?assertEqual(ok,                 eproc_fsm:resume({inst, 102},     [{user, {<<"SomeUser">>, <<"Hmm2">>}} | Opts])), % Ok, resuming.
-    ?assertEqual(ok,                 eproc_fsm:resume({inst, 103},     [{user, {<<"SomeUser">>, <<"Hmm3">>}} | Opts])), % State updated, new.
-    ?assertEqual(ok,                 eproc_fsm:resume({inst, 104},     [{user, {<<"SomeUser">>, <<"Hmm4">>}} | Opts])), % State updated, old.
-    ?assertEqual({error, bad_state}, eproc_fsm:resume({inst, 105},     [{user, {<<"SomeUser">>, <<"Hmm5">>}} | Opts])), % Invalid state.
-    ?assertEqual(3, meck:num_calls(eproc_fsm__seq, code_change, '_')),
-    ?assertEqual(1, meck:num_calls(eproc_store, set_instance_resumed, [store, {inst, unknown}, '_', '_'])),
-    ?assertEqual(1, meck:num_calls(eproc_store, set_instance_resumed, [store, {inst, 101}, '_', '_'])),
-    ?assertEqual(1, meck:num_calls(eproc_store, set_instance_resumed, [store, {inst, 102}, '_', '_'])),
-    ?assertEqual(1, meck:num_calls(eproc_store, set_instance_resumed, [store, {inst, 103}, '_', '_'])),
-    ?assertEqual(1, meck:num_calls(eproc_store, set_instance_resumed, [store, {inst, 104}, '_', '_'])),
-    ?assertEqual(1, meck:num_calls(eproc_store, set_instance_resumed, [store, {inst, 105}, '_', '_'])),
-    ?assertEqual(3, meck:num_calls(eproc_reg_gproc, whereis_name, '_')),
-    ?assert(meck:validate([eproc_store, eproc_reg_gproc, eproc_fsm__seq])),
-    ok = meck:unload([eproc_store, eproc_reg_gproc, eproc_fsm__seq]).
+    ok = eproc_fsm:resume({inst, 101}, [{start, no}, {state, unchanged}]),
+    ok = eproc_fsm:resume({inst, 102}, [{start, no}, {state, retry_last}]),
+    ok = eproc_fsm:resume({inst, 103}, [{start, no}, {state, {set, a, b, c}}]),
+    ?assertEqual(1, meck:num_calls(eproc_store, set_instance_resuming, [store, {inst, 101}, '_', '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_store, set_instance_resuming, [store, {inst, 102}, '_', '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_store, set_instance_resuming, [store, {inst, 103}, '_', '_'])),
+    ?assertEqual(3, meck:num_calls(eproc_store, set_instance_resuming, '_')),
+    ?assert(meck:validate([eproc_store])),
+    ok = meck:unload([eproc_store]).
 
 
-
-
-% TODO: Check if set_state/* works.
+% %%
+% %%  Check if resume/* works in the cases when:
+% %%    * state was not updated.
+% %%    * instance is already resumed.
+% %%    * state was updated and new state is valid for new instance.
+% %%    * state was updated and new state is valid for existing instance (with transitions).
+% %%    * state was updated and new state is invalid.
+% %%
+% resume_test() ->
+%     TargetFun = fun () -> receive {'$gen_call', From, {'eproc_fsm$is_online'}} -> gen_server:reply(From, true) end end,
+%     Target102 = spawn_link(TargetFun),
+%     Target103 = spawn_link(TargetFun),
+%     Target104 = spawn_link(TargetFun),
+%     DefaultInst = #instance{
+%         id = undefined, group = 123, name = name, module = eproc_fsm__seq,
+%         args = {}, opts = [], state = #inst_state{sname = [], sdata = {state, undefined}}, status = running,
+%         created = erlang:now(), transitions = []
+%     },
+%     Inst102 = DefaultInst#instance{id = 102, transitions = []},
+%     Inst103 = DefaultInst#instance{id = 103, transitions = []},
+%     Inst104 = DefaultInst#instance{id = 104, transitions = [#transition{
+%         inst_id = 104, number = 1, sname = [incrementing], sdata = {state, 5},
+%         attr_last_id = 17, attr_actions = []
+%     }]},
+%     Inst105 = DefaultInst#instance{id = 105, transitions = []},
+%
+%     {ok, Store} = eproc_store:ref(eproc_store_ets, store_args),
+%     {ok, Registry} = eproc_registry:ref(eproc_reg_gproc, reg_args),
+%     Opts = [{store, store}, {registry, Registry}],
+%     ok = meck:new(eproc_store, []),
+%     ok = meck:new(eproc_reg_gproc, []),
+%     ok = meck:new(eproc_fsm__seq, []),
+%     ok = meck:expect(eproc_fsm__seq, code_change, fun
+%         (state, [sname103], {sdata103}, undefined) -> {ok, [sname103x], {sdata103x}};
+%         (state, [sname104], {sdata104}, undefined) -> {ok, [sname104x], {sdata104x}};
+%         (state, [sname105], {sdata105}, undefined) -> {error, bad_state}
+%     end),
+%     ok = meck:expect(eproc_store, set_instance_resumed, fun
+%         (store, {inst, unknown}, #user_action{}, _F) ->
+%             {error, not_found};
+%         (store, {inst, 101}, #user_action{}, _F) ->
+%             {error, running};
+%         (store, {inst, InstId = 102}, UA = #user_action{comment = <<"Hmm2">>}, F) ->
+%             none = F(Inst102, #inst_susp{
+%                 updated = undefined,
+%                 resumed = UA
+%             }),
+%             {ok, InstId, {default, [aaa]}};
+%         (store, {inst, InstId = 103}, UA = #user_action{comment = <<"Hmm3">>}, F) ->
+%             {add, NewTrn, NewMsg} = F(Inst103, #inst_susp{
+%                 updated = UA,
+%                 upd_sname = [sname103],
+%                 upd_sdata = {sdata103},
+%                 upd_attrs = [#attr_action{attr_id = 103001}],
+%                 resumed = UA
+%             }),
+%             #transition{inst_id = 103, number = 1, sname = [sname103x], sdata = {sdata103x}} = NewTrn,
+%             #message{body = resume} = NewMsg,
+%             {ok, InstId, {default, [aaa]}};
+%         (store, {inst, InstId = 104}, UA = #user_action{comment = <<"Hmm4">>}, F) ->
+%             {add, NewTrn, NewMsg} = F(Inst104, #inst_susp{
+%                 updated = UA,
+%                 upd_sname = [sname104],
+%                 upd_sdata = {sdata104},
+%                 upd_attrs = [],
+%                 resumed = UA
+%             }),
+%             #transition{inst_id = 104, number = 2, sname = [sname104x], sdata = {sdata104x}} = NewTrn,
+%             #message{body = resume} = NewMsg,
+%             {ok, InstId, {default, [aaa]}};
+%         (store, {inst, InstId = 105}, UA = #user_action{comment = <<"Hmm5">>}, F) ->
+%             {error, bad_state} = F(Inst105, #inst_susp{
+%                 updated = UA,
+%                 upd_sname = [sname105],
+%                 upd_sdata = {sdata105},
+%                 upd_attrs = [],
+%                 resumed = UA
+%             }),
+%             {error, bad_state}
+%     end),
+%     ok = meck:expect(eproc_reg_gproc, whereis_name, fun
+%         ({new, reg_args, {inst, 102}, {default, [aaa]}}) -> Target102;
+%         ({new, reg_args, {inst, 103}, {default, [aaa]}}) -> Target103;
+%         ({new, reg_args, {inst, 104}, {default, [aaa]}}) -> Target104
+%     end),
+%     ?assertEqual({error, bad_ref},   eproc_fsm:resume(some,            Opts)),
+%     ?assertEqual({error, not_found}, eproc_fsm:resume({inst, unknown}, [{user, <<"SomeUser">>} | Opts])),
+%     ?assertEqual(ok,                 eproc_fsm:resume({inst, 101},     [{user, {<<"SomeUser">>, <<"Hmm1">>}} | Opts])), % Already running.
+%     ?assertEqual(ok,                 eproc_fsm:resume({inst, 102},     [{user, {<<"SomeUser">>, <<"Hmm2">>}} | Opts])), % Ok, resuming.
+%     ?assertEqual(ok,                 eproc_fsm:resume({inst, 103},     [{user, {<<"SomeUser">>, <<"Hmm3">>}} | Opts])), % State updated, new.
+%     ?assertEqual(ok,                 eproc_fsm:resume({inst, 104},     [{user, {<<"SomeUser">>, <<"Hmm4">>}} | Opts])), % State updated, old.
+%     ?assertEqual({error, bad_state}, eproc_fsm:resume({inst, 105},     [{user, {<<"SomeUser">>, <<"Hmm5">>}} | Opts])), % Invalid state.
+%     ?assertEqual(3, meck:num_calls(eproc_fsm__seq, code_change, '_')),
+%     ?assertEqual(1, meck:num_calls(eproc_store, set_instance_resumed, [store, {inst, unknown}, '_', '_'])),
+%     ?assertEqual(1, meck:num_calls(eproc_store, set_instance_resumed, [store, {inst, 101}, '_', '_'])),
+%     ?assertEqual(1, meck:num_calls(eproc_store, set_instance_resumed, [store, {inst, 102}, '_', '_'])),
+%     ?assertEqual(1, meck:num_calls(eproc_store, set_instance_resumed, [store, {inst, 103}, '_', '_'])),
+%     ?assertEqual(1, meck:num_calls(eproc_store, set_instance_resumed, [store, {inst, 104}, '_', '_'])),
+%     ?assertEqual(1, meck:num_calls(eproc_store, set_instance_resumed, [store, {inst, 105}, '_', '_'])),
+%     ?assertEqual(3, meck:num_calls(eproc_reg_gproc, whereis_name, '_')),
+%     ?assert(meck:validate([eproc_store, eproc_reg_gproc, eproc_fsm__seq])),
+%     ok = meck:unload([eproc_store, eproc_reg_gproc, eproc_fsm__seq]).
+%
 
 
 

@@ -144,7 +144,7 @@
     send_create_event/4, sync_send_create_event/4,
     send_event/3, send_event/2,
     sync_send_event/3, sync_send_event/2,
-    kill/2, suspend/2, resume/3,
+    kill/2, suspend/2, resume/2,
     is_online/2, is_online/1
 ]).
 
@@ -1071,10 +1071,11 @@ suspend(FsmRef, Options) ->
 
 
 %%
-%%  Resumes previously suspended FSM instance. If the FSM is already running,
-%%  `ok` will be returned, nothing will be done and error will not be rised.
-%%  While performing resume, the FSM will be marked as running and started
-%%  in the registrt (made online). The instance startup is performed synchronously.
+%%  Resumes previously suspended FSM instance. If the FSM is not suspended
+%%  (still suspending or just running), an error will be rised.
+%%  While performing resume, the FSM will be marked as running
+%%  and opionally started in the registry (made online).
+%%  The instance startup is performed synchronously.
 %%  It is an error to resume already terminated process.
 %%
 %%  Parameters:
@@ -1083,33 +1084,51 @@ suspend(FsmRef, Options) ->
 %%  :   References particular FSM instance. The reference must be either
 %%      `{inst, _}` or `{name, _}`. Erlang process ids or names are not
 %%      supported here. See `send_event/3` for more details.
-%%  `StateAction`
-%%  :   When resuming the FSM, the administrator can cange its internal state.
-%%      This parameter specifies, which state to use in the resumed FSM.
-%%      `unchanged` - says to use FSM's original state, as it was when the
-%%      FSM was suspended. `retry_last` - says to use state of the last resume
-%%      attempt. And the `{set, ..}` specifies the new state explicitly.
 %%  `Options`
 %%  :   Any of the Common FSM Options can be provided here.
 %%      Only `store`, `registry` and `user` options will be used
-%%      here, other options will be ignored.
+%%      here, other options will be ignored. Options, specific to
+%%      this function are listed bellow.
 %%
-%%  This function depends on `eproc_registry`.
+%%  Options, specific to this function:
+%%
+%%  `{state, unchanged | retry_last | {set, NewStateName, NewStateData, ResumeScript}}`
+%%  :   When resuming the FSM, its internal state can be changed.
+%%      This option specifies, what state to use in the resumed FSM.
+%%
+%%        * The option `unchanged` indicates to use FSM's original state,
+%%          as it was at the moment when the FSM was interrupted.
+%%        * The option `retry_last` indicates to use state of the last resume
+%%          attempt or the original state, if there was no resume attempts.
+%%          This is the default option.
+%%        * An the option `{set, NewStateName, NewStateData, ResumeScript}` indicates
+%%          to use new state, as provided explicitly.
+%%
+%%  `{start, (no | yes | start_spec())}`
+%%  :   indicates, if and how the FSM should be started, after marking it as resuming.
+%%      The automatic startup implies dependency on EProc Registry in this function.
+%%
+%%        * The option 'no' indicates, that the FSM should not be started automatically.
+%%          In this case, the application can start the FSM manually afterward.
+%%          EProc registry is not used in this case.
+%%        * If the option `yes` is provided, the EProc Registry will be used to start
+%%          the FSM with start specification provided when creating the FSM.
+%%          The is the default case.
+%%        * Third option is to provide the start specification explicitly.
+%%          In this case the registry will be used, altrough the start specification
+%%          provided explicitly will be used instead of the specification provided
+%%          when creating the FSM.
 %%
 -spec resume(
         FsmRef      :: fsm_ref(),
-        StateAction :: unchanged | retry_last | {set, NewStateName, NewStateData, ResumeScript},
         Options     :: list()
     ) ->
         ok |
         {error, bad_ref} |
-        {error, Reason :: term()}
-    when
-        NewStateName :: state_name(),
-        NewStateData :: state_data(),
-        ResumeScript :: script().
+        {error, running} |
+        {error, Reason :: term()}.
 
-resume(FsmRef, StateAction, Options) ->
+resume(FsmRef, Options) ->
     case {is_fsm_ref(FsmRef), is_online(FsmRef)} of
         {false, _} ->
             {error, bad_ref};
@@ -1118,17 +1137,26 @@ resume(FsmRef, StateAction, Options) ->
         {true, true} ->
             Store = resolve_store(Options),
             UserAction = resolve_user_action(Options),
+            StateAction = proplists:get_value(state, Options, retry_last),
+            StartAction = proplists:get_value(start, Options, yes),
             case eproc_store:set_instance_resuming(Store, FsmRef, StateAction, UserAction) of
-                {ok, InstId, StartSpec} ->
-                    Registry = resolve_registry(Options),
-                    {ok, ResolvedFsmRef} = eproc_registry:make_new_fsm_ref(Registry, {inst, InstId}, StartSpec),
-                    true = gen_server:call(ResolvedFsmRef, {'eproc_fsm$is_online'}),
-                    case is_online(FsmRef) of
-                        true -> ok;
-                        false -> {error, resume_failed}
+                {ok, InstId, StoredStartSpec} ->
+                    case StartAction of
+                        no -> ok;
+                        _ ->
+                            StartSpec = case StartAction of
+                                yes -> StoredStartSpec;
+                                ProvidedStartSpec when is_tuple(ProvidedStartSpec) -> ProvidedStartSpec
+                            end,
+                            Registry = resolve_registry(Options),
+                            {ok, ResolvedFsmRef} = eproc_registry:make_new_fsm_ref(Registry, {inst, InstId}, StartSpec),
+                            case gen_server:call(ResolvedFsmRef, {'eproc_fsm$is_online'}) of
+                                true -> ok;
+                                false -> {error, resume_failed}
+                            end
                     end;
                 {error, running} ->
-                    ok;
+                    {error, running};
                 {error, Reason} ->
                     {error, Reason}
             end
@@ -1625,9 +1653,11 @@ start_loaded(Instance, StartOpts, State) ->
     #inst_state{
         sname = LastSName,
         sdata = LastSData,
+        trn_nr = LastTrnNr,
         interrupt = Interrupt
     } = InstState,
     #state{
+        store = Store,
         registry = Registry
     } = State,
 
@@ -1644,8 +1674,8 @@ start_loaded(Instance, StartOpts, State) ->
             case ResumeAttempt of
                 #resume_attempt{upd_sname = undefined, upd_sdata = undefined, upd_script = undefined} ->
                     {ok, NewState} = init_loaded(Instance, LastSName, LastSData, State),
+                    ok = eproc_store:set_instance_resumed(Store, InstId, LastTrnNr),
                     %%
-                    %%  TODO: call eproc_store:set_instance_running().
                     %%  TODO: Reset limit counters.
                     %%
                     {ok, NewState};
