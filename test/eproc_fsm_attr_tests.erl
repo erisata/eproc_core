@@ -178,6 +178,31 @@ event_test() ->
 %%  Check if `apply_actions` works.
 %%
 apply_actions_test() ->
-    ?assert(todo).
+    Action1a = #attr_action{module = eproc_fsm_attr__void, attr_id = 1, action = {create, n1a,       [s1a], d1a}},
+    Action1b = #attr_action{module = eproc_fsm_attr__void, attr_id = 2, action = {create, n1b,       [s1b], d1b}},
+    Action1c = #attr_action{module = eproc_fsm_attr__void, attr_id = 3, action = {create, undefined, [s1c], d1c}},
+    Action2a = #attr_action{module = eproc_fsm_attr__void, attr_id = 1, action = {update, [s2a], d2a}},
+    Action2b = #attr_action{module = eproc_fsm_attr__void, attr_id = 2, action = {remove, {user, r1}}},
+    Attrs0 = [],
+    {ok, Attrs1} = eproc_fsm_attr:apply_actions([Action1a, Action1b, Action1c], Attrs0, 100, 13),
+    {ok, Attrs2} = eproc_fsm_attr:apply_actions([Action2a, Action2b],           Attrs1, 100, 14),
+    ?assertEqual(3, length(Attrs1)),
+    ?assertEqual(2, length(Attrs2)),
+    ?assertEqual(1, length([X || X = #attribute{
+        inst_id = 100, attr_id = 1, module = eproc_fsm_attr__void, name = n1a, scope = [s1a], data = d1a,
+        from = 13, upds = [], till = undefined, reason = undefined} <- Attrs1])),
+    ?assertEqual(1, length([X || X = #attribute{
+        inst_id = 100, attr_id = 2, module = eproc_fsm_attr__void, name = n1b, scope = [s1b], data = d1b,
+        from = 13, upds = [], till = undefined, reason = undefined} <- Attrs1])),
+    ?assertEqual(1, length([X || X = #attribute{
+        inst_id = 100, attr_id = 3, module = eproc_fsm_attr__void, name = undefined, scope = [s1c], data = d1c,
+        from = 13, upds = [], till = undefined, reason = undefined} <- Attrs1])),
+    ?assertEqual(1, length([X || X = #attribute{
+        inst_id = 100, attr_id = 1, module = eproc_fsm_attr__void, name = n1a, scope = [s2a], data = d2a,
+        from = 13, upds = [14], till = undefined, reason = undefined} <- Attrs2])),
+    ?assertEqual(1, length([X || X = #attribute{
+        inst_id = 100, attr_id = 3, module = eproc_fsm_attr__void, name = undefined, scope = [s1c], data = d1c,
+        from = 13, upds = [], till = undefined, reason = undefined} <- Attrs1])),
+    ok.
 
 
