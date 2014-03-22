@@ -1159,9 +1159,10 @@ resume(FsmRef, Options) ->
                             end,
                             Registry = resolve_registry(Options),
                             {ok, ResolvedFsmRef} = eproc_registry:make_new_fsm_ref(Registry, {inst, InstId}, StartSpec),
-                            case gen_server:call(ResolvedFsmRef, {'eproc_fsm$is_online'}) of
-                                true -> ok;
-                                false -> {error, resume_failed}
+                            try gen_server:call(ResolvedFsmRef, {'eproc_fsm$is_online'}) of
+                                true -> ok
+                            catch
+                                _:_ -> {error, resume_failed}
                             end
                     end;
                 {error, running} ->
@@ -1632,12 +1633,17 @@ handle_create(Module, Args, CreateOpts, CustomOpts) ->
 %%
 handle_start(FsmRef, StartOpts, State = #state{store = Store, restart = RestartOpts}) ->
     case eproc_store:load_instance(Store, FsmRef) of
-        {ok, Instance = #instance{id = InstId, status = running}} ->
+        {ok, Instance = #instance{id = InstId, status = Status}} when Status =:= running; Status =:= resuming ->
             case eproc_restart:restarted({?MODULE, InstId}, RestartOpts) of
                 ok ->
-                    {ok, NewState} = start_loaded(Instance, StartOpts, State),
-                    lager:debug("FSM started, ref=~p.", [FsmRef]),
-                    {online, NewState};
+                    case start_loaded(Instance, StartOpts, State) of
+                        {ok, NewState} ->
+                            lager:debug("FSM started, ref=~p.", [FsmRef]),
+                            {online, NewState};
+                        {error, Reason} ->
+                            lager:warning("Failed to start FSM, ref=~p, error=~p.", [FsmRef, Reason]),
+                            {offline, InstId}
+                    end;
                 fail ->
                     {ok, InstId} = eproc_store:set_instance_suspended(Store, FsmRef, {fault, restart_limit}),
                     lager:notice("Suspending FSM on startup, give up restarting, ref=~p, id=~p.", [FsmRef, InstId]),
@@ -1678,33 +1684,44 @@ start_loaded(Instance, StartOpts, State) ->
 
     case Interrupt of
         undefined ->
-            {ok, _NewState} = init_loaded(Instance, LastSName, LastSData, State);
+            case init_loaded(Instance, LastSName, LastSData, State) of
+                {ok, NewState} -> {ok, NewState};
+                {error, Reason} -> {error, Reason}
+            end;
         #interrupt{status = active, resumes = [ResumeAttempt | _]} ->
             case ResumeAttempt of
                 #resume_attempt{upd_sname = undefined, upd_sdata = undefined, upd_script = undefined} ->
-                    {ok, NewState} = init_loaded(Instance, LastSName, LastSData, State),
-                    ok = eproc_store:set_instance_resumed(Store, InstId, LastTrnNr),
-                    %%
-                    %%  TODO: Reset limit counters.
-                    %%
-                    {ok, NewState};
+                    case init_loaded(Instance, LastSName, LastSData, State) of
+                        {ok, NewState} ->
+                            ok = eproc_store:set_instance_resumed(Store, InstId, LastTrnNr),
+                            %%
+                            %%  TODO: Reset limit counters.
+                            %%
+                            {ok, NewState};
+                        {error, Reason} ->
+                            {error, Reason}
+                    end;
                 #resume_attempt{upd_sname = UpdSName, upd_sdata = UpdSData, resumed = #user_action{user = ResumedUser}} ->
-                    {ok, NewState} = init_loaded(Instance, UpdSName, UpdSData, State),
-                    Trigger = #trigger_spec{
-                        type = admin,
-                        source = ResumedUser,
-                        message = resume,
-                        sync = false,
-                        reply_fun = undefined,
-                        src_arg = false
-                    },
-                    %%
-                    %%  TODO: Reset limit counters.
-                    %%
-                    TransitionFun = fun (T, S) -> perform_resume_transition(T, ResumeAttempt, S) end,
-                    case perform_transition(Trigger, TransitionFun, NewState) of
-                        {cont, noreply, ResumedState} -> {ok, ResumedState};
-                        {error, Reason}               -> {error, Reason}
+                    case init_loaded(Instance, UpdSName, UpdSData, State) of
+                        {ok, NewState} ->
+                            Trigger = #trigger_spec{
+                                type = admin,
+                                source = ResumedUser,
+                                message = resume,
+                                sync = false,
+                                reply_fun = undefined,
+                                src_arg = false
+                            },
+                            %%
+                            %%  TODO: Reset limit counters.
+                            %%
+                            TransitionFun = fun (T, S) -> perform_resume_transition(T, ResumeAttempt, S) end,
+                            case perform_transition(Trigger, TransitionFun, NewState) of
+                                {cont, noreply, ResumedState} -> {ok, ResumedState};
+                                {error, Reason}               -> {error, Reason}
+                            end;
+                        {error, Reason} ->
+                            {error, Reason}
                     end
             end
     end.
@@ -1724,20 +1741,24 @@ init_loaded(Instance, SName, SData, State) ->
         attr_last_id = LastAttrId,
         attrs_active = ActiveAttrs
     } = InstState,
-    {ok, UpgradedSName, UpgradedSData} = upgrade_state(Instance, SName, SData),
-    {ok, AttrState} = eproc_fsm_attr:init(UpgradedSName, LastAttrId, ActiveAttrs),
-    {ok, UpgradedSDataWithRT, RTField, RTDefault} = call_init_runtime(UpgradedSName, UpgradedSData, Module),
-    NewState = State#state{
-        inst_id     = InstId,
-        module      = Module,
-        sname       = UpgradedSName,
-        sdata       = UpgradedSDataWithRT,
-        rt_field    = RTField,
-        rt_default  = RTDefault,
-        trn_nr      = LastTrnNr,
-        attrs       = AttrState
-    },
-    {ok, NewState}.
+    case upgrade_state(Instance, SName, SData) of
+        {ok, UpgradedSName, UpgradedSData} ->
+            {ok, AttrState} = eproc_fsm_attr:init(UpgradedSName, LastAttrId, ActiveAttrs),
+            {ok, UpgradedSDataWithRT, RTField, RTDefault} = call_init_runtime(UpgradedSName, UpgradedSData, Module),
+            NewState = State#state{
+                inst_id     = InstId,
+                module      = Module,
+                sname       = UpgradedSName,
+                sdata       = UpgradedSDataWithRT,
+                rt_field    = RTField,
+                rt_default  = RTDefault,
+                trn_nr      = LastTrnNr,
+                attrs       = AttrState
+            },
+            {ok, NewState};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 
 %%
@@ -1781,7 +1802,7 @@ register_online(#instance{id = InstId, name = Name}, Registry, StartOpts) ->
 %%  Perform state upgrade on code change or state reload from db.
 %%
 upgrade_state(#instance{module = Module}, SName, SData) ->
-    case Module:code_change(state, SName, SData, undefined) of
+    try Module:code_change(state, SName, SData, undefined) of
         {ok, NextSName, NewSData} ->
             {ok, NextSName, NewSData};
         {ok, NextSName, NewSData, _RTField} ->
@@ -1789,6 +1810,9 @@ upgrade_state(#instance{module = Module}, SName, SData) ->
             {ok, NextSName, NewSData};
         {error, Reason} ->
             {error, Reason}
+    catch
+        ErrClass:Error ->
+            {error, {bad_state, {ErrClass, Error, erlang:get_stacktrace()}}}
     end.
 
 
