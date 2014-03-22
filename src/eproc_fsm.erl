@@ -131,6 +131,8 @@
 %%  :   indicates a user initiaten an action. This option is mainly
 %%      used for administrative actions: kill, suspend and resume.
 %%
+%%  TODO: Error handling.
+%%
 -module(eproc_fsm).
 -behaviour(gen_server).
 -compile([{parse_transform, lager_transform}]).
