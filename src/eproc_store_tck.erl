@@ -262,9 +262,67 @@ eproc_store_core_test_suspend_resume(Config) ->
 
 
 %%
-%%  TODO:.for terminated FSM.
+%%  Checks, if `add_transition` works including the following cases:
+%%    * Ordinary transition
+%%    * Messages and msg refs.
+%%    * TODO: Suspend,
+%%    * TODO: Resume
+%%    * TODO: Terminate
+%%    * TODO:.for terminated FSM.
 %%
-eproc_store_core_test_add_transition(_Config) ->
-    throw(todo).
+eproc_store_core_test_add_transition(Config) ->
+    Store = store(Config),
+    %%  Add instances.
+    Inst = inst_value(),
+    {ok, IID1} = eproc_store:add_instance(Store, Inst),
+    %%  Add transitions.
+    Trn1 = #transition{
+        inst_id = IID1,
+        number = 1,
+        sname = [s1],
+        sdata = d1,
+        timestamp = erlang:now(),
+        duration = 13,
+        trigger_type = event,
+        trigger_msg = #msg_ref{id = 1001, peer = {connector, some}},
+        trigger_resp = #msg_ref{id = 1002, peer = {connector, some}},
+        trn_messages = [#msg_ref{id = 1003, peer = {connector, some}}],
+        attr_last_id = 1,
+        attr_actions = [#attr_action{module = m, attr_id = 1, action = {create, undefined, [], some}}],
+        inst_status = running,
+        interrupts = undefined
+    },
+    Trn2 = Trn1#transition{
+        number = 2,
+        sname = [s2],
+        sdata = d2,
+        trigger_msg = #msg_ref{id = 1004, peer = {connector, some}},
+        trigger_resp = undefined,
+        trn_messages = [],
+        attr_actions = []
+    },
+    Msg1 = #message{id = 1001, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m1},
+    Msg2 = #message{id = 1002, sender = {connector, some}, receiver = {inst, IID1}, resp_to = 1001,      date = erlang:now(), body = m2},
+    Msg3 = #message{id = 1003, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m3},
+    Msg4 = #message{id = 1004, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m4},
+    %%
+    %%  Add ordinary transition
+    {ok, IID1, 1} = eproc_store:add_transition(Store, Trn1, [Msg1, Msg2, Msg3]),
+    {ok, #instance{status = running, state = #inst_state{
+        inst_id = IID1, trn_nr = 1,
+        sname = [s1], sdata = d1,
+        attr_last_id = 1, attrs_active = [_],
+        interrupt = undefined
+    }}} = eproc_store:get_instance(Store, {inst, IID1}, current),
+    %%
+    %%  Add ordinary transition
+    {ok, IID1, 2} = eproc_store:add_transition(Store, Trn2, [Msg4]),
+    {ok, #instance{status = running, state = #inst_state{
+        inst_id = IID1, trn_nr = 2,
+        sname = [s2], sdata = d2,
+        attr_last_id = 1, attrs_active = [_],
+        interrupt = undefined
+    }}} = eproc_store:get_instance(Store, {inst, IID1}, current),
+    ok.
 
 

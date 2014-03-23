@@ -174,7 +174,7 @@ add_transition(_StoreArgs, Transition, Messages) ->
         interrupts   = undefined
     } = Transition,
     true = is_list(AttrActions),
-    Instance = #instance{status = OldStatus} = ets:lookup(?INST_TBL, InstId),
+    [Instance = #instance{status = OldStatus}] = ets:lookup(?INST_TBL, InstId),
 
     case {is_instance_terminated(OldStatus), is_instance_terminated(Status)} of
         {false, false} ->
