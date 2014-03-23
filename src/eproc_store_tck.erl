@@ -68,6 +68,7 @@ inst_value() ->
         module = some_fsm,
         args = [arg1],
         opts = [{o, p}],
+        start_spec = undefined,
         status = running,
         created = erlang:now(),
         terminated = undefined,
@@ -114,7 +115,7 @@ eproc_store_core_test_unnamed_instance(Config) ->
     Store = store(Config),
     %%  Add unnamed process with new group.
     %%  and second, to check if they are not interferring.
-    Inst = inst_value(),
+    Inst = #instance{state = State} = inst_value(),
     {ok, IID1} = eproc_store:add_instance(Store, Inst#instance{group = new}),
     {ok, IID2} = eproc_store:add_instance(Store, Inst#instance{group = 897}),
     true = undefined =/= IID1,
@@ -123,13 +124,13 @@ eproc_store_core_test_unnamed_instance(Config) ->
     %%  Try to get instance headers.
     {ok, Inst1 = #instance{id = IID1, group = GRP1}} = eproc_store:get_instance(Store, {inst, IID1}, header),
     {ok, Inst2 = #instance{id = IID2, group = GRP2}} = eproc_store:get_instance(Store, {inst, IID2}, header),
-    Inst1 = Inst#instance{id = IID1, group = GRP1},
-    Inst2 = Inst#instance{id = IID2, group = GRP2},
+    Inst1 = Inst#instance{id = IID1, group = GRP1, state = undefined},
+    Inst2 = Inst#instance{id = IID2, group = GRP2, state = undefined},
     false = is_atom(GRP1),
     897 = GRP2,
     %%  Try to load instance data.
     {ok, LoadedInst = #instance{id = IID1, group = GRP1}} = eproc_store:load_instance(Store, {inst, IID1}),
-    LoadedInst = Inst#instance{id = IID1, group = GRP1, transitions = []},
+    LoadedInst = Inst#instance{id = IID1, group = GRP1, state = State#inst_state{inst_id = IID1}},
     %%  Kill created instances.
     {ok, IID1} = eproc_store:set_instance_killed(Store, {inst, IID1}, #user_action{}),
     {ok, IID1} = eproc_store:set_instance_killed(Store, {inst, IID1}, #user_action{}),
@@ -163,7 +164,7 @@ eproc_store_core_test_unnamed_instance(Config) ->
 eproc_store_core_test_named_instance(Config) ->
     Store = store(Config),
     %%  Add instances.
-    Inst = inst_value(),
+    Inst = #instance{state = State} = inst_value(),
     {ok, IID1} = eproc_store:add_instance(Store, Inst#instance{group = new, name = test_named_instance_a}),
     {ok, IID2} = eproc_store:add_instance(Store, Inst#instance{group = 897, name = test_named_instance_b}),
     {error, bad_name} = eproc_store:add_instance(Store, Inst#instance{group = 897, name = test_named_instance_b}),
@@ -171,19 +172,19 @@ eproc_store_core_test_named_instance(Config) ->
     true = undefined =/= IID2,
     true = IID1 =/= IID2,
     %%  Try to get instance headers by IID and by name.
-    {ok, Inst1 = #instance{id = IID1, group = GRP1}} = eproc_store:get_instance(Store, {inst, IID1}, header),
-    {ok, Inst2 = #instance{id = IID2, group = GRP2}} = eproc_store:get_instance(Store, {inst, IID2}, header),
+    {ok, Inst1 = #instance{id = IID1, group = GRP1, state = undefined}} = eproc_store:get_instance(Store, {inst, IID1}, header),
+    {ok, Inst2 = #instance{id = IID2, group = GRP2, state = undefined}} = eproc_store:get_instance(Store, {inst, IID2}, header),
     {error, not_found}  = eproc_store:get_instance(Store, {inst, some}, header),
     {ok, Inst1}         = eproc_store:get_instance(Store, {name, test_named_instance_a}, header),
     {ok, Inst2}         = eproc_store:get_instance(Store, {name, test_named_instance_b}, header),
     {error, not_found}  = eproc_store:get_instance(Store, {name, test_named_instance_c}, header),
-    Inst1 = Inst#instance{id = IID1, group = GRP1, name = test_named_instance_a},
-    Inst2 = Inst#instance{id = IID2, group = GRP2, name = test_named_instance_b},
+    Inst1 = Inst#instance{id = IID1, group = GRP1, name = test_named_instance_a, state = undefined},
+    Inst2 = Inst#instance{id = IID2, group = GRP2, name = test_named_instance_b, state = undefined},
     false = is_atom(GRP1),
     897 = GRP2,
     %%  Try to load instance data.
     {ok, LoadedInst = #instance{id = IID1, group = GRP1}} = eproc_store:load_instance(Store, {name, test_named_instance_a}),
-    LoadedInst = Inst#instance{id = IID1, group = GRP1, name = test_named_instance_a, transitions = []},
+    LoadedInst = Inst#instance{id = IID1, group = GRP1, name = test_named_instance_a, state = State#inst_state{inst_id = IID1}},
     %%  Kill created instances.
     {ok, IID1}         = eproc_store:set_instance_killed(Store, {name, test_named_instance_a}, #user_action{}),
     {error, not_found} = eproc_store:set_instance_killed(Store, {name, test_named_instance_a}, #user_action{}),
@@ -207,14 +208,12 @@ eproc_store_core_test_named_instance(Config) ->
 %%  Check if suspend/resume functionality works:
 %%
 %%    * set_instance_suspended/*
+%%    * set_instance_resuming/*
+%%        * StateAction :: unchanged | retry_last | {set, NewStateName, NewStateData, ResumeScript}
+%%        * InstStatus
 %%    * set_instance_resumed/*
-%%    * set_instance_state/*
 %%
 %%  Also checks, if kill has no effect on second invocation.
-%%
-%%  TODO: Check, if attr actions are numbered correctly.
-%%  TODO: Maybe move attr numbering to resume?!!!!!!!!
-%%  TODO: Handle attributes in the store.
 %%
 eproc_store_core_test_suspend_resume(Config) ->
     Store = store(Config),
@@ -231,39 +230,26 @@ eproc_store_core_test_suspend_resume(Config) ->
     {ok, IID2}          = eproc_store:set_instance_suspended(Store, {inst, IID2}, #user_action{}),  %% Already suspended
     {ok, IID3}          = eproc_store:set_instance_killed(Store, {inst, IID3}, #user_action{}),
     {error, terminated} = eproc_store:set_instance_suspended(Store, {inst, IID3}, #user_action{}),  %% Already terminated
-    %%  Set new state for some of them.
-    {error, not_found}  = eproc_store:set_instance_state(Store, {inst, some}, #user_action{}, [s1], {s1}, []),
-    {error, terminated} = eproc_store:set_instance_state(Store, {inst, IID3}, #user_action{}, [s1], {s1}, []),
-    {error, running}    = eproc_store:set_instance_state(Store, {inst, IID4}, #user_action{}, [s1], {s1}, []),
-    {ok, IID2} = eproc_store:set_instance_state(Store, {inst, IID2}, #user_action{}, [s1], {s1}, []),
-    {ok, IID2} = eproc_store:set_instance_state(Store, {inst, IID2}, #user_action{}, [s2], {s2}, [
-        #attr_action{module = eproc_timer, attr_id = undefined, action = {create, n1, [scope1], {data1}}},
-        #attr_action{module = eproc_timer, attr_id = undefined, action = {create, n2, [scope2], {data2}}},
-        #attr_action{module = eproc_timer, attr_id = undefined, action = {create, n3, [scope3], {data3}}}   %% TODO: Also test remove and update.
-    ]),
-    %%  Resume them
-    F1 = fun (_Instance, _InstSusp) ->
-        none
-    end,
-    F2a = fun (_Instance, _InstSusp) ->
-        {error, bad_state}
-    end,
-    F2b = fun (#instance{id = IID}, #interrupt{resumes = [#resume_attempt{upd_sname = [s2], upd_sdata = {s2}}]}) ->
-        {add, #transition{inst_id = IID}, #message{}}
-    end,
     {ok, Inst1Suspended} = eproc_store:get_instance(Store, {inst, IID1}, current),
     {ok, Inst2Suspended} = eproc_store:get_instance(Store, {inst, IID2}, current),
-    {error, not_found}         = eproc_store:set_instance_resumed(Store, {inst, some}, #user_action{}, F1),   %% Inst not found.
-    {ok, IID1, {default, []}}  = eproc_store:set_instance_resumed(Store, {inst, IID1}, #user_action{}, F1),   %% Ok, resumed wo state change.
-    {error, running}           = eproc_store:set_instance_resumed(Store, {inst, IID1}, #user_action{}, F1),   %% Already running.
-    {error, bad_state}         = eproc_store:set_instance_resumed(Store, {inst, IID2}, #user_action{}, F2a),  %% State updated to invalid.
-    {ok, IID2, {mfa,{a,b,[]}}} = eproc_store:set_instance_resumed(Store, {inst, IID2}, #user_action{}, F2b),  %% Ok, resumed with state change.
+    #instance{status = suspended, state = #inst_state{}} = Inst1Suspended,
+    #instance{status = suspended, state = #inst_state{}} = Inst2Suspended,
+    %%  Mark them resuming
+    {error, not_found}         = eproc_store:set_instance_resuming(Store, {inst, some}, unchanged, #user_action{}),   %% Inst not found.
+    {ok, IID1, {default, []}}  = eproc_store:set_instance_resuming(Store, {inst, IID1}, unchanged, #user_action{}),   %% Ok, resumed wo state change.
+    {ok, IID1, {default, []}}  = eproc_store:set_instance_resuming(Store, {inst, IID1}, unchanged, #user_action{}),   %% Already resuming.
+    {ok, IID2, {mfa,{a,b,[]}}} = eproc_store:set_instance_resuming(Store, {inst, IID2}, retry_last, #user_action{}),           %% Ok, resumed with last state wo change.
+    {ok, IID2, {mfa,{a,b,[]}}} = eproc_store:set_instance_resuming(Store, {inst, IID2}, {set, [s1], d1, []}, #user_action{}),  %% Ok, resumed with state change.
+    {ok, IID2, {mfa,{a,b,[]}}} = eproc_store:set_instance_resuming(Store, {inst, IID2}, {set, [s2], d2, []}, #user_action{}),  %% Ok, resumed with state change.
+    {ok, IID2, {mfa,{a,b,[]}}} = eproc_store:set_instance_resuming(Store, {inst, IID2}, retry_last, #user_action{}),           %% Ok, resumed with last change.
     {ok, Inst1Resumed} = eproc_store:get_instance(Store, {inst, IID1}, current),
     {ok, Inst2Resumed} = eproc_store:get_instance(Store, {inst, IID2}, current),
-    #instance{status = suspended, transitions = []} = Inst1Suspended,
-    #instance{status = suspended, transitions = []} = Inst2Suspended,
-    #instance{status = running, transitions = []} = Inst1Resumed,
-    #instance{status = running, transitions = [#transition{attr_last_id = 3}]} = Inst2Resumed,
+    #instance{status = resuming, state = #inst_state{}} = Inst1Resumed,
+    #instance{status = resuming, state = #inst_state{}} = Inst2Resumed,
+    %%  Mark them resumed
+    ok = eproc_store:set_instance_resumed(Store, IID1, 2),
+    ok = eproc_store:set_instance_resumed(Store, IID1, 2),
+    {error, running}  = eproc_store:set_instance_resuming(Store, {inst, IID1}, unchanged, #user_action{}),   %% Try resume running FSM
     %%  Kill them.
     {ok, Inst3Killed} = eproc_store:get_instance(Store, {inst, IID3}, current),
     {ok, IID1} = eproc_store:set_instance_killed(Store, {inst, IID1}, #user_action{}),
@@ -271,6 +257,7 @@ eproc_store_core_test_suspend_resume(Config) ->
     {ok, IID3} = eproc_store:set_instance_killed(Store, {inst, IID3}, #user_action{}), %% Kill it second time.
     {ok, IID4} = eproc_store:set_instance_killed(Store, {inst, IID4}, #user_action{}),
     {ok, Inst3Killed} = eproc_store:get_instance(Store, {inst, IID3}, current),
+    {error, terminated}  = eproc_store:set_instance_resuming(Store, {inst, IID1}, unchanged, #user_action{}),   %% Try resume terminated FSM
     ok.
 
 

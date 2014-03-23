@@ -139,7 +139,7 @@ supervisor_child_specs(_StoreArgs) ->
 %%
 %%  Add new instance to the store.
 %%
-add_instance(_StoreArgs, Instance = #instance{name = Name, group = Group, state = #inst_state{}})->
+add_instance(_StoreArgs, Instance = #instance{name = Name, group = Group, state = State = #inst_state{}})->
     InstId = ets:update_counter(?CNT_TBL, inst, 1),
     ResolvedGroup = if
         Group =:= new     -> InstId;
@@ -151,7 +151,8 @@ add_instance(_StoreArgs, Instance = #instance{name = Name, group = Group, state 
                 id = InstId,
                 name = Name,
                 group = ResolvedGroup,
-                transitions = undefined
+                transitions = undefined,
+                state = State#inst_state{inst_id = InstId}
             }),
             {ok, InstId};
         false ->
@@ -239,7 +240,7 @@ set_instance_resuming(_StoreArgs, FsmRef, StateAction, UserAction) ->
                     {error, terminated};
                 {false, running} ->
                     {error, running};
-                {false, suspended} ->
+                {false, Status} when Status =:= suspended; Status =:= resuming ->
                     case write_instance_resuming(Instance, StateAction, UserAction) of
                         ok                  -> {ok, InstId, StartSpec};
                         {error, FailReason} -> {error, FailReason}
@@ -449,14 +450,18 @@ write_instance_resuming(#instance{id = InstId}, StateAction, UserAction) ->
 %%  Mark instance as running (resumed).
 %%
 write_instance_resumed(InstId, TrnNr) ->
-    {ok, Interrupt} = read_active_interrupt(InstId),
-    NewInterrupt = Interrupt#interrupt{
-        trn_nr = TrnNr,
-        status = closed
-    },
+    case read_active_interrupt(InstId) of
+        {ok, Interrupt} ->
+            NewInterrupt = Interrupt#interrupt{
+                trn_nr = TrnNr,
+                status = closed
+            },
+            true = ets:delete_object(?INTR_TBL, Interrupt),
+            true = ets:insert(?INTR_TBL, NewInterrupt);
+        {error, not_found} ->
+            ok
+    end,
     true = ets:update_element(?INST_TBL, InstId, {#instance.status, running}),
-    true = ets:delete_object(?INTR_TBL, Interrupt),
-    true = ets:insert(?INTR_TBL, NewInterrupt),
     ok.
 
 
