@@ -172,7 +172,7 @@ add_transition(_StoreArgs, Transition, Messages) ->
     } = Transition,
     true = is_list(AttrActions),
     [Instance = #instance{status = OldStatus}] = ets:lookup(?INST_TBL, InstId),
-    case {is_instance_terminated(OldStatus), is_instance_terminated(Status), OldStatus, Transition} of
+    Action = case {is_instance_terminated(OldStatus), is_instance_terminated(Status), OldStatus, Transition} of
         {false, false, suspended, #transition{inst_status = running, interrupts = undefined}} ->
             ok;
         {false, false, running, #transition{inst_status = running, interrupts = undefined}} ->
@@ -183,12 +183,19 @@ add_transition(_StoreArgs, Transition, Messages) ->
         {false, false, resuming, #transition{inst_status = running, interrupts = undefined}} ->
             ok = write_instance_resumed(InstId, TrnNr);
         {false, true, _, #transition{interrupts = undefined}} ->
-            ok = write_instance_terminated(Instance, Status, normal)
+            ok = write_instance_terminated(Instance, Status, normal);
+        {true, _, _, _} ->
+            {error, terminated}
     end,
-    ok = handle_attr_actions(Instance, Transition, Messages),
-    true = ets:insert(?TRN_TBL, Transition#transition{interrupts = undefined}),
-    [ true = ets:insert(?MSG_TBL, Message) || Message <- Messages],
-    {ok, InstId, TrnNr}.
+    case Action of
+        ok ->
+            ok = handle_attr_actions(Instance, Transition, Messages),
+            true = ets:insert(?TRN_TBL, Transition#transition{interrupts = undefined}),
+            [ true = ets:insert(?MSG_TBL, Message) || Message <- Messages],
+            {ok, InstId, TrnNr};
+        {error, ErrReason} ->
+            {error, ErrReason}
+    end.
 
 
 %%

@@ -267,10 +267,6 @@ eproc_store_core_test_suspend_resume(Config) ->
 %%  Checks, if `add_transition` works including the following cases:
 %%    * Ordinary transition
 %%    * Messages and msg refs.
-%%    * TODO: Suspend,
-%%    * TODO: Resume
-%%    * TODO: Terminate
-%%    * TODO:.for terminated FSM.
 %%
 eproc_store_core_test_add_transition(Config) ->
     Store = store(Config),
@@ -295,9 +291,9 @@ eproc_store_core_test_add_transition(Config) ->
         inst_status = running,
         interrupts = undefined
     },
-    Msg11 = #message{id = 1011, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m1},
-    Msg12 = #message{id = 1012, sender = {connector, some}, receiver = {inst, IID1}, resp_to = 1011,      date = erlang:now(), body = m2},
-    Msg13 = #message{id = 1013, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m3},
+    Msg11 = #message{id = 1011, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m11},
+    Msg12 = #message{id = 1012, sender = {connector, some}, receiver = {inst, IID1}, resp_to = 1011,      date = erlang:now(), body = m12},
+    Msg13 = #message{id = 1013, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m13},
     {ok, IID1, 1} = eproc_store:add_transition(Store, Trn1, [Msg11, Msg12, Msg13]),
     {ok, #instance{status = running, state = #inst_state{
         inst_id = IID1, trn_nr = 1,
@@ -316,7 +312,7 @@ eproc_store_core_test_add_transition(Config) ->
         trn_messages = [],
         attr_actions = []
     },
-    Msg21 = #message{id = 1021, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m4},
+    Msg21 = #message{id = 1021, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m21},
     {ok, IID1, 2} = eproc_store:add_transition(Store, Trn2, [Msg21]),
     {ok, #instance{status = running, state = #inst_state{
         inst_id = IID1, trn_nr = 2,
@@ -337,7 +333,7 @@ eproc_store_core_test_add_transition(Config) ->
         inst_status = suspended,
         interrupts = [#interrupt{reason = {fault, some_reason}}]
     },
-    Msg31 = #message{id = 1031, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m4},
+    Msg31 = #message{id = 1031, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m31},
     {ok, IID1, 3} = eproc_store:add_transition(Store, Trn3, [Msg31]),
     {ok, #instance{status = suspended, state = #inst_state{
         inst_id = IID1, trn_nr = 3,
@@ -354,6 +350,70 @@ eproc_store_core_test_add_transition(Config) ->
     }}} = eproc_store:get_instance(Store, {inst, IID1}, current),
     %%
     %%  Resume with transition.
+    {ok, IID1, _}  = eproc_store:set_instance_resuming(Store, {inst, IID1}, unchanged, #user_action{}),
+    {ok, IID1, _}  = eproc_store:set_instance_resuming(Store, {inst, IID1}, unchanged, #user_action{}),
+    {ok, IID1, _}  = eproc_store:set_instance_resuming(Store, {inst, IID1}, unchanged, #user_action{}),
+    Trn4 = Trn1#transition{
+        number = 4,
+        sname = [s4],
+        sdata = d4,
+        trigger_msg = #msg_ref{id = 1041, peer = {connector, some}},
+        trigger_resp = undefined,
+        trn_messages = [],
+        attr_actions = [],
+        inst_status = running,
+        interrupts = undefined
+    },
+    Msg41 = #message{id = 1041, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m41},
+    {ok, IID1, 4} = eproc_store:add_transition(Store, Trn4, [Msg41]),
+    {ok, #instance{status = running, state = #inst_state{
+        inst_id = IID1, trn_nr = 4,
+        sname = [s4], sdata = d4,
+        attr_last_id = 1, attrs_active = [_],
+        interrupt = undefined
+    }}} = eproc_store:get_instance(Store, {inst, IID1}, current),
+    %%
+    %%  Terminate FSM.
+    Trn5 = Trn1#transition{
+        number = 5,
+        sname = [s5],
+        sdata = d5,
+        trigger_msg = #msg_ref{id = 1051, peer = {connector, some}},
+        trigger_resp = undefined,
+        trn_messages = [],
+        attr_actions = [],
+        inst_status = completed,
+        interrupts = undefined
+    },
+    Msg51 = #message{id = 1051, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m51},
+    {ok, IID1, 5} = eproc_store:add_transition(Store, Trn5, [Msg51]),
+    {ok, #instance{status = completed, state = #inst_state{
+        inst_id = IID1, trn_nr = 5,
+        sname = [s5], sdata = d5,
+        attr_last_id = 1, attrs_active = [_],
+        interrupt = undefined
+    }}} = eproc_store:get_instance(Store, {inst, IID1}, current),
+    %%
+    %%  Add transition to the terminated FSM.
+    Trn6 = Trn1#transition{
+        number = 6,
+        sname = [s6],
+        sdata = d6,
+        trigger_msg = #msg_ref{id = 1061, peer = {connector, some}},
+        trigger_resp = undefined,
+        trn_messages = [],
+        attr_actions = [],
+        inst_status = running,
+        interrupts = undefined
+    },
+    Msg61 = #message{id = 1061, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m61},
+    {error, terminated} = eproc_store:add_transition(Store, Trn6, [Msg61]),
+    {ok, #instance{status = completed, state = #inst_state{
+        inst_id = IID1, trn_nr = 5,
+        sname = [s5], sdata = d5,
+        attr_last_id = 1, attrs_active = [_],
+        interrupt = undefined
+    }}} = eproc_store:get_instance(Store, {inst, IID1}, current),
     ok.
 
 
