@@ -27,7 +27,8 @@
     eproc_store_core_test_unnamed_instance/1,
     eproc_store_core_test_named_instance/1,
     eproc_store_core_test_suspend_resume/1,
-    eproc_store_core_test_add_transition/1
+    eproc_store_core_test_add_transition/1,
+    eproc_store_core_test_load_running/1
 ]).
 -include_lib("common_test/include/ct.hrl").
 -include("eproc.hrl").
@@ -40,7 +41,8 @@ testcases(core) -> [
     eproc_store_core_test_unnamed_instance,
     eproc_store_core_test_named_instance,
     eproc_store_core_test_suspend_resume,
-    eproc_store_core_test_add_transition
+    eproc_store_core_test_add_transition,
+    eproc_store_core_test_load_running
     ];
 
 testcases(router) -> [
@@ -98,18 +100,6 @@ inst_value() ->
 %%    * get_instance(iid), header.
 %%    * load_instance(iid).
 %%    * set_instance_killed(iid).
-%%
-%%  TODO:
-%%
-%%    * Suspend.
-%%    * Resume.
-%%    * Add transition.
-%%    * Add transition.
-%%    * Suspend.
-%%    * Resume.
-%%    * Suspend.
-%%    * Resume.
-%%    * Suspend.
 %%
 eproc_store_core_test_unnamed_instance(Config) ->
     Store = store(Config),
@@ -414,6 +404,31 @@ eproc_store_core_test_add_transition(Config) ->
         attr_last_id = 1, attrs_active = [_],
         interrupt = undefined
     }}} = eproc_store:get_instance(Store, {inst, IID1}, current),
+    ok.
+
+
+%%
+%%  Check, if load_running works.
+%%
+eproc_store_core_test_load_running(Config) ->
+    Store = store(Config),
+    %%  Add instances.
+    Inst = inst_value(),
+    {ok, IID1} = eproc_store:add_instance(Store, Inst#instance{start_spec = {default, [1]}}),   % Resuming
+    {ok, IID2} = eproc_store:add_instance(Store, Inst#instance{start_spec = {default, [2]}}),   % Suspended
+    {ok, IID3} = eproc_store:add_instance(Store, Inst#instance{start_spec = {default, [3]}}),   % Killed
+    {ok, IID4} = eproc_store:add_instance(Store, Inst#instance{start_spec = {default, [4]}}),
+    {ok, IID5} = eproc_store:add_instance(Store, Inst#instance{start_spec = {default, [5]}}),
+    {ok, IID1} = eproc_store:set_instance_suspended(Store, {inst, IID1}, #user_action{}),
+    {ok, IID2} = eproc_store:set_instance_suspended(Store, {inst, IID2}, #user_action{}),
+    {ok, IID1, {default, [1]}}  = eproc_store:set_instance_resuming(Store, {inst, IID1}, unchanged, #user_action{}),
+    {ok, IID3} = eproc_store:set_instance_killed(Store, {inst, IID3}, #user_action{}),
+    {ok, Running} = eproc_store:load_running(Store, fun (_, _) -> true end),
+    [  ] = [ ok || {{inst, I}, {default, [1]}} <- Running, I =:= IID1 ],
+    [  ] = [ ok || {{inst, I}, {default, [2]}} <- Running, I =:= IID2 ],
+    [  ] = [ ok || {{inst, I}, {default, [3]}} <- Running, I =:= IID3 ],
+    [ok] = [ ok || {{inst, I}, {default, [4]}} <- Running, I =:= IID4 ],
+    [ok] = [ ok || {{inst, I}, {default, [5]}} <- Running, I =:= IID5 ],
     ok.
 
 

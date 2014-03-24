@@ -23,7 +23,8 @@
     eproc_store_core_test_unnamed_instance/1,
     eproc_store_core_test_named_instance/1,
     eproc_store_core_test_suspend_resume/1,
-    eproc_store_core_test_add_transition/1
+    eproc_store_core_test_add_transition/1,
+    eproc_store_core_test_load_running/1
 ]).
 -include_lib("common_test/include/ct.hrl").
 -include("eproc.hrl").
@@ -61,4 +62,4 @@ end_per_suite(Config) ->
 ?MAP_TCK_TEST(eproc_store_core_test_named_instance).
 ?MAP_TCK_TEST(eproc_store_core_test_suspend_resume).
 ?MAP_TCK_TEST(eproc_store_core_test_add_transition).
-
+?MAP_TCK_TEST(eproc_store_core_test_load_running).
