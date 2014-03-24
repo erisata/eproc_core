@@ -163,28 +163,30 @@ add_instance(_StoreArgs, Instance = #instance{name = Name, group = Group, state 
 %%
 %%  Add a transition for an existing instance.
 %%
-%%  TODO: Add suspend on transition.
-%%
 add_transition(_StoreArgs, Transition, Messages) ->
     #transition{
         inst_id      = InstId,
         number       = TrnNr,
         attr_actions = AttrActions,
-        inst_status  = Status,
-        interrupts   = undefined
+        inst_status  = Status
     } = Transition,
     true = is_list(AttrActions),
     [Instance = #instance{status = OldStatus}] = ets:lookup(?INST_TBL, InstId),
-
-    case {is_instance_terminated(OldStatus), is_instance_terminated(Status)} of
-        {false, false} ->
+    case {is_instance_terminated(OldStatus), is_instance_terminated(Status), OldStatus, Transition} of
+        {false, false, suspended, #transition{inst_status = running, interrupts = undefined}} ->
             ok;
-        {false, true} ->
+        {false, false, running, #transition{inst_status = running, interrupts = undefined}} ->
+            ok;
+        {false, false, running, #transition{inst_status = suspended, interrupts = [Interrupt]}} ->
+            #interrupt{reason = Reason} = Interrupt,
+            ok = write_instance_suspended(InstId, Reason);
+        {false, false, resuming, #transition{inst_status = running, interrupts = undefined}} ->
+            ok = write_instance_resumed(InstId, TrnNr);
+        {false, true, _, #transition{interrupts = undefined}} ->
             ok = write_instance_terminated(Instance, Status, normal)
     end,
-
     ok = handle_attr_actions(Instance, Transition, Messages),
-    true = ets:insert(?TRN_TBL, Transition),
+    true = ets:insert(?TRN_TBL, Transition#transition{interrupts = undefined}),
     [ true = ets:insert(?MSG_TBL, Message) || Message <- Messages],
     {ok, InstId, TrnNr}.
 
@@ -214,14 +216,14 @@ set_instance_suspended(_StoreArgs, FsmRef, Reason) ->
     case read_instance(FsmRef, current) of
         {error, FailReason} ->
             {error, FailReason};
-        {ok, Instance = #instance{id = InstId, status = Status}} ->
+        {ok, #instance{id = InstId, status = Status}} ->
             case {is_instance_terminated(Status), Status} of
                 {true, _} ->
                     {error, terminated};
                 {false, suspended} ->
                     {ok, InstId};
                 {false, running} ->
-                    ok = write_instance_suspended(Instance, Reason),
+                    ok = write_instance_suspended(InstId, Reason),
                     {ok, InstId}
             end
     end.
@@ -335,7 +337,12 @@ read_state(#instance{id = InstId, state = InstState}, current) ->
     Transitions = ets:lookup(?TRN_TBL, InstId),
     SortedTrns = lists:keysort(#transition.number, Transitions),
     CurrentState = lists:foldl(fun eproc_store:apply_transition/2, InstState, SortedTrns),
-    {ok, CurrentState}.
+    case read_active_interrupt(InstId) of
+        {ok, Interrupt} ->
+            {ok, CurrentState#inst_state{interrupt = Interrupt}};
+        {error, not_found} ->
+            {ok, CurrentState#inst_state{interrupt = undefined}}
+    end.
 
 
 %%
@@ -375,7 +382,8 @@ write_instance_terminated(#instance{id = InstId, name = Name}, Status, Reason) -
 %%
 %%  Mark instance as suspended.
 %%
-write_instance_suspended(#instance{id = InstId}, Reason) ->
+write_instance_suspended(InstId, Reason) ->
+    {error, not_found} = read_active_interrupt(InstId),
     true = ets:update_element(?INST_TBL, InstId, {#instance.status, suspended}),
     SuspId = ets:update_counter(?CNT_TBL, intr, 1),
     Interrupt = #interrupt{

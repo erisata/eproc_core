@@ -232,8 +232,8 @@ eproc_store_core_test_suspend_resume(Config) ->
     {error, terminated} = eproc_store:set_instance_suspended(Store, {inst, IID3}, #user_action{}),  %% Already terminated
     {ok, Inst1Suspended} = eproc_store:get_instance(Store, {inst, IID1}, current),
     {ok, Inst2Suspended} = eproc_store:get_instance(Store, {inst, IID2}, current),
-    #instance{status = suspended, state = #inst_state{}} = Inst1Suspended,
-    #instance{status = suspended, state = #inst_state{}} = Inst2Suspended,
+    #instance{status = suspended, state = #inst_state{interrupt = #interrupt{}}} = Inst1Suspended,
+    #instance{status = suspended, state = #inst_state{interrupt = #interrupt{}}} = Inst2Suspended,
     %%  Mark them resuming
     {error, not_found}         = eproc_store:set_instance_resuming(Store, {inst, some}, unchanged, #user_action{}),   %% Inst not found.
     {ok, IID1, {default, []}}  = eproc_store:set_instance_resuming(Store, {inst, IID1}, unchanged, #user_action{}),   %% Ok, resumed wo state change.
@@ -242,14 +242,16 @@ eproc_store_core_test_suspend_resume(Config) ->
     {ok, IID2, {mfa,{a,b,[]}}} = eproc_store:set_instance_resuming(Store, {inst, IID2}, {set, [s1], d1, []}, #user_action{}),  %% Ok, resumed with state change.
     {ok, IID2, {mfa,{a,b,[]}}} = eproc_store:set_instance_resuming(Store, {inst, IID2}, {set, [s2], d2, []}, #user_action{}),  %% Ok, resumed with state change.
     {ok, IID2, {mfa,{a,b,[]}}} = eproc_store:set_instance_resuming(Store, {inst, IID2}, retry_last, #user_action{}),           %% Ok, resumed with last change.
-    {ok, Inst1Resumed} = eproc_store:get_instance(Store, {inst, IID1}, current),
-    {ok, Inst2Resumed} = eproc_store:get_instance(Store, {inst, IID2}, current),
-    #instance{status = resuming, state = #inst_state{}} = Inst1Resumed,
-    #instance{status = resuming, state = #inst_state{}} = Inst2Resumed,
+    {ok, Inst1Resuming} = eproc_store:get_instance(Store, {inst, IID1}, current),
+    {ok, Inst2Resuming} = eproc_store:get_instance(Store, {inst, IID2}, current),
+    #instance{status = resuming, state = #inst_state{interrupt = #interrupt{}}} = Inst1Resuming,
+    #instance{status = resuming, state = #inst_state{interrupt = #interrupt{}}} = Inst2Resuming,
     %%  Mark them resumed
     ok = eproc_store:set_instance_resumed(Store, IID1, 2),
     ok = eproc_store:set_instance_resumed(Store, IID1, 2),
     {error, running}  = eproc_store:set_instance_resuming(Store, {inst, IID1}, unchanged, #user_action{}),   %% Try resume running FSM
+    {ok, Inst1Resumed} = eproc_store:get_instance(Store, {inst, IID1}, current),
+    #instance{status = running, state = #inst_state{interrupt = undefined}} = Inst1Resumed,
     %%  Kill them.
     {ok, Inst3Killed} = eproc_store:get_instance(Store, {inst, IID3}, current),
     {ok, IID1} = eproc_store:set_instance_killed(Store, {inst, IID1}, #user_action{}),
@@ -275,7 +277,8 @@ eproc_store_core_test_add_transition(Config) ->
     %%  Add instances.
     Inst = inst_value(),
     {ok, IID1} = eproc_store:add_instance(Store, Inst),
-    %%  Add transitions.
+    %%
+    %%  Add ordinary transition
     Trn1 = #transition{
         inst_id = IID1,
         number = 1,
@@ -284,30 +287,18 @@ eproc_store_core_test_add_transition(Config) ->
         timestamp = erlang:now(),
         duration = 13,
         trigger_type = event,
-        trigger_msg = #msg_ref{id = 1001, peer = {connector, some}},
-        trigger_resp = #msg_ref{id = 1002, peer = {connector, some}},
-        trn_messages = [#msg_ref{id = 1003, peer = {connector, some}}],
+        trigger_msg = #msg_ref{id = 1011, peer = {connector, some}},
+        trigger_resp = #msg_ref{id = 1012, peer = {connector, some}},
+        trn_messages = [#msg_ref{id = 1013, peer = {connector, some}}],
         attr_last_id = 1,
         attr_actions = [#attr_action{module = m, attr_id = 1, action = {create, undefined, [], some}}],
         inst_status = running,
         interrupts = undefined
     },
-    Trn2 = Trn1#transition{
-        number = 2,
-        sname = [s2],
-        sdata = d2,
-        trigger_msg = #msg_ref{id = 1004, peer = {connector, some}},
-        trigger_resp = undefined,
-        trn_messages = [],
-        attr_actions = []
-    },
-    Msg1 = #message{id = 1001, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m1},
-    Msg2 = #message{id = 1002, sender = {connector, some}, receiver = {inst, IID1}, resp_to = 1001,      date = erlang:now(), body = m2},
-    Msg3 = #message{id = 1003, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m3},
-    Msg4 = #message{id = 1004, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m4},
-    %%
-    %%  Add ordinary transition
-    {ok, IID1, 1} = eproc_store:add_transition(Store, Trn1, [Msg1, Msg2, Msg3]),
+    Msg11 = #message{id = 1011, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m1},
+    Msg12 = #message{id = 1012, sender = {connector, some}, receiver = {inst, IID1}, resp_to = 1011,      date = erlang:now(), body = m2},
+    Msg13 = #message{id = 1013, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m3},
+    {ok, IID1, 1} = eproc_store:add_transition(Store, Trn1, [Msg11, Msg12, Msg13]),
     {ok, #instance{status = running, state = #inst_state{
         inst_id = IID1, trn_nr = 1,
         sname = [s1], sdata = d1,
@@ -315,14 +306,54 @@ eproc_store_core_test_add_transition(Config) ->
         interrupt = undefined
     }}} = eproc_store:get_instance(Store, {inst, IID1}, current),
     %%
-    %%  Add ordinary transition
-    {ok, IID1, 2} = eproc_store:add_transition(Store, Trn2, [Msg4]),
+    %%  Add another ordinary transition
+    Trn2 = Trn1#transition{
+        number = 2,
+        sname = [s2],
+        sdata = d2,
+        trigger_msg = #msg_ref{id = 1021, peer = {connector, some}},
+        trigger_resp = undefined,
+        trn_messages = [],
+        attr_actions = []
+    },
+    Msg21 = #message{id = 1021, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m4},
+    {ok, IID1, 2} = eproc_store:add_transition(Store, Trn2, [Msg21]),
     {ok, #instance{status = running, state = #inst_state{
         inst_id = IID1, trn_nr = 2,
         sname = [s2], sdata = d2,
         attr_last_id = 1, attrs_active = [_],
         interrupt = undefined
     }}} = eproc_store:get_instance(Store, {inst, IID1}, current),
+    %%
+    %%  Suspend by transition.
+    Trn3 = Trn1#transition{
+        number = 3,
+        sname = [s3],
+        sdata = d3,
+        trigger_msg = #msg_ref{id = 1031, peer = {connector, some}},
+        trigger_resp = undefined,
+        trn_messages = [],
+        attr_actions = [],
+        inst_status = suspended,
+        interrupts = [#interrupt{reason = {fault, some_reason}}]
+    },
+    Msg31 = #message{id = 1031, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m4},
+    {ok, IID1, 3} = eproc_store:add_transition(Store, Trn3, [Msg31]),
+    {ok, #instance{status = suspended, state = #inst_state{
+        inst_id = IID1, trn_nr = 3,
+        sname = [s3], sdata = d3,
+        attr_last_id = 1, attrs_active = [_],
+        interrupt = #interrupt{
+            inst_id = IID1,
+            trn_nr = undefined,
+            status = active,
+            suspended = {_, _, _},
+            reason = {fault, some_reason},
+            resumes = []
+        }
+    }}} = eproc_store:get_instance(Store, {inst, IID1}, current),
+    %%
+    %%  Resume with transition.
     ok.
 
 
