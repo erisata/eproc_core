@@ -55,7 +55,12 @@
 
 
 %%
-%%  TODO: Describe, what should be done here.
+%%  This function should register new persistent FSM.
+%%  Additionally, the following should be performed:
+%%
+%%    * Unique FSM InstId should be generated.
+%%    * Unique group should be generated, if group=new.
+%%    * Fill instance id in related structures.
 %%
 -callback add_instance(
         StoreArgs   :: term(),
@@ -65,7 +70,14 @@
 
 
 %%
-%%  TODO: Describe, what should be done here.
+%%  This function should register new transition for the FSM.
+%%  Additionally, the following should be done:
+%%
+%%    * Add all related messages.
+%%    * Terminate FSM, if the `inst_state` is substate of the `terminated` state.
+%%    * suspend FSM, if `inst_state = suspended` and `interrupt = #interrupt{reason = R}`.
+%%    * resume FSM, if instance state was `resuming` and new `inst_state = running`.
+%%    * Handle attribute actions.
 %%
 -callback add_transition(
         StoreArgs   :: term(),
@@ -76,7 +88,7 @@
 
 
 %%
-%%  TODO: Describe, what should be done here.
+%%  Mark instance as killed.
 %%
 -callback set_instance_killed(
         StoreArgs   :: term(),
@@ -87,7 +99,7 @@
 
 
 %%
-%%  TODO: Describe, what should be done here.
+%%  Mark instance as suspended and initialize corresponing interrupt.
 %%
 -callback set_instance_suspended(
         StoreArgs   :: term(),
@@ -139,9 +151,7 @@
 
 
 %%
-%%  TODO: Describe, what should be done here.
-%%
-%%  TODO: `interrupt` for empty FSM and for non-empty.
+%%  Get instance with its current state and active interrupt.
 %%
 -callback load_instance(
         StoreArgs   :: term(),
@@ -152,7 +162,7 @@
 
 
 %%
-%%  TODO: Describe, what should be done here.
+%%  Return all FSMs, that should be started automatically on startup.
 %%
 -callback load_running(
         StoreArgs       :: term(),
@@ -162,12 +172,12 @@
 
 
 %%
-%%  TODO: Describe, what should be done here.
+%%  Get instance data.
 %%
 -callback get_instance(
         StoreArgs   :: term(),
         FsmRef      :: fsm_ref(),
-        Query       :: header
+        Query       :: header | current
     ) ->
         {ok, #instance{}} |
         {error, Reason :: term()}.
@@ -321,7 +331,7 @@ apply_transition(Transition, InstState) ->
     } = Transition,
     TrnNr = OldTrnNr + 1,
     {ok, NewAttrs} = eproc_fsm_attr:apply_actions(AttrActions, Attrs, InstId, TrnNr),
-    InstState#inst_state{   % TODO: Interrupt?
+    InstState#inst_state{
         trn_nr = TrnNr,
         sname = SName,
         sdata = SData,
