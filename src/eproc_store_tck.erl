@@ -414,15 +414,17 @@ eproc_store_core_test_load_running(Config) ->
     Store = store(Config),
     %%  Add instances.
     Inst = inst_value(),
-    {ok, IID1} = eproc_store:add_instance(Store, Inst#instance{start_spec = {default, [1]}}),   % Resuming
-    {ok, IID2} = eproc_store:add_instance(Store, Inst#instance{start_spec = {default, [2]}}),   % Suspended
-    {ok, IID3} = eproc_store:add_instance(Store, Inst#instance{start_spec = {default, [3]}}),   % Killed
-    {ok, IID4} = eproc_store:add_instance(Store, Inst#instance{start_spec = {default, [4]}}),
-    {ok, IID5} = eproc_store:add_instance(Store, Inst#instance{start_spec = {default, [5]}}),
+    {ok, IID1} = eproc_store:add_instance(Store, Inst#instance{start_spec = {default, [1]}}),   % Will be resuming
+    {ok, IID2} = eproc_store:add_instance(Store, Inst#instance{start_spec = {default, [2]}}),   % Will be suspended
+    {ok, IID3} = eproc_store:add_instance(Store, Inst#instance{start_spec = {default, [3]}}),   % Will be killed
+    {ok, IID4} = eproc_store:add_instance(Store, Inst#instance{start_spec = {default, [4]}}),   % Will be running
+    {ok, IID5} = eproc_store:add_instance(Store, Inst#instance{start_spec = {default, [5]}}),   % Will be running also
+    %%  Change instance statuses.
     {ok, IID1} = eproc_store:set_instance_suspended(Store, {inst, IID1}, #user_action{}),
     {ok, IID2} = eproc_store:set_instance_suspended(Store, {inst, IID2}, #user_action{}),
     {ok, IID1, {default, [1]}}  = eproc_store:set_instance_resuming(Store, {inst, IID1}, unchanged, #user_action{}),
     {ok, IID3} = eproc_store:set_instance_killed(Store, {inst, IID3}, #user_action{}),
+    %%  Get instances to start / run.
     {ok, Running} = eproc_store:load_running(Store, fun (_, _) -> true end),
     [  ] = [ ok || {{inst, I}, {default, [1]}} <- Running, I =:= IID1 ],
     [  ] = [ ok || {{inst, I}, {default, [2]}} <- Running, I =:= IID2 ],
