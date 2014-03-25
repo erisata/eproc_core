@@ -24,7 +24,7 @@
 -module(eproc_fsm__seq).
 -behaviour(eproc_fsm).
 -compile([{parse_transform, lager_transform}]).
--export([new/0, reset/1, skip/1, close/1, next/1, get/1, last/1, flip/1]).
+-export([new/0, named/1, reset/1, skip/1, close/1, next/1, get/1, last/1, flip/1, exists/1]).
 -export([init/1, init/2, handle_state/3, terminate/3, code_change/4, format_status/2]).
 -include("eproc.hrl").
 
@@ -39,26 +39,35 @@ new() ->
     CreateOpts = [{start_spec, {default, StartOpts}}],
     eproc_fsm:send_create_event(?MODULE, {}, reset, CreateOpts).
 
+named(Name) ->
+    lager:debug("Creating new named SEQ."),
+    StartOpts = [{register, name}],
+    CreateOpts = [{name, Name}, {start_spec, {default, StartOpts}}],
+    eproc_fsm:send_create_event(?MODULE, {}, reset, CreateOpts).
+
 reset(FsmRef) ->
-    eproc_fsm:send_event(FsmRef, reset).
+    eproc_fsm:send_event(resolve_ref(FsmRef), reset).
 
 skip(FsmRef) ->
-    eproc_fsm:send_event(FsmRef, skip).
+    eproc_fsm:send_event(resolve_ref(FsmRef), skip).
 
 close(FsmRef) ->
-    eproc_fsm:send_event(FsmRef, close).
+    eproc_fsm:send_event(resolve_ref(FsmRef), close).
 
 next(FsmRef) ->
-    eproc_fsm:sync_send_event(FsmRef, next).
+    eproc_fsm:sync_send_event(resolve_ref(FsmRef), next).
 
 get(FsmRef) ->
-    eproc_fsm:sync_send_event(FsmRef, get).
+    eproc_fsm:sync_send_event(resolve_ref(FsmRef), get).
 
 last(FsmRef) ->
-    eproc_fsm:sync_send_event(FsmRef, last).
+    eproc_fsm:sync_send_event(resolve_ref(FsmRef), last).
 
 flip(FsmRef) ->
-    eproc_fsm:send_event(FsmRef, flip).
+    eproc_fsm:send_event(resolve_ref(FsmRef), flip).
+
+exists(FsmRef) ->
+    eproc_fsm:is_online(resolve_ref(FsmRef)).
 
 
 
@@ -184,4 +193,10 @@ format_status(_Opt, State) ->
 %% =============================================================================
 %%  Internal functions.
 %% =============================================================================
+
+%%
+%%  Only needed to use iid and name without using {name, ...} in the client.
+%%
+resolve_ref({inst, IID}) -> {inst, IID};
+resolve_ref(Name)        -> {name, Name}.
 

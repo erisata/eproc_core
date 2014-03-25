@@ -20,7 +20,8 @@
 -module(eproc_fsm_SUITE).
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([
-    test_seq/1
+    test_simple_unnamed/1,
+    test_simple_named/1
 ]).
 -include_lib("common_test/include/ct.hrl").
 -include("eproc.hrl").
@@ -30,7 +31,8 @@
 %%  CT API.
 %%
 all() -> [
-    test_seq
+    test_simple_unnamed,
+    test_simple_named
     ].
 
 
@@ -57,41 +59,43 @@ end_per_suite(_Config) ->
     ok = application:stop(eproc_core).
 
 
-%%
-%%  Helper function.
-%%
-registry(Config) ->
-    proplists:get_value(registry, Config).
-
-store(Config) ->
-    proplists:get_value(store, Config).
-
-
 
 %% =============================================================================
 %%  Testcases.
 %% =============================================================================
 
 %%
-%%  Test functions of the SEQ FSM.
+%%  Test functions of the SEQ FSM, using instance id.
 %%
-test_seq(Config) ->
+test_simple_unnamed(_Config) ->
     {ok, Seq} = eproc_fsm__seq:new(),
     {ok, 1} = eproc_fsm__seq:next(Seq),
     {ok, 2} = eproc_fsm__seq:next(Seq),
     {ok, 2} = eproc_fsm__seq:get(Seq),
-    ok = eproc_fsm__seq:flip(Seq),
+    ok      = eproc_fsm__seq:flip(Seq),
     {ok, 1} = eproc_fsm__seq:next(Seq),
     {ok, 0} = eproc_fsm__seq:next(Seq),
-    ok = eproc_fsm__seq:flip(Seq),
+    ok      = eproc_fsm__seq:flip(Seq),
     {ok, 1} = eproc_fsm__seq:next(Seq),
-    ok = eproc_fsm__seq:reset(Seq),
-    ok = eproc_fsm__seq:skip(Seq),
-    ok = eproc_fsm__seq:skip(Seq),
-    true = eproc_fsm:is_online(Seq),
+    ok      = eproc_fsm__seq:reset(Seq),
+    ok      = eproc_fsm__seq:skip(Seq),
+    ok      = eproc_fsm__seq:skip(Seq),
+    true    = eproc_fsm__seq:exists(Seq),
     {ok, 2} = eproc_fsm__seq:last(Seq),
-    false = eproc_fsm:is_online(Seq),
+    false   = eproc_fsm__seq:exists(Seq),
     ok.
 
+%%
+%%  Test functions of the SEQ FSM, using FSM name.
+%%
+test_simple_named(_Config) ->
+    {ok, _} = eproc_fsm__seq:named(test_simple_named),
+    {ok, 1} = eproc_fsm__seq:next(test_simple_named),
+    {ok, 2} = eproc_fsm__seq:next(test_simple_named),
+    {ok, 3} = eproc_fsm__seq:next(test_simple_named),
+    true    = eproc_fsm__seq:exists(test_simple_named),
+    ok      = eproc_fsm__seq:close(test_simple_named),
+    false   = eproc_fsm__seq:exists(test_simple_named),
+    ok.
 
 
