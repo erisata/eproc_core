@@ -24,7 +24,8 @@
     test_simple_named/1,
     test_suspend_resume/1,
     test_kill/1,
-    test_rtdata/1
+    test_rtdata/1,
+    test_timers/1
 ]).
 -include_lib("common_test/include/ct.hrl").
 -include("eproc.hrl").
@@ -38,7 +39,8 @@ all() -> [
     test_simple_named,
     test_suspend_resume,
     test_kill,
-    test_rtdata
+    test_rtdata,
+    test_timers
     ].
 
 
@@ -56,6 +58,7 @@ init_per_suite(Config) ->
     {ok, Store} = eproc_registry:ref(),
     {ok, Registry} = eproc_registry:ref(),
     [{store, Store}, {registry, Registry} | Config].
+
 
 %%
 %%  CT API, cleanup.
@@ -159,10 +162,50 @@ test_rtdata(_Config) ->
     ok.
 
 
+%%
+%%  Check if timers work.
+%%
+test_timers(_Config) ->
+    {ok, P} = eproc_fsm__sched:start(),
+    ok = eproc_fsm__sched:subscribe(P),
+    %%  Set timer.
+    ok = eproc_fsm__sched:set(P, 100),
+    ok = receive tick -> ok after 500 -> timeout end,
+    ok = receive tick -> ok after 500 -> timeout end,
+    %%  Update timer.
+    ok = eproc_fsm__sched:set(P, 400),
+    ok = flush_msgs(),
+    ok = receive tick -> bad after 300 -> ok end,
+    ok = receive tick -> ok after 400 -> timeout end,
+    %% Cancel timer by scope.
+    ok = eproc_fsm__sched:pause(P),
+    ok = flush_msgs(),
+    ok = receive tick -> bad after 1000 -> ok end,
+    %% Start timer again.
+    ok = eproc_fsm__sched:set(P, 100),
+    ok = receive tick -> ok after 500 -> timeout end,
+    ok = receive tick -> ok after 500 -> timeout end,
+    %% Cancel timer explicitly.
+    ok = eproc_fsm__sched:cancel(P),
+    ok = receive tick -> bad after 1000 -> ok end,
+    %% Cleanup.
+    ok = eproc_fsm__sched:stop(P),
+    ok.
+
+
 
 %%
-%%  TODO: Timers.
 %%  TODO: Router keys.
 %%  TODO: Meta.
+%%  TODO: Send msg.
 %%
+
+
 %%
+%%  Clear msg inbox.
+%%
+flush_msgs() ->
+    receive _ -> flush_msgs()
+    after 0 -> ok
+    end.
+

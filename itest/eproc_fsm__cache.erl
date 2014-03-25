@@ -94,11 +94,14 @@ handle_state([serving], {entry, _PrevState}, StateData) ->
 handle_state([serving], {sync, _From, get}, StateData = #state{data = Data}) ->
     {reply_same, {ok, Data}, StateData};
 
-handle_state([serving], {event, crash}, StateData = #state{data = Data}) ->
+handle_state([serving], {event, crash}, #state{data = Data}) ->
     undefined = Data;
 
 handle_state([serving], {event, stop}, StateData) ->
-    {final_state, [done], StateData}.
+    {final_state, [done], StateData};
+
+handle_state([serving], {exit, _NextState}, StateData) ->
+    {ok, StateData}.
 
 
 %%

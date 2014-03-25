@@ -53,7 +53,7 @@
 %%
 set(Name, After, Event, Scope) ->
     Now = erlang:now(),
-    ok = eproc_fsm:register_message({inst, eproc_fsm:id()}, {timer, Name}, {msg, Event, Now}, undefined),
+    {ok, registered} = eproc_fsm:register_message({inst, eproc_fsm:id()}, {timer, Name}, {msg, Event, Now}, undefined),
     ok = eproc_fsm_attr:action(?MODULE, Name, {timer, After, Event}, Scope).
 
 
@@ -63,7 +63,7 @@ set(Name, After, Event, Scope) ->
 set(After, Event, Scope) ->
     Now = erlang:now(),
     Name = undefined,
-    ok = eproc_fsm:register_message({inst, eproc_fsm:id()}, {timer, Name}, {msg, Event, Now}, undefined),
+    {ok, registered} = eproc_fsm:register_message({inst, eproc_fsm:id()}, {timer, Name}, {msg, Event, Now}, undefined),
     ok = eproc_fsm_attr:action(?MODULE, Name, {timer, After, Event}, Scope).
 
 
@@ -73,7 +73,7 @@ set(After, Event, Scope) ->
 set(After, Event) ->
     Now = erlang:now(),
     Name = undefined,
-    ok = eproc_fsm:register_message({inst, eproc_fsm:id()}, {timer, Name}, {msg, Event, Now}, undefined),
+    {ok, registered} = eproc_fsm:register_message({inst, eproc_fsm:id()}, {timer, Name}, {msg, Event, Now}, undefined),
     ok = eproc_fsm_attr:action(?MODULE, Name, {timer, After, Event}, next).
 
 
