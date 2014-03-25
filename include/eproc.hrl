@@ -239,6 +239,15 @@
 
 
 %%
+%%  Describes single FSM limit.
+%%
+-record(inst_limit, {
+    name                :: atom(),
+    current = 0         :: integer(),
+    limit = infinity    :: integer() | infinity
+}).
+
+%%
 %%  Describes particular state of the FSM. If `#transition{}` corresponds to the
 %%  transition arrow in the FSM diagram, the `#inst_state{}` stands for the
 %%  named state of an object. This state record can be reconstructed from
@@ -251,6 +260,7 @@
     sdata           :: term(),                      %% FSM state data.
     attr_last_id    :: integer(),                   %% Last used FSM attribute ID.
     attrs_active    :: [#attribute{}] | undefined,  %% List of attributes, that are active at this state.
+    limits          :: [#inst_limit{}],             %% List of FSM limits with current values.
     interrupt       :: #interrupt{} | undefined     %% Interrupt information, if the FSM is currently interrupted.
 }).
 

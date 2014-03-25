@@ -82,6 +82,7 @@ inst_value() ->
             sdata = {state, a, b},
             attr_last_id = 0,
             attrs_active = [],
+            limits = [#inst_limit{name = some, current = 13, limit = 17}],
             interrupt = undefined
         },
         transitions = undefined

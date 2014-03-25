@@ -1317,7 +1317,8 @@ resolve_start_spec(FsmRef, {mfa, {Module, Function, Args}}) when is_atom(Module)
     attrs       :: term(),          %% State for the `eproc_fsm_attr` module.
     registry    :: registry_ref(),  %% A registry reference.
     store       :: store_ref(),     %% A store reference.
-    restart     :: list()           %% Restart options.
+    restart     :: list(),          %% Restart options.
+    limits      :: [#inst_limit{}]  %% Instance limits.
 }).
 
 
@@ -1597,6 +1598,13 @@ resolve_user_action(CommonOpts) ->
 %%  Creates new instance, initializes its initial state.
 %%
 handle_create(Module, Args, CreateOpts, CustomOpts) ->
+    LimitsFun = fun
+        ({max_transitions,  Max}, Lims) -> [#inst_limit{name = trn, current = 0, limit = Max} | Lims];
+        ({max_sent_msgs,    Max}, Lims) -> [#inst_limit{name = msg, current = 0, limit = Max} | Lims];
+        ({max_errors,       Max}, Lims) -> [#inst_limit{name = err, current = 0, limit = Max} | Lims];
+        (_, Lims) -> Lims
+    end,
+    Limits = lists:foldl(LimitsFun, [], CreateOpts),
     Group       = proplists:get_value(group,      CreateOpts, new),
     Name        = proplists:get_value(name,       CreateOpts, undefined),
     Store       = proplists:get_value(store,      CreateOpts, undefined),
@@ -1609,6 +1617,7 @@ handle_create(Module, Args, CreateOpts, CustomOpts) ->
         sdata           = InitSData,
         attr_last_id    = 0,
         attrs_active    = [],
+        limits          = Limits,
         interrupt       = undefined
     },
     Instance = #instance{
@@ -1671,12 +1680,18 @@ start_loaded(Instance, StartOpts, State) ->
         sname = LastSName,
         sdata = LastSData,
         trn_nr = LastTrnNr,
+        limits = Limits,
         interrupt = Interrupt
     } = InstState,
     #state{
         store = Store,
         registry = Registry
     } = State,
+
+    {PrevLimits, ResetLimits} = case Limits of
+        undefined -> {[], []};
+        _ -> {Limits, [ L#inst_limit{current = 0} || L <- Limits ]}
+    end,
 
     undefined = erlang:put('eproc_fsm$id', InstId),
     undefined = erlang:put('eproc_fsm$group', Group),
@@ -1686,25 +1701,22 @@ start_loaded(Instance, StartOpts, State) ->
 
     case Interrupt of
         undefined ->
-            case init_loaded(Instance, LastSName, LastSData, State) of
+            case init_loaded(Instance, LastSName, LastSData, State#state{limits = PrevLimits}) of
                 {ok, NewState} -> {ok, NewState};
                 {error, Reason} -> {error, Reason}
             end;
         #interrupt{status = active, resumes = [ResumeAttempt | _]} ->
             case ResumeAttempt of
                 #resume_attempt{upd_sname = undefined, upd_sdata = undefined, upd_script = undefined} ->
-                    case init_loaded(Instance, LastSName, LastSData, State) of
+                    case init_loaded(Instance, LastSName, LastSData, State#state{limits = ResetLimits}) of
                         {ok, NewState} ->
                             ok = eproc_store:set_instance_resumed(Store, InstId, LastTrnNr),
-                            %%
-                            %%  TODO: Reset limit counters.
-                            %%
                             {ok, NewState};
                         {error, Reason} ->
                             {error, Reason}
                     end;
                 #resume_attempt{upd_sname = UpdSName, upd_sdata = UpdSData, resumed = #user_action{user = ResumedUser}} ->
-                    case init_loaded(Instance, UpdSName, UpdSData, State) of
+                    case init_loaded(Instance, UpdSName, UpdSData, State#state{limits = ResetLimits}) of
                         {ok, NewState} ->
                             Trigger = #trigger_spec{
                                 type = admin,
@@ -1714,9 +1726,6 @@ start_loaded(Instance, StartOpts, State) ->
                                 reply_fun = undefined,
                                 src_arg = false
                             },
-                            %%
-                            %%  TODO: Reset limit counters.
-                            %%
                             TransitionFun = fun (T, S) -> perform_resume_transition(T, ResumeAttempt, S) end,
                             case perform_transition(Trigger, TransitionFun, NewState) of
                                 {cont, noreply, ResumedState} -> {ok, ResumedState};
@@ -2155,6 +2164,33 @@ create_prepare_send(Module, Args, Options) ->
     {ok, FsmRef, NewFsmRef, AllSendOpts}.
 
 
+%%
+%%  Increment and check limit.
+%%
+increment_check_limit(Name, Limits) ->
+    case lists:keyfind(Name, #inst_limit.name, Limits) of
+        false ->
+            {ok, Limits};
+        Limit ->
+            {Resp, NewLimit} = increment_check_limit(Limit),
+            {Resp, lists:keyreplace(Name, #inst_limit.name, Limits, NewLimit)}
+    end.
+
+
+increment_check_limit(undefined) ->
+    {ok, undefined};
+
+increment_check_limit(Lim = #inst_limit{limit = infinity}) ->
+    {ok, Lim};
+
+increment_check_limit(Lim = #inst_limit{current = Current, limit = Limit}) ->
+    NewLim = Lim#inst_limit{current = Current + 1},
+    case Current >= Limit of
+        true -> {reached, NewLim};
+        false -> {ok, NewLim}
+    end.
+
+
 
 %% =============================================================================
 %%  Unit tests for private functions.
@@ -2163,7 +2199,7 @@ create_prepare_send(Module, Args, Options) ->
 -include_lib("eunit/include/eunit.hrl").
 
 %%
-%%  Unit tests for resolve_event_src/1.
+%%  Unit tests for `resolve_event_src/1`.
 %%
 resolve_event_src_test_() -> [
     fun () ->
@@ -2195,7 +2231,7 @@ resolve_event_src_test_() -> [
     end].
 
 %%
-%%  Unit tests for split_options/1.
+%%  Unit tests for `split_options/1`.
 %%
 split_options_test_() -> [
     ?_assertMatch(
@@ -2214,6 +2250,35 @@ split_options_test_() -> [
             {group, x}, {name, x}, {start_spec, x}, {max_transitions, x}, {max_errors, x}, {max_sent_msgs, x},
             {restart, x}, {register, x}, {source, x}, {timeout, x}, {store, x}, {registry, x}, {user, x}, {some, y}
         ])
+    )].
+
+%%
+%%  Unit tests for `increment_check_limit/1`.
+%%
+increment_check_limit_test_() -> [
+    ?_assertEqual(
+        {ok, undefined},
+        increment_check_limit(undefined)
+    ),
+    ?_assertEqual(
+        {ok, #inst_limit{current = 1999, limit = infinity}},
+        increment_check_limit(#inst_limit{current = 1999, limit = infinity})
+    ),
+    ?_assertEqual(
+        {ok, #inst_limit{current = 2000, limit = 2000}},
+        increment_check_limit(#inst_limit{current = 1999, limit = 2000})
+    ),
+    ?_assertEqual(
+        {reached, #inst_limit{current = 2001, limit = 2000}},
+        increment_check_limit(#inst_limit{current = 2000, limit = 2000})
+    ),
+    ?_assertMatch(
+        {reached, [#inst_limit{name = some, current = 3001, limit = 2000}]},
+        increment_check_limit(some, [#inst_limit{name = some, current = 3000, limit = 2000}])
+    ),
+    ?_assertMatch(
+        {ok, [#inst_limit{name = some, current = 3000, limit = 2000}]},
+        increment_check_limit(other, [#inst_limit{name = some, current = 3000, limit = 2000}])
     )].
 
 -endif.
