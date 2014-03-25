@@ -45,24 +45,21 @@ start_link() ->
 %%  Supervisor initialization.
 %%
 init({}) ->
-    {ok, {StoreMod, StoreArgs}} = eproc_core_app:store_cfg(),
-    StoreSpec = {store,
-        {StoreMod, start_link, [StoreArgs]},
-        permanent, 10000, worker, [StoreMod, eproc_store]
-    },
+    {ok, Store} = eproc_store:ref(),
+    {ok, StoreSpecs} = eproc_store:supervisor_child_specs(Store),
 
-    RestartSpec = {restart,
-        {eproc_restart, start_link, []},
-        permanent, 10000, worker, [eproc_restart]
-    },
-
-    {ok, RegistrySpec} = case eproc_registry:ref() of
+    {ok, RegistrySpecs} = case eproc_registry:ref() of
         {ok, Registry} -> eproc_registry:supervisor_child_specs(Registry);
         undefined -> {ok, []}
     end,
 
+    RestartSpecs = [{restart,
+        {eproc_restart, start_link, []},
+        permanent, 10000, worker, [eproc_restart]
+    }],
+
     {ok, {{one_for_all, 100, 10},
-        [StoreSpec, RestartSpec] ++ RegistrySpec
+        lists:append([StoreSpecs, RegistrySpecs, RestartSpecs])
     }}.
 
 

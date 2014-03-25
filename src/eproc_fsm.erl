@@ -1640,7 +1640,7 @@ handle_start(FsmRef, StartOpts, State = #state{store = Store, restart = RestartO
                 ok ->
                     case start_loaded(Instance, StartOpts, State) of
                         {ok, NewState} ->
-                            lager:debug("FSM started, ref=~p.", [FsmRef]),
+                            lager:debug("FSM started, ref=~p, pid=~p.", [FsmRef, self()]),
                             {online, NewState};
                         {error, Reason} ->
                             lager:warning("Failed to start FSM, ref=~p, error=~p.", [FsmRef, Reason]),
