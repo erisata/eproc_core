@@ -23,7 +23,8 @@
     test_simple_unnamed/1,
     test_simple_named/1,
     test_suspend_resume/1,
-    test_kill/1
+    test_kill/1,
+    test_rtdata/1
 ]).
 -include_lib("common_test/include/ct.hrl").
 -include("eproc.hrl").
@@ -36,7 +37,8 @@ all() -> [
     test_simple_unnamed,
     test_simple_named,
     test_suspend_resume,
-    test_kill
+    test_kill,
+    test_rtdata
     ].
 
 
@@ -89,6 +91,7 @@ test_simple_unnamed(_Config) ->
     false   = eproc_fsm__seq:exists(Seq),
     ok.
 
+
 %%
 %%  Test functions of the SEQ FSM, using FSM name.
 %%
@@ -128,6 +131,7 @@ test_suspend_resume(_Config) ->
     false     = eproc_fsm__seq:exists(Seq),
     ok.
 
+
 %%
 %%  Check, if FSM can be killed.
 %%
@@ -139,3 +143,26 @@ test_kill(_Config) ->
     ok.
 
 
+%%
+%%  Check if FSM runtime data functionality works.
+%%
+test_rtdata(_Config) ->
+    {ok, P} = eproc_fsm__cache:new(),
+    {ok, X = {_, _, _}} = eproc_fsm__cache:get(P),
+    {ok, X = {_, _, _}} = eproc_fsm__cache:get(P),
+    ok = eproc_fsm__cache:crash(P),
+    timer:sleep(100),   %% Wait for process to be restarted.
+    {ok, Y = {_, _, _}} = eproc_fsm__cache:get(P),
+    {ok, Y = {_, _, _}} = eproc_fsm__cache:get(P),
+    true = (X =/= Y),
+    ok = eproc_fsm__cache:stop(P),
+    ok.
+
+
+
+%%
+%%  TODO: Timers.
+%%  TODO: Router keys.
+%%  TODO: Meta.
+%%
+%%
