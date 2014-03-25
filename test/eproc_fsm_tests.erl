@@ -1167,7 +1167,7 @@ kill_test() ->
     Mon = erlang:monitor(process, PID),
     ?assertEqual({error, bad_ref},   eproc_fsm:kill(PID,             [{store, store}, {registry, Registry}])),
     ?assertEqual({error, not_found}, eproc_fsm:kill({inst, unknown}, [{store, store}, {registry, Registry}, {user, <<"SomeUser">>}])),
-    ?assertEqual(ok,                 eproc_fsm:kill({inst, 100},     [{store, store}, {registry, Registry}, {user, {<<"SomeUser">>, <<"Hmm">>}}])),
+    ?assertEqual({ok, {inst, 100}},  eproc_fsm:kill({inst, 100},     [{store, store}, {registry, Registry}, {user, {<<"SomeUser">>, <<"Hmm">>}}])),
     ?assert(receive {'DOWN', Mon, process, PID, normal} -> true after 1000 -> false end),
     ?assertEqual(false, eproc_fsm:is_online(PID)),
     ?assertEqual(2, meck:num_calls(eproc_store, set_instance_killed, '_')),

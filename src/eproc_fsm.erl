@@ -1014,7 +1014,7 @@ sync_send_event(FsmRef, Event) ->
         FsmRef  :: fsm_ref() | otp_ref(),
         Options :: list()
     ) ->
-        ok |
+        {ok, ResolvedFsmRef :: fsm_ref()} |
         {error, bad_ref} |
         {error, Reason :: term()}.
 
@@ -1026,9 +1026,10 @@ kill(FsmRef, Options) ->
             Store = resolve_store(Options),
             UserAction = resolve_user_action(Options),
             case eproc_store:set_instance_killed(Store, FsmRef, UserAction) of
-                {ok, _InstId} ->
+                {ok, InstId} ->
                     {ok, ResolvedFsmRef} = resolve_fsm_ref(FsmRef, Options),
-                    gen_server:cast(ResolvedFsmRef, {'eproc_fsm$kill'});
+                    ok = gen_server:cast(ResolvedFsmRef, {'eproc_fsm$kill'}),
+                    {ok, {inst, InstId}};
                 {error, Reason} ->
                     {error, Reason}
             end

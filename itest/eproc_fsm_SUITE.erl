@@ -22,7 +22,8 @@
 -export([
     test_simple_unnamed/1,
     test_simple_named/1,
-    test_suspend_resume/1
+    test_suspend_resume/1,
+    test_kill/1
 ]).
 -include_lib("common_test/include/ct.hrl").
 -include("eproc.hrl").
@@ -34,7 +35,8 @@
 all() -> [
     test_simple_unnamed,
     test_simple_named,
-    test_suspend_resume
+    test_suspend_resume,
+    test_kill
     ].
 
 
@@ -123,6 +125,16 @@ test_suspend_resume(_Config) ->
     {ok, 100} = eproc_fsm__seq:get(Seq),
     %% Terminate FSM.
     ok        = eproc_fsm__seq:close(Seq),
+    false     = eproc_fsm__seq:exists(Seq),
+    ok.
+
+%%
+%%  Check, if FSM can be killed.
+%%
+test_kill(_Config) ->
+    {ok, Seq} = eproc_fsm__seq:new(),
+    true      = eproc_fsm__seq:exists(Seq),
+    {ok, Seq} = eproc_fsm:kill(Seq, []),
     false     = eproc_fsm__seq:exists(Seq),
     ok.
 
