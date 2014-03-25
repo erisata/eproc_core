@@ -21,7 +21,8 @@
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([
     test_simple_unnamed/1,
-    test_simple_named/1
+    test_simple_named/1,
+    test_suspend_resume/1
 ]).
 -include_lib("common_test/include/ct.hrl").
 -include("eproc.hrl").
@@ -32,7 +33,8 @@
 %%
 all() -> [
     test_simple_unnamed,
-    test_simple_named
+    test_simple_named,
+    test_suspend_resume
     ].
 
 
@@ -96,6 +98,32 @@ test_simple_named(_Config) ->
     true    = eproc_fsm__seq:exists(test_simple_named),
     ok      = eproc_fsm__seq:close(test_simple_named),
     false   = eproc_fsm__seq:exists(test_simple_named),
+    ok.
+
+
+%%
+%%  Test, if FSM can be suspended and then resumed.
+%%
+test_suspend_resume(_Config) ->
+    {ok, Seq} = eproc_fsm__seq:new(),
+    {ok, 1}   = eproc_fsm__seq:next(Seq),
+    %% Suspend
+    true      = eproc_fsm__seq:exists(Seq),
+    {ok, Seq} = eproc_fsm:suspend(Seq, []),
+    false     = eproc_fsm__seq:exists(Seq),
+    %% Resume without state change
+    {ok, Seq} = eproc_fsm:resume(Seq, []),
+    true      = eproc_fsm__seq:exists(Seq),
+    {ok, 1}   = eproc_fsm__seq:get(Seq),
+    %% Suspend and resume with updated state.
+    {ok, Seq} = eproc_fsm:suspend(Seq, []),
+    false     = eproc_fsm__seq:exists(Seq),
+    {ok, Seq} = eproc_fsm:resume(Seq, [{state, {set, [incrementing], {state, 100}, []}}]),
+    true      = eproc_fsm__seq:exists(Seq),
+    {ok, 100} = eproc_fsm__seq:get(Seq),
+    %% Terminate FSM.
+    ok        = eproc_fsm__seq:close(Seq),
+    false     = eproc_fsm__seq:exists(Seq),
     ok.
 
 

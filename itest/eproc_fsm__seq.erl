@@ -33,17 +33,29 @@
 %%  Public API.
 %% =============================================================================
 
+%%
+%%  Start unnamed seq.
+%%  This function uses sync create event.
+%%
 new() ->
     lager:debug("Creating new SEQ."),
     StartOpts = [{register, id}],
     CreateOpts = [{start_spec, {default, StartOpts}}],
-    eproc_fsm:send_create_event(?MODULE, {}, reset, CreateOpts).
+    {ok, FsmRef, 0} = eproc_fsm:sync_send_create_event(?MODULE, {}, get, CreateOpts),
+    {ok, FsmRef}.
 
+
+%%
+%%  Start named seq.
+%%  This function uses asynchronous initial event.
+%%
 named(Name) ->
     lager:debug("Creating new named SEQ."),
-    StartOpts = [{register, name}],
+    StartOpts = [{register, both}, {start_sync, true}],
     CreateOpts = [{name, Name}, {start_spec, {default, StartOpts}}],
-    eproc_fsm:send_create_event(?MODULE, {}, reset, CreateOpts).
+    {ok, FsmRef} = eproc_fsm:send_create_event(?MODULE, {}, reset, CreateOpts),
+    {ok, FsmRef}.
+
 
 reset(FsmRef) ->
     eproc_fsm:send_event(resolve_ref(FsmRef), reset).
@@ -103,6 +115,10 @@ init(_StateName, _StateData) ->
 %%  The initial state.
 %%
 handle_state([], {event, reset}, StateData) ->
+    {next_state, [incrementing], StateData#state{seq = 0}};
+
+handle_state([], {sync, From, get}, StateData) ->
+    ok = eproc_fsm:reply(From, 0),
     {next_state, [incrementing], StateData#state{seq = 0}};
 
 

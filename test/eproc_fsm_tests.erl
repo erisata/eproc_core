@@ -1208,7 +1208,7 @@ suspend_test() ->
     Mon = erlang:monitor(process, PID),
     ?assertEqual({error, bad_ref},   eproc_fsm:suspend(PID,             [{store, store}, {registry, Registry}])),
     ?assertEqual({error, not_found}, eproc_fsm:suspend({inst, unknown}, [{store, store}, {registry, Registry}, {user, <<"SomeUser">>}])),
-    ?assertEqual(ok,                 eproc_fsm:suspend({inst, 100},     [{store, store}, {registry, Registry}, {user, {<<"SomeUser">>, <<"Hmm">>}}])),
+    ?assertEqual({ok, {inst, 100}},  eproc_fsm:suspend({inst, 100},     [{store, store}, {registry, Registry}, {user, {<<"SomeUser">>, <<"Hmm">>}}])),
     ?assert(receive {'DOWN', Mon, process, PID, normal} -> true after 1000 -> false end),
     ?assertEqual(false, eproc_fsm:is_online(PID)),
     ?assertEqual(2, meck:num_calls(eproc_store, set_instance_suspended, '_')),
@@ -1227,9 +1227,9 @@ resume_no_start_test() ->
         (store, {inst, InstId = 102}, retry_last,     #user_action{}) -> {ok, InstId, {default, []}};
         (store, {inst, InstId = 103}, {set, a, b, c}, #user_action{}) -> {ok, InstId, {default, []}}
     end),
-    ok = eproc_fsm:resume(resume_test_a, [{store, store}, {start, no}, {fsm_ref, {inst, 101}}, {state, unchanged}]),
-    ok = eproc_fsm:resume(resume_test_b, [{store, store}, {start, no}, {fsm_ref, {inst, 102}}, {state, retry_last}]),
-    ok = eproc_fsm:resume(resume_test_c, [{store, store}, {start, no}, {fsm_ref, {inst, 103}}, {state, {set, a, b, c}}]),
+    {ok, {inst, 101}} = eproc_fsm:resume(resume_test_a, [{store, store}, {start, no}, {fsm_ref, {inst, 101}}, {state, unchanged}]),
+    {ok, {inst, 102}} = eproc_fsm:resume(resume_test_b, [{store, store}, {start, no}, {fsm_ref, {inst, 102}}, {state, retry_last}]),
+    {ok, {inst, 103}} = eproc_fsm:resume(resume_test_c, [{store, store}, {start, no}, {fsm_ref, {inst, 103}}, {state, {set, a, b, c}}]),
     ?assertEqual(1, meck:num_calls(eproc_store, set_instance_resuming, [store, {inst, 101}, '_', '_'])),
     ?assertEqual(1, meck:num_calls(eproc_store, set_instance_resuming, [store, {inst, 102}, '_', '_'])),
     ?assertEqual(1, meck:num_calls(eproc_store, set_instance_resuming, [store, {inst, 103}, '_', '_'])),
@@ -1328,10 +1328,9 @@ resume_and_start_test() ->
         ([some], {state, b}) -> ok;
         ([s2],   d2        ) -> ok
     end),
-    ER = {error, resume_failed},
-    ok = eproc_fsm:resume(resume_and_start_test_1, [{start, {default, [aaa]}}, {fsm_ref, {inst, 101}}, {state, unchanged} | Opts]),
-    ok = eproc_fsm:resume(resume_and_start_test_2, [{start, yes}, {fsm_ref, {inst, 102}}, {state, {set, [s2], d2, []}} | Opts]),
-    ER = eproc_fsm:resume(resume_and_start_test_3, [{start, yes}, {fsm_ref, {inst, 103}}, {state, {set, [s3], d3, []}} | Opts]),
+    {ok, {inst, 101}}      = eproc_fsm:resume(resume_and_start_test_1, [{start, {default, [aaa]}}, {fsm_ref, {inst, 101}}, {state, unchanged} | Opts]),
+    {ok, {inst, 102}}      = eproc_fsm:resume(resume_and_start_test_2, [{start, yes}, {fsm_ref, {inst, 102}}, {state, {set, [s2], d2, []}} | Opts]),
+    {error, resume_failed} = eproc_fsm:resume(resume_and_start_test_3, [{start, yes}, {fsm_ref, {inst, 103}}, {state, {set, [s3], d3, []}} | Opts]),
     exit(whereis(resume_and_start_test_pid1), normal),
     exit(whereis(resume_and_start_test_pid2), normal),
     ?assert(meck:validate([eproc_store, eproc_registry, eproc_registry_mock, eproc_fsm__void])),

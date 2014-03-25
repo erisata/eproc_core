@@ -617,9 +617,8 @@ create(Module, Args, Options) ->
 %%  Start previously created (using `create/3`) `eproc_fsm` instance.
 %%
 %%  As part of initialization procedure, the FSM registers itself to the
-%%  registry. Registration by InstId is done synchronously and registrations
-%%  by Name and Keys are done asynchronously. One can use `is_online/1` to
-%%  synchronize with the FSM.
+%%  registry. Registration by InstId and Name is done synchronously or
+%%  asynchronously (default), depending on the `start_sync` option.
 %%
 %%  This function should be considered as a low-level API. The functions
 %%  `send_create_event/*` and `sync_send_create_event/*` should be used
@@ -660,6 +659,11 @@ create(Module, Args, Options) ->
 %%  :   a registry to be used by the instance. If this option not provided, a registry
 %%      specified in the `eproc_core` application environment is used. `eproc_core` can
 %%      cave no registry specified. In that case the registry will not be used.
+%%  `{start_sync, Sync :: boolean()}`
+%%  :   starts FSM synchronously if `Sync = true` and asynchronously otherwise.
+%%      Default is `false` (asynchronously). If FSM is started synchonously,
+%%      FSM id and name will be registered within the EProc Registry before
+%%      this function exits, if requested.
 %%
 -spec start_link(
         FsmName     :: {local, atom()} | {global, term()} | {via, module(), term()},
@@ -670,7 +674,7 @@ create(Module, Args, Options) ->
 
 start_link(FsmName, FsmRef, Options) ->
     {ok, StartOpts, ProcessOptions} = resolve_start_link_opts(Options),
-    gen_server:start_link(FsmName, ?MODULE, {FsmRef, StartOpts}, ProcessOptions).
+    start_sync(gen_server:start_link(FsmName, ?MODULE, {FsmRef, StartOpts}, ProcessOptions), StartOpts).
 
 
 %%
@@ -684,7 +688,7 @@ start_link(FsmName, FsmRef, Options) ->
 
 start_link(FsmRef, Options) ->
     {ok, StartOpts, ProcessOptions} = resolve_start_link_opts(Options),
-    gen_server:start_link(?MODULE, {FsmRef, StartOpts}, ProcessOptions).
+    start_sync(gen_server:start_link(?MODULE, {FsmRef, StartOpts}, ProcessOptions), StartOpts).
 
 
 %%
@@ -806,8 +810,10 @@ is_fsm_ref(_) -> false.
 
 
 %%
-%%  Creates new FSM, starts it and sends first message to it. The startup is
-%%  performed synchonously, therefore FSM instance id and name are registered
+%%  Creates new FSM, starts it and sends first message to it. The startup can be
+%%  performed synchonously or asynchronously (default), depending on the `start_sync`
+%%  option. It could be passed via `start_spec` option in this function.
+%%  If the FSM is started synchonously, FSM instance id and name are registered
 %%  before this function exits, if FSM was requested to register them.
 %%  Nevertheless, the initial message is processed asynchronously.
 %%
@@ -854,7 +860,8 @@ send_create_event(Module, Args, Event, Options) ->
 %%  Creates new FSM, starts it and sends first message synchonously to it. All the
 %%  parameters and behaviour are similar to ones, described for `send_create_event/4`,
 %%  except that first event is send synchonously, i.e. `sync_send_event/2-3` is used
-%%  instead of `send_event/2-3`.
+%%  instead of `send_event/2-3`. Instance name and id will be registered before this
+%%  function returns and therefore can be used safely.
 %%
 -spec sync_send_create_event(
         Module  :: module(),
@@ -1051,7 +1058,7 @@ kill(FsmRef, Options) ->
         FsmRef  :: fsm_ref() | otp_ref(),
         Options :: list()
     ) ->
-        ok |
+        {ok, ResolvedFsmRef :: fsm_ref()} |
         {error, bad_ref} |
         {error, Reason :: term()}.
 
@@ -1063,9 +1070,10 @@ suspend(FsmRef, Options) ->
             Store = resolve_store(Options),
             UserAction = resolve_user_action(Options),
             case eproc_store:set_instance_suspended(Store, FsmRef, UserAction) of
-                {ok, _InstId} ->
+                {ok, InstId} ->
                     {ok, ResolvedFsmRef} = resolve_fsm_ref(FsmRef, Options),
-                    gen_server:cast(ResolvedFsmRef, {'eproc_fsm$suspend'});
+                    ok = gen_server:cast(ResolvedFsmRef, {'eproc_fsm$suspend'}),
+                    {ok, {inst, InstId}};
                 {error, Reason} ->
                     {error, Reason}
             end
@@ -1133,7 +1141,7 @@ suspend(FsmRef, Options) ->
         FsmRef      :: fsm_ref() | otp_ref(),
         Options     :: list()
     ) ->
-        ok |
+        {ok, ResolvedFsmRef :: fsm_ref()} |
         {error, bad_ref} |
         {error, running} |
         {error, Reason :: term()}.
@@ -1153,7 +1161,8 @@ resume(FsmRef, Options) ->
             case eproc_store:set_instance_resuming(Store, FsmRefInStore, StateAction, UserAction) of
                 {ok, InstId, StoredStartSpec} ->
                     case StartAction of
-                        no -> ok;
+                        no ->
+                            {ok, {inst, InstId}};
                         _ ->
                             StartSpec = case StartAction of
                                 yes -> StoredStartSpec;
@@ -1162,7 +1171,7 @@ resume(FsmRef, Options) ->
                             Registry = resolve_registry(Options),
                             {ok, ResolvedFsmRef} = eproc_registry:make_new_fsm_ref(Registry, {inst, InstId}, StartSpec),
                             try gen_server:call(ResolvedFsmRef, {'eproc_fsm$is_online'}) of
-                                true -> ok
+                                true -> {ok, {inst, InstId}}
                             catch
                                 _:_ -> {error, resume_failed}
                             end
@@ -2117,7 +2126,8 @@ split_options(Prop = {N, _}, {Create, Start, Send, Common, Unknown}) when
 
 split_options(Prop = {N, _}, {Create, Start, Send, Common, Unknown}) when
         N =:= restart;
-        N =:= register
+        N =:= register;
+        N =:= start_sync
         ->
     {Create, [Prop | Start], Send, Common, Unknown};
 
@@ -2153,6 +2163,25 @@ create_prepare_send(Module, Args, Options) ->
     {ok, StartSpec} = resolve_start_spec(CreateOpts),
     {ok, NewFsmRef} = eproc_registry:make_new_fsm_ref(Registry, FsmRef, StartSpec),
     {ok, FsmRef, NewFsmRef, AllSendOpts}.
+
+
+%%
+%%  Start FSM synchronously, if requested.
+%%
+start_sync({ok, Pid}, StartOpts) ->
+    case proplists:get_value(start_sync, StartOpts, false) of
+        false ->
+            {ok, Pid};
+        true ->
+            try gen_server:call(Pid, {'eproc_fsm$is_online'}) of
+                true -> {ok, Pid}
+            catch
+                _:_ -> {error, start_failed}
+            end
+    end;
+
+start_sync(Other, _StartOpts) ->
+    Other.
 
 
 
@@ -2205,14 +2234,15 @@ split_options_test_() -> [
     ?_assertMatch(
         {ok,
             [{group, x}, {name, x}, {start_spec, x}, {max_transitions, x}, {max_errors, x}, {max_sent_msgs, x}],
-            [{restart, x}, {register, x}],
+            [{restart, x}, {register, x}, {start_sync, x}],
             [{source, x}],
             [{timeout, x}, {store, x}, {registry, x}, {user, x}],
             [{some, y}]
         },
         split_options([
             {group, x}, {name, x}, {start_spec, x}, {max_transitions, x}, {max_errors, x}, {max_sent_msgs, x},
-            {restart, x}, {register, x}, {source, x}, {timeout, x}, {store, x}, {registry, x}, {user, x}, {some, y}
+            {restart, x}, {register, x}, {start_sync, x}, {source, x}, {timeout, x}, {store, x}, {registry, x},
+            {user, x}, {some, y}
         ])
     )].
 
