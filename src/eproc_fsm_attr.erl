@@ -66,12 +66,13 @@
         Action      :: term(),
         Scope       :: term()
     ) ->
-        {create, Data, State} |
+        {create, Data, State, NeedsStore} |
         {error, Reason}
     when
         Data :: term(),
         State :: term(),
-        Reason :: term().
+        Reason :: term(),
+        NeedsStore :: boolean().
 
 %%
 %%  Attribute updated by user.
@@ -83,13 +84,15 @@
         Action      :: term(),
         Scope       :: term() | undefined
     ) ->
-        {update, NewData, NewState} |
-        {remove, Reason} |
+        {update, NewData, NewState, NeedsStore} |
+        {remove, Reason, NeedsStore} |
+        handled |
         {error, Reason}
     when
         NewData :: term(),
         NewState :: term(),
-        Reason :: term().
+        Reason :: term(),
+        NeedsStore :: boolean().
 
 %%
 %%  Attribute removed by `eproc_fsm`.
@@ -99,10 +102,11 @@
         Attribute :: #attribute{},
         AttrState :: term()
     ) ->
-        ok |
+        {ok, NeedsStore} |
         {error, Reason}
     when
-        Reason :: term().
+        Reason :: term(),
+        NeedsStore :: boolean().
 
 
 %%
@@ -117,7 +121,7 @@
         Event       :: term()
     ) ->
         {handled, NewAttrState} |
-        {trigger, Trigger, Action} |
+        {trigger, Trigger, Action, NeedsStore} |
         {error, Reason}
     when
         NewAttrState :: term(),
@@ -126,7 +130,8 @@
         Action ::
             {update, NewAttrData, NewAttrState} |
             {remove, Reason},
-        Reason :: term().
+        Reason :: term(),
+        NeedsStore :: boolean().
 
 
 
@@ -341,7 +346,9 @@ perform_action(ActionSpec, {AttrCtxs, Actions, Context, LastAttrId}) ->
                         {updated, NewAttrCtx, NewAction} ->
                             {[NewAttrCtx | OtherAttrCtxs], [NewAction | Actions], Context, LastAttrId};
                         {removed, NewAction} ->
-                            {OtherAttrCtxs, [NewAction | Actions], Context, LastAttrId}
+                            {OtherAttrCtxs, [NewAction | Actions], Context, LastAttrId};
+                        handled ->
+                            {[AttrCtx | OtherAttrCtxs], Actions, Context, LastAttrId}
                     end
             end
     end.
@@ -365,7 +372,7 @@ perform_create(Module, Name, Action, Scope, {InstId, TrnNr, NextSName}, LastAttr
         till = undefined
     },
     case Module:handle_created(NewAttribute, Action, ResolvedScope) of
-        {create, AttrData, AttrState} ->
+        {create, AttrData, AttrState, NeedsStore} ->
             AttrCtx = #attr_ctx{
                 attr_id = NewAttrId,
                 attr = NewAttribute#attribute{data = AttrData},
@@ -374,7 +381,8 @@ perform_create(Module, Name, Action, Scope, {InstId, TrnNr, NextSName}, LastAttr
             AttrAction = #attr_action{
                 module = Module,
                 attr_id = NewAttrId,
-                action = {create, Name, ResolvedScope, AttrData}
+                action = {create, Name, ResolvedScope, AttrData},
+                needs_store = NeedsStore
             },
             {ok, AttrCtx, AttrAction, NewAttrId};
         {error, Reason} ->
@@ -398,11 +406,12 @@ perform_update(AttrCtx, Action, Scope, {_InstId, TrnNr, NextSName}) ->
     } = Attribute,
     ResolvedScope = resolve_scope(Scope, OldScope, NextSName),
     case Module:handle_updated(Attribute, AttrState, Action, Scope) of
-        {update, NewData, NewState} ->
+        {update, NewData, NewState, NeedsStore} ->
             AttrAction = #attr_action{
                 module = Module,
                 attr_id = AttrId,
-                action = {update, ResolvedScope, NewData}
+                action = {update, ResolvedScope, NewData},
+                needs_store = NeedsStore
             },
             NewAttribute = Attribute#attribute{
                 data = NewData,
@@ -414,13 +423,16 @@ perform_update(AttrCtx, Action, Scope, {_InstId, TrnNr, NextSName}) ->
                 state = NewState
             },
             {updated, NewAttrCtx, AttrAction};
-        {remove, UserReason} ->
+        {remove, UserReason, NeedsStore} ->
             AttrAction = #attr_action{
                 module = Module,
                 attr_id = AttrId,
-                action = {remove, {user, UserReason}}
+                action = {remove, {user, UserReason}},
+                needs_store = NeedsStore
             },
             {removed, AttrAction};
+        handled ->
+            handled;
         {error, Reason} ->
             erlang:throw({attr_update_failed, Reason})
     end.
@@ -438,11 +450,12 @@ perform_cleanup(AttrCtx, {SName, AttrCtxs, Actions}) ->
             {SName, [AttrCtx | AttrCtxs], Actions};
         false ->
             case Module:handle_removed(Attr, State) of
-                ok ->
+                {ok, NeedsStore} ->
                     Action = #attr_action{
                         module = Module,
                         attr_id = AttrId,
-                        action = {remove, {scope, SName}}
+                        action = {remove, {scope, SName}},
+                        needs_store = NeedsStore
                     },
                     {SName, AttrCtxs, [Action | Actions]};
                 {error, Reason} ->
@@ -461,14 +474,15 @@ process_event(AttrCtx, Event) ->
         {handled, NewAttrState} ->
             NewAttrCtx = AttrCtx#attr_ctx{state = NewAttrState},
             {handled, NewAttrCtx};
-        {trigger, Trigger, {remove, Reason}} when is_record(Trigger, trigger_spec) ->
+        {trigger, Trigger, {remove, Reason}, NeedsStore} when is_record(Trigger, trigger_spec) ->
             AttrAction = #attr_action{
                 module = Module,
                 attr_id = AttrId,
-                action = {remove, {user, Reason}}
+                action = {remove, {user, Reason}},
+                needs_store = NeedsStore
             },
             {trigger, removed, Trigger, AttrAction};
-        {trigger, Trigger, {update, NewAttrData, NewAttrState}} when is_record(Trigger, trigger_spec) ->
+        {trigger, Trigger, {update, NewAttrData, NewAttrState}, NeedsStore} when is_record(Trigger, trigger_spec) ->
             NewAttrCtx = AttrCtx#attr_ctx{
                 attr = Attribute#attribute{data = NewAttrData},
                 state = NewAttrState
@@ -476,7 +490,8 @@ process_event(AttrCtx, Event) ->
             AttrAction = #attr_action{
                 module = Module,
                 attr_id = AttrId,
-                action = {update, Scope, NewAttrData}
+                action = {update, Scope, NewAttrData},
+                needs_store = NeedsStore
             },
             {trigger, NewAttrCtx, Trigger, AttrAction};
         {error, Reason} ->

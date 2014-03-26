@@ -107,7 +107,7 @@ init(ActiveAttrs) ->
 handle_created(#attribute{attr_id = AttrId}, {timer, After, Event}, _Scope) ->
     Data = #data{start = erlang:now(), delay = After, event = Event},
     {ok, State} = start_timer(AttrId, Data),
-    {create, Data, State};
+    {create, Data, State, false};
 
 handle_created(_Attribute, {timer, remove}, _Scope) ->
     {error, {unknown_timer}}.
@@ -121,18 +121,19 @@ handle_updated(Attribute, AttrState, {timer, After, Event}, _Scope) ->
     NewData = #data{start = erlang:now(), delay = After, event = Event},
     ok = stop_timer(AttrState),
     {ok, NewState} = start_timer(AttrId, NewData),
-    {update, NewData, NewState};
+    {update, NewData, NewState, false};
 
 handle_updated(_Attribute, AttrState, {timer, remove}, _Scope) ->
     ok = stop_timer(AttrState),
-    {remove, explicit}.
+    {remove, explicit, false}.
 
 
 %%
 %%  Attribute removed by `eproc_fsm`.
 %%
 handle_removed(_Attribute, State) ->
-    ok = stop_timer(State).
+    ok = stop_timer(State),
+    {ok, false}.
 
 
 %%
@@ -160,7 +161,7 @@ handle_event(Attribute, _State, fired) ->
         src_arg = true
     },
     Action = {remove, fired},
-    {trigger, Trigger, Action}.
+    {trigger, Trigger, Action, false}.
 
 
 

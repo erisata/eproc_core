@@ -71,7 +71,7 @@ handle_created(_Attribute, {key, Key}, _Scope) ->
     % TODO: Register key synchronously.
     AttrData = #data{key = Key},
     AttrState = undefined,
-    {create, AttrData, AttrState}.
+    {create, AttrData, AttrState, true}.
 
 
 %%
@@ -85,7 +85,7 @@ handle_updated(_Attribute, _AttrState, {key, _Key}, _Scope) ->
 %%  Attributes should never be removed.
 %%
 handle_removed(_Attribute, _AttrState) ->
-    ok.
+    {ok, true}.
 
 
 %%

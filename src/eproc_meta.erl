@@ -16,22 +16,22 @@
 
 %%
 %%  This module is responsible for maintaining FSM metadata. For now,
-%%  the metadata is maintained as keywords, that can be attached to
+%%  the metadata is maintained as tags, that can be attached to
 %%  an FSM instance.
 %%
-%%  Keywords can be used to find FSM instances or caregorize them.
-%%  Keywords don't need to be unique, but required to be binaries.
+%%  Tags can be used to find FSM instances or caregorize them.
+%%  Tags don't need to be unique, but required to be binaries.
 %%  They are maintained as FSM attributes.
 %%
 -module(eproc_meta).
 -behaviour(eproc_fsm_attr).
--export([add_keyword/2]).
+-export([add_tag/2]).
 -export([init/1, handle_created/3, handle_updated/4, handle_removed/2, handle_event/3]).
 -include("eproc.hrl").
 
 
 -record(data, {
-    keyword :: binary(),
+    tag     :: binary(),
     type    :: binary()
 }).
 
@@ -43,8 +43,8 @@
 %%
 %%
 %%
-add_keyword(Keyword, Type) ->
-    Name = Action = {keyword, Keyword, Type},
+add_tag(Tag, Type) ->
+    Name = Action = {tag, Tag, Type},
     eproc_fsm_attr:action(?MODULE, Name, Action, []).
 
 
@@ -63,30 +63,30 @@ init(ActiveAttrs) ->
 %%
 %%  Attribute created.
 %%
-handle_created(_Attribute, {keyword, Keyword, Type}, _Scope) ->
-    AttrData = #data{keyword = Keyword, type = Type},
+handle_created(_Attribute, {tag, Tag, Type}, _Scope) ->
+    AttrData = #data{tag = Tag, type = Type},
     AttrState = undefined,
-    {create, AttrData, AttrState}.
+    {create, AttrData, AttrState, true}.
 
 
 %%
-%%  A keyword can only be updated to the same value.
+%%  A tag can only be updated to the same value.
 %%
-handle_updated(Attribute, AttrState, {keyword, Keyword, Type}, _Scope) ->
+handle_updated(Attribute, _AttrState, {tag, Tag, Type}, _Scope) ->
     #attribute{data = AttrData} = Attribute,
-    AttrData = #data{keyword = Keyword, type = Type},
-    {update, AttrData, AttrState}.
+    AttrData = #data{tag = Tag, type = Type},
+    handled.
 
 
 %%
 %%  Attributes should never be removed.
 %%
 handle_removed(_Attribute, _AttrState) ->
-    {error, keywords_non_removable}.
+    {error, tags_non_removable}.
 
 
 %%
-%%  Events are not used for keywords.
+%%  Events are not used for tags.
 %%
 handle_event(_Attribute, _AttrState, Event) ->
     throw({unknown_event, Event}).

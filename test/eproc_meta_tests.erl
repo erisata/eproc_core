@@ -25,7 +25,7 @@
 %%
 init_test() ->
     Attr = #attribute{
-        inst_id = iid, module = eproc_meta, name = {keyword, a, b},
+        inst_id = iid, module = eproc_meta, name = {tag, a, b},
         scope = [], data = {data, a, b}, from = from_trn
     },
     {ok, _State} = eproc_fsm_attr:init([], 0, [Attr]).
@@ -34,14 +34,14 @@ init_test() ->
 %%
 %%  Check if attribute creation and updating works.
 %%
-add_keyword_test() ->
+add_tag_test() ->
     {ok, State1} = eproc_fsm_attr:init([], 0, []),
     {ok, State2} = eproc_fsm_attr:transition_start(0, 0, [], State1),
-    ok = eproc_meta:add_keyword(keyword1, type),
-    ok = eproc_meta:add_keyword(keyword2, type),
-    {ok, [_, _], _LastAttrId3, State3} = eproc_fsm_attr:transition_end(0, 0, [], State2),
+    ok = eproc_meta:add_tag(tag1, type),
+    ok = eproc_meta:add_tag(tag2, type),
+    {ok, [_, _], LastAttrId3, State3} = eproc_fsm_attr:transition_end(0, 0, [], State2),
     {ok, State4} = eproc_fsm_attr:transition_start(0, 0, [], State3),
-    ok = eproc_meta:add_keyword(keyword1, type),
-    {ok, [_], _LastAttrId5, _State5} = eproc_fsm_attr:transition_end(0, 0, [], State4).
+    ok = eproc_meta:add_tag(tag1, type),
+    ?assertMatch({ok, [], LastAttrId3, State4}, eproc_fsm_attr:transition_end(0, 0, [], State4)).
 
 

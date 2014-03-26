@@ -46,12 +46,28 @@
 -define(INTR_TBL, 'eproc_store_ets$interrupt').
 -define(TRN_TBL,  'eproc_store_ets$transition').
 -define(MSG_TBL,  'eproc_store_ets$message').
+-define(KEY_TBL,  'eproc_store_ets$router_key').
+-define(TAG_TBL,  'eproc_store_ets$meta_tag').
 -define(CNT_TBL,  'eproc_store_ets$counter').
 
 -record(inst_name, {
     name    :: inst_name(),
     inst_id :: inst_id()
 }).
+
+-record(router_key, {
+    key     :: term(),
+    inst_id :: inst_id(),
+    attr_id :: integer()
+}).
+
+-record(meta_tag, {
+    tag     :: binary(),
+    type    :: binary(),
+    inst_id :: inst_id(),
+    attr_id :: integer()
+}).
+
 
 
 %% =============================================================================
@@ -80,6 +96,8 @@ init({}) ->
     ets:new(?INTR_TBL, [bag, public, named_table, {keypos, #interrupt.inst_id},  WC]),
     ets:new(?TRN_TBL,  [bag, public, named_table, {keypos, #transition.inst_id}, WC]),
     ets:new(?MSG_TBL,  [set, public, named_table, {keypos, #message.id},         WC]),
+    ets:new(?KEY_TBL,  [set, public, named_table, {keypos, #router_key.key},     WC]),
+    ets:new(?TAG_TBL,  [bag, public, named_table, {keypos, #meta_tag.tag},       WC]),
     ets:new(?CNT_TBL,  [set, public, named_table, {keypos, 1}]),
     ets:insert(?CNT_TBL, {inst, 0}),
     ets:insert(?CNT_TBL, {intr, 0}),
@@ -492,9 +510,48 @@ is_instance_terminated(killed)    -> true.
 
 
 %%
-%%  TODO: Handle all supported attribute actions.
+%%  Handle all attribute actions.
 %%
-handle_attr_actions(Instance, Transition, Messages) ->
+handle_attr_actions(Instance, Transition = #transition{attr_actions = AttrActions}, Messages) ->
+    [
+        ok = handle_attr_action(A, Instance, Transition, Messages)
+        || A = #attr_action{needs_store = true} <- AttrActions
+    ],
     ok.
 
+
+handle_attr_action(AttrAction = #attr_action{module = eproc_router}, Instance, _Transition, _Messages) ->
+    #attr_action{attr_id = AttrId, action = Action} = AttrAction,
+    #instance{id = InstId} = Instance,
+    case Action of
+        {create, _Name, _Scope, {data, Key}} ->
+            true = ets:insert_new(?KEY_TBL, #router_key{key = Key, inst_id = InstId, attr_id = AttrId}),
+            ok;
+        {update, _NewScope, {data, NewKey}} ->
+            [#router_key{key = OldKey}] = ets:match_object(?KEY_TBL, #router_key{attr_id = AttrId, _ = '_'}),
+            case NewKey of
+                OldKey ->
+                    ok;
+                _ ->
+                    true = ets:insert(?KEY_TBL, #router_key{key = NewKey, inst_id = InstId, attr_id = AttrId}),
+                    true = ets:delete(?KEY_TBL, OldKey),
+                    ok
+            end;
+        {remove, _Reason} ->
+            true = ets:match_delete(?KEY_TBL, #router_key{attr_id = AttrId, _ = '_'}),
+            ok
+    end;
+
+handle_attr_action(AttrAction = #attr_action{module = eproc_meta}, Instance, _Transition, _Messages) ->
+    #attr_action{attr_id = AttrId, action = Action} = AttrAction,
+    #instance{id = InstId} = Instance,
+    case Action of
+        {create, _Name, _Scope, {data, Tag, Type}} ->
+            true = ets:insert_new(?KEY_TBL, #meta_tag{tag = Tag, type = Type, inst_id = InstId, attr_id = AttrId}),
+            ok;
+        {update, _NewScope, {data, _Tag, _Type}} ->
+            ok;
+        {remove, _Reason} ->
+            ok
+    end.
 

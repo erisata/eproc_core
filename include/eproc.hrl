@@ -176,15 +176,16 @@
 %%  at a specific transition.
 %%
 -record(attr_action, {
-    module,
-    attr_id,
-    action  ::
+    module      :: module(),
+    attr_id     :: integer(),
+    action      ::
         {create, Name :: term(), Scope :: term(), Data :: term()} |
         {update, NewScope :: term(), NewData :: term()} |
         {remove, Reason :: (
             {scope, NewSName :: term()} |
             {user, UserReason :: term()}
-        )}
+        )},
+    needs_store = false :: boolean()    % True, if this attribute action should be handled in the store.
 }).
 
 

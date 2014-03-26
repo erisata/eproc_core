@@ -61,14 +61,14 @@ handle_updated(_Attribute, _AttrState, _Action, _Scope) ->
 %%  Attribute removed by `eproc_fsm`.
 %%
 handle_removed(_Attribute, _AttrState) ->
-    ok.
+    {ok, false}.
 
 
 %%
 %%  Attribute event received.
 %%
 handle_event(_Attribute, _AttrState, _Event) ->
-    ok.
+    {error, not_implemented}.
 
 
 
