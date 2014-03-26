@@ -132,6 +132,7 @@
 %%      used for administrative actions: kill, suspend and resume.
 %%
 %%  TODO: Error handling.
+%%  TODO: Attachment support.
 %%
 -module(eproc_fsm).
 -behaviour(gen_server).
@@ -1448,14 +1449,14 @@ handle_info(Event, State = #state{attrs = Attrs}) ->
 %%  Invoked, when the FSM terminates.
 %%
 terminate(_Reason, _State) ->
-    ok.
+    ok. % TODO
 
 
 %%
 %%  Invoked in the case of code upgrade.
 %%
 code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+    {ok, State}.    % TODO
 
 
 
@@ -1488,7 +1489,7 @@ resolve_timeout(Options) ->
 
 
 %%
-%%
+%%  TODO: Comment.
 %%
 resolve_start_link_opts(Options) ->
     {ok, [], StartOpts, [], CommonOpts, UnknownOpts} = split_options(Options),
