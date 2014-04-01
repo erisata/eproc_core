@@ -24,7 +24,10 @@
     eproc_store_core_test_named_instance/1,
     eproc_store_core_test_suspend_resume/1,
     eproc_store_core_test_add_transition/1,
-    eproc_store_core_test_load_running/1
+    eproc_store_core_test_load_running/1,
+    eproc_store_core_test_attrs/1,
+    eproc_store_router_test_attrs/1,
+    eproc_store_meta_test_attrs/1
 ]).
 -include_lib("common_test/include/ct.hrl").
 -include("eproc.hrl").
@@ -33,7 +36,11 @@
 %%
 %%
 all() ->
-    eproc_store_tck:testcases(core).
+    lists:append([
+        eproc_store_tck:testcases(core),
+        eproc_store_tck:testcases(router),
+        eproc_store_tck:testcases(meta)
+    ]).
 
 %%
 %%
@@ -63,3 +70,8 @@ end_per_suite(Config) ->
 ?MAP_TCK_TEST(eproc_store_core_test_suspend_resume).
 ?MAP_TCK_TEST(eproc_store_core_test_add_transition).
 ?MAP_TCK_TEST(eproc_store_core_test_load_running).
+?MAP_TCK_TEST(eproc_store_core_test_attrs).
+?MAP_TCK_TEST(eproc_store_router_test_attrs).
+?MAP_TCK_TEST(eproc_store_meta_test_attrs).
+
+

@@ -28,7 +28,10 @@
     eproc_store_core_test_named_instance/1,
     eproc_store_core_test_suspend_resume/1,
     eproc_store_core_test_add_transition/1,
-    eproc_store_core_test_load_running/1
+    eproc_store_core_test_load_running/1,
+    eproc_store_core_test_attrs/1,
+    eproc_store_router_test_attrs/1,
+    eproc_store_meta_test_attrs/1
 ]).
 -include_lib("common_test/include/ct.hrl").
 -include("eproc.hrl").
@@ -42,13 +45,16 @@ testcases(core) -> [
     eproc_store_core_test_named_instance,
     eproc_store_core_test_suspend_resume,
     eproc_store_core_test_add_transition,
-    eproc_store_core_test_load_running
+    eproc_store_core_test_load_running,
+    eproc_store_core_test_attrs
     ];
 
 testcases(router) -> [
+    eproc_store_router_test_attrs
     ];
 
 testcases(meta) -> [
+    eproc_store_meta_test_attrs
     ].
 
 
@@ -432,5 +438,91 @@ eproc_store_core_test_load_running(Config) ->
     [ok] = [ ok || {{inst, I}, {default, [4]}} <- Running, I =:= IID4 ],
     [ok] = [ ok || {{inst, I}, {default, [5]}} <- Running, I =:= IID5 ],
     ok.
+
+
+%%
+%%  Check if generic attribute functionality works.
+%%
+%%    * Unknown attribute is handled, if it does not requires a store.
+%%    * Transition is rejected, if unkown attribute is added that requires a store.
+%%
+eproc_store_core_test_attrs(Config) ->
+    Store = store(Config),
+    %%  Add instances.
+    Inst = inst_value(),
+    {ok, IID1} = eproc_store:add_instance(Store, Inst),
+    %%
+    %%  Add attribute that needs no store.
+    %%
+    Trn1 = #transition{
+        inst_id = IID1, number = 1, sname = [s1], sdata = d1,
+        timestamp = erlang:now(), duration = 13, trigger_type = event,
+        trigger_msg = #msg_ref{id = 1011, peer = {connector, some}},
+        trigger_resp = undefined,
+        trn_messages = [],
+        attr_last_id = 1,
+        attr_actions = [
+            #attr_action{module = m, attr_id = 1, needs_store = false, action = {create, n11, [], some}}
+        ],
+        inst_status = running,interrupts = undefined
+    },
+    Msg11 = #message{id = 1011, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m11},
+    {ok, IID1, 1} = eproc_store:add_transition(Store, Trn1, [Msg11]),
+    {ok, #instance{status = running, state = #inst_state{
+        inst_id = IID1, trn_nr = 1,
+        sname = [s1], sdata = d1,
+        attr_last_id = 1,
+        attrs_active = [Attr11],
+        interrupt = undefined
+    }}} = eproc_store:get_instance(Store, {inst, IID1}, current),
+    #attribute{
+        inst_id = IID1,
+        attr_id = 1,
+        module = m,
+        name = n11,
+        scope = [],
+        data = some,
+        from = 1,
+        upds = [],
+        till = undefined,
+        reason = undefined
+    } = Attr11,
+    %%
+    %%  Add another ordinary transition
+    %%
+    Trn2 = Trn1#transition{
+        number = 2,
+        sname = [s2],
+        sdata = d2,
+        trigger_msg = #msg_ref{id = 1021, peer = {connector, some}},
+        trigger_resp = undefined,
+        trn_messages = [],
+        attr_actions = [
+            #attr_action{module = m2, attr_id = 2, needs_store = true, action = {create, n11, [], some}}
+        ]
+    },
+    Msg21 = #message{id = 1021, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m21},
+    ok = try eproc_store:add_transition(Store, Trn2, [Msg21]) of
+        {ok, IID1, _} -> error
+    catch
+        _:_ -> ok
+    end,
+    {ok, #instance{status = running, state = #inst_state{
+        inst_id = IID1, trn_nr = 1,
+        sname = [s1], sdata = d1,
+        attr_last_id = 1,
+        attrs_active = [Attr11],
+        interrupt = undefined
+    }}} = eproc_store:get_instance(Store, {inst, IID1}, current),
+    ok.
+
+
+
+eproc_store_router_test_attrs(Config) ->
+    ok = todo.  % TODO
+
+
+eproc_store_meta_test_attrs(Config) ->
+    ok = todo.  % TODO
 
 
