@@ -587,18 +587,6 @@
 %%          with the actual FSM reference (`{inst, InstId}`). It should be needed
 %%          to call `eproc_fsm:start_link/2` later on.
 %%
-%%  `{max_transitions, integer() | infinity}` - TODO
-%%  :   Maximal allowed number of transitions.
-%%      When this limit will be reached, the FSM will be suspended.
-%%
-%%  `{max_errors, integer() | infinity}` - TODO
-%%  :   Maximal allowed number of errors in the FSM.
-%%      When this limit will be reached, the FSM will be suspended.
-%%
-%%  `{max_sent_msgs, integer() | infinity}` - TODO
-%%  :   Maximal allowed number of messages sent by the FSM.
-%%      When this limit will be reached, the FSM will be suspended.
-%%
 -spec create(
         Module  :: module(),
         Args    :: term(),
@@ -642,17 +630,6 @@ create(Module, Args, Options) ->
 %%
 %%  Options supprted by this function:
 %%
-%%  `{restart, list()}`
-%%  :   specifies options used to limit process restart rate and duration. These
-%%      options are passed to `eproc_restart:restarted/2`. See docs for that function
-%%      for more details. If this option is not specified, [] is used as a default.
-%%  `{register, (id | name | both)}`
-%%  :   specifies, what to register to the `eproc_registry` on startup.
-%%      The registration is performed asynchronously and the id or name are those
-%%      loaded from the store during startup. These registration options are independent
-%%      from the FsmName parameter. The FSM register nothing if this option is not
-%%      provided. The startup will fail if this option is provided but registry
-%%      is not configured for the `eproc_core` application (app environment).
 %%  `{store, StoreRef}`
 %%  :   a store to be used by the instance. If this option not provided, a store specified
 %%      in the `eproc_core` application environment is used.
@@ -660,6 +637,27 @@ create(Module, Args, Options) ->
 %%  :   a registry to be used by the instance. If this option not provided, a registry
 %%      specified in the `eproc_core` application environment is used. `eproc_core` can
 %%      cave no registry specified. In that case the registry will not be used.
+%%  `{register, (id | name | both)}`
+%%  :   specifies, what to register to the `eproc_registry` on startup.
+%%      The registration is performed asynchronously and the id or name are those
+%%      loaded from the store during startup. These registration options are independent
+%%      from the FsmName parameter. The FSM register nothing if this option is not
+%%      provided. The startup will fail if this option is provided but registry
+%%      is not configured for the `eproc_core` application (app environment).
+%%  `{restart_delay, (none | {const, DelayMS} | {exp, InitDelayMs, ExpCoef})}`
+%%  :   TODO: Defines restart delay strategy. Default is `none`.
+%%      See `eproc_restart:restarted/2` for more details.
+%%  `{max_restarts, [{Count, TimeMS}}`
+%%  :   TODO: Similar to supervisor's MaxR and MaxT.
+%%  `{max_transitions, [{Count, TimeMS}]}`
+%%  :   TODO: Maximal number of transitions per time interval.
+%%      When this limit will be reached, the FSM will be suspended.
+%%  `{max_sent_msgs, [{Count, TimeMS} | {Destination, Count, TimeMS}]}`
+%%  :   TODO: Maximal number of messages sent by the FSM allowed per time
+%%      interval and optionally per destination.
+%%      When this limit will be reached, the FSM will be suspended.
+%%  `{max_idle, TimeMS}`
+%%  :   TODO: ...
 %%
 -spec start_link(
         FsmName     :: {local, atom()} | {global, term()} | {via, module(), term()},
