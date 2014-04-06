@@ -26,16 +26,7 @@
 -include("eproc.hrl").
 
 
--type duration_elem() ::
-        {integer(), ms} |
-        {integer(), s} |
-        {integer(), sec} |
-        {integer(), min} |
-        {integer(), hour} |
-        {integer(), day} |
-        {integer(), week} |
-        {integer(), month} |
-        {integer(), year}.
+-type duration_elem() :: {integer(), ms | s | sec | min | hour | day | week | month | year}.
 
 %%
 %%  Describes duration in human readable format.
