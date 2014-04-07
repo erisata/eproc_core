@@ -275,6 +275,16 @@
 
 
 
+%%
+%%  TODO: Remove it.
+%%
+-record(inst_limit, {
+    name                :: atom(),
+    current = 0         :: integer(),
+    limit = infinity    :: integer() | infinity
+}).
+
+
 %% =============================================================================
 %%  Callback definitions.
 %% =============================================================================
@@ -1316,7 +1326,7 @@ resolve_start_spec(FsmRef, {mfa, {Module, Function, Args}}) when is_atom(Module)
     registry    :: registry_ref(),  %% A registry reference.
     store       :: store_ref(),     %% A store reference.
     restart     :: list(),          %% Restart options.
-    limits      :: [#inst_limit{}]  %% Instance limits.
+    limits      :: [term()]         %% Instance limits. TODO: add type spec.
 }).
 
 
@@ -1615,7 +1625,6 @@ handle_create(Module, Args, CreateOpts, CustomOpts) ->
         sdata           = InitSData,
         attr_last_id    = 0,
         attrs_active    = [],
-        limits          = Limits,
         interrupt       = undefined
     },
     Instance = #instance{
@@ -1678,7 +1687,6 @@ start_loaded(Instance, StartOpts, State) ->
         sname = LastSName,
         sdata = LastSData,
         trn_nr = LastTrnNr,
-        limits = Limits,
         interrupt = Interrupt
     } = InstState,
     #state{
@@ -1686,6 +1694,7 @@ start_loaded(Instance, StartOpts, State) ->
         registry = Registry
     } = State,
 
+    Limits = undefined, % TODO: Initialize.
     {PrevLimits, ResetLimits} = case Limits of
         undefined -> {[], []};
         _ -> {Limits, [ L#inst_limit{current = 0} || L <- Limits ]}

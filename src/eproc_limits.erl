@@ -15,11 +15,38 @@
 %\--------------------------------------------------------------------
 
 %%
-%%  TODO: Rewrite.
-%%  This module is used to control process restarts. This module is
-%%  based on ETS and can delay the calling process using constant or
-%%  exponentially increasing delays.
+%%  This module allows to manage some reccuring events. Several
+%%  strategies are supported for this. The process that reports the events
+%%  can be delayed with constant and exponentially increasing delays
+%%  or can be notified, when some counter limit is reached.
 %%
+%%  This module is used in `eproc_fsm` to limit restart rate as well
+%%  as transition and message rates. Nevertheless, this module is not
+%%  tied to the `eproc_fsm` and can be used by other modules.
+%%
+%%  This module manages counters, and each of the counters can have
+%%  multiple limits set. Each limit has own action, that is applied
+%%  when the limit is reached. If several actions are fired,
+%%  the following rules apply:
+%%
+%%    * If several limits with delay actions are triggered,
+%%      maximum of all the delays is used.
+%%    * If delay is triggered together with notification,
+%%      the process is not delayed and the notifications
+%%      are returned immediatelly.
+%%
+%%  Each process can have several counters, that can be later
+%%  reset or cleaned up in one go. Altrough process name is an
+%%  arbitraty term and is not related to Erlang process in any way.
+%%
+%%  Several types of counter limits are implemented:
+%%
+%%    * `series` - counts events in a series, where events in one
+%%      series have distance not more than specified time interval.
+%%    * `rate` - measures event rate. This is similar to supervisor's
+%%      restart counters.
+%%
+%%  For more details, look at descriptions of the corresponding types.
 %%
 %%  Examples:
 %%
@@ -42,22 +69,44 @@
 
 
 %%
-%%
-%%
--type exp_delay() :: {delay, MinDelay :: duration(), Coefficient :: number(), MaxDelay :: duration()}.
-
-%%
-%%
+%%  Constant delay action. If this event is fired, it aways delays
+%%  the calling process for the specific time.
 %%
 -type const_delay() :: {delay, Delay :: duration()}.
 
+
 %%
+%%  Exponential delay action. When triggered for the first time
+%%  in the failure series, it delays the process calling `notify/2-3`
+%%  for MinDelay. Each subsequent trigger causes delay increased by
+%%  Coefficient comparing to the previous delay. The delays will not
+%%  exceed the MaxDelay.
 %%
+%%  If the corresponding counter is dropped bellow the limit, all
+%%  the delays are reset and the next delay will be MinDelay again.
+%%
+-type exp_delay() :: {delay, MinDelay :: duration(), Coefficient :: number(), MaxDelay :: duration()}.
+
+
+%%
+%%  Action, that is triggered when particular limit is reached.
+%%  Delay actions are discussed above. The `notify` action causes
+%%  the `notify/2-3` function to return names of the reached limits
+%%  in form of `{reached, [LimitName]}`.
 %%
 -type limit_action() :: notify | exp_delay() | const_delay().
 
+
 %%
+%%  Limit specification, counting events in a series, where intervals
+%%  between the events in the series are less that NewAfter.
+%%  The Action is triggered is series contains more than MaxCount events.
 %%
+%%  If an interval between two subsequent events is more that NewAfter,
+%%  old series data is discarded and new series is started to count.
+%%
+%%  This limit is efficient in both: cpu and memory usage and has
+%%  constant complexity to number of events.
 %%
 -type series_spec() ::
         {series,
@@ -68,7 +117,16 @@
         }.
 
 %%
+%%  Limit specification counting events per time interval.
+%%  It acts similarly to the supervisor's restart counters.
+%%  This limit triggers the Action if more than MaxCount events
+%%  has been occured during the specified Duration.
 %%
+%%  This limit implementation is less effective comparing to the
+%%  `series` limit. It has linear complexity with regards to
+%%  event count arrived during the Duration. The same applies
+%%  for memory and CPU. One should avoid this limit for very
+%%  large durations (hours and more).
 %%
 -type rate_spec() ::
         {rate,
@@ -79,7 +137,8 @@
         }.
 
 %%
-%%
+%%  Limit specification can be series limit or rate limit.
+%%  Each of them are described above in more details.
 %%
 -type limit_spec() :: series_spec() | rate_spec().
 
@@ -135,6 +194,10 @@ start_link() ->
 %%  Creates or updates a counter. Counter is left unchanged is
 %%  this function is called subsequently with the same parameters.
 %%
+%%  Counter specification is updated if it was absent or was
+%%  different from the new specification. In this case all the
+%%  counter state is reset.
+%%
 -spec setup(
         Proc :: term(),
         Name :: term(),
@@ -158,35 +221,28 @@ setup(Proc, Name, Spec) ->
 
 
 %%
-%%  TODO: Rewrite.
-%%
-%%  This function should be used during initialization of the process,
-%%  whos restarts should be delayed. It is recomended to use asynchronous
-%%  initialization in such case and call this function from the asynchronous
-%%  part.
-%%
-%%  Several options are supported by this function:
-%%
-%%  `{delay, (none | {const, DelayMS} | {exp, InitDelayMs, ExpCoef})}`
-%%  :   Defines restart delay strategy. Default is `none`.
-%%  `{fail, {MaxRestarts, MaxTimeMS}} | {fail, never}`
-%%  :   Similar to supervisor's MaxR and MaxT.
-%%
+%%  Notifies the counter that event has occured.
+%%  The function can be used to notify several (Count) events in one call.
+%%  Timestamp for all such events will be considered the same.
 %%
 -spec notify(
         Proc    :: term(),
         Name    :: term(),
         Count   :: integer()
     ) ->
-        ok | {reached, [LimitName :: term()]}.
+        ok | {reached, [LimitName :: term()]} | {error, not_found}.
 
 notify(Proc, Name, Count) ->
-    [Counter] = ets:lookup(?MODULE, {Proc, Name}),
-    {ReachedLimits, NewCounter} = handle_notif(Counter, Count),
-    true = ets:insert(?MODULE, NewCounter),
-    case ReachedLimits of
-        [] -> ok;
-        _ -> {reached, ReachedLimits}
+    case ets:lookup(?MODULE, {Proc, Name}) of
+        [] ->
+            {error, not_found};
+        [Counter] ->
+            {ReachedLimits, NewCounter} = handle_notif(Counter, Count),
+            true = ets:insert(?MODULE, NewCounter),
+            case ReachedLimits of
+                [] -> ok;
+                _ -> {reached, ReachedLimits}
+            end
     end.
 
 
@@ -197,7 +253,7 @@ notify(Proc, Name, Count) ->
         Proc    :: term(),
         Name    :: term()
     ) ->
-        ok | {reached, [LimitName :: term()]}.
+        ok | {reached, [LimitName :: term()]} | {error, not_found}.
 
 notify(Proc, Name) ->
     notify(Proc, Name, 1).
@@ -335,18 +391,8 @@ init_limits({rate, LimitName, _MaxCount, _Duration, _Action}) ->
 handle_notif(Counter = #counter{specs = Specs, limits = Limits, tstamps = TStamps}, Count) ->
     Now = os:timestamp(),
     ThisTStamp = {Now, Count},
-    NewTStamps = [ThisTStamp | TStamps],
-    {NewLimits, MaxDelay, MaxInterval, ReachedLimits} = handle_limit(Specs, Limits, NewTStamps, Now, Count),
-    FilteredTStamps = case MaxInterval =< 1000 of
-        true ->
-            [];
-        false ->
-            {N1, N2, _} = Now,
-            OldestSecs = N1 * 1000000 + N2 - (MaxInterval div 1000) - 1,
-            OldestTS = {OldestSecs div 1000000, OldestSecs rem 1000000, 0},
-            Filter = fun ({T, _C}) -> T >= OldestTS end,
-            lists:takewhile(Filter, TStamps)
-    end,
+    {NewLimits, MaxDelay, MaxInterval, ReachedLimits} = handle_limit(Specs, Limits, TStamps, Now, Count),
+    FilteredTStamps = cleanup_tstamps(TStamps, Now, MaxInterval),
     NewCounter = Counter#counter{limits = NewLimits, tstamps = [ThisTStamp | FilteredTStamps]},
     case {ReachedLimits, MaxDelay} of
         {[], D} when D > 0 ->
@@ -395,7 +441,7 @@ handle_limit(
     #limit{name = LimitName, delay = LastDelay} = Limit,
     DurationMS = eproc_timer:duration_to_ms(Duration),
     OldestTStamp = timestamp_add_ms(NotifTime, -DurationMS),
-    {NewReachedLimits, NewDelay} = case rate_above(TStamps, OldestTStamp, MaxCount, 0) of
+    {NewReachedLimits, NewDelay} = case rate_above([{NotifTime, NotifCount} | TStamps], OldestTStamp, MaxCount, 0) of
         true  -> handle_action(LimitName, Action, ReachedLimits, LastDelay);
         false -> {ReachedLimits, 0}
     end,
@@ -428,6 +474,20 @@ handle_action(_LimitName, {delay, MinDelay, Coefficient, MaxDelay}, ReachedLimit
     end,
     MaxDelayMS = eproc_timer:duration_to_ms(MaxDelay),
     {ReachedLimits, erlang:min(DelayMS, MaxDelayMS)}.
+
+
+%%
+%%  Drop old timestamps.
+%%
+cleanup_tstamps(_TStamps, _Now, 0) ->
+    [];
+
+cleanup_tstamps(TStamps, Now, MaxInterval) ->
+    {N1, N2, _} = Now,
+    OldestSecs = N1 * 1000000 + N2 - (MaxInterval div 1000) - 1,
+    OldestTS = {OldestSecs div 1000000, OldestSecs rem 1000000, 0},
+    Filter = fun ({T, _C}) -> T >= OldestTS end,
+    lists:takewhile(Filter, TStamps).
 
 
 %%
