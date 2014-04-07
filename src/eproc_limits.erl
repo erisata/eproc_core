@@ -94,6 +94,8 @@
 %%  the `notify/2-3` function to return names of the reached limits
 %%  in form of `{reached, [LimitName]}`.
 %%
+%%  TODO: Add action: {call, {Module, Function, Args}}.
+%%
 -type limit_action() :: notify | exp_delay() | const_delay().
 
 
