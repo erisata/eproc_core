@@ -50,12 +50,12 @@
 %%
 %%  Examples:
 %%
-%%      eproc_limits:notify({eproc_fsm, InstId}, restart, [
+%%      eproc_limits:setup({eproc_fsm, InstId}, restart, [
 %%          {series, delays, 1,    {10, min}, {delay, {100, ms}, 1.1, {1, hour}}},
 %%          {series, giveup, 1000, {10, min}, notify}
 %%      ]).
 %%
-%%      eproc_limits:notify({eproc_fsm, InstId}, transition, [
+%%      eproc_limits:setup({eproc_fsm, InstId}, transition, [
 %%          {series, burst, 100,   {200, min}, notify},
 %%          {series, total, 10000, {1, year},  notify}
 %%      ]).
@@ -249,16 +249,16 @@ notify(Proc, Name, Count) ->
 
 
 %%
-%%  Convenience function, equivalent to `notify(Proc, Name, 1)`.
+%%  Updates several counters at once.
 %%
 -spec notify(
         Proc    :: term(),
-        Name    :: term()
+        Names   :: [{Name :: term(), Count :: integer()}]
     ) ->
         ok | {reached, [LimitName :: term()]} | {error, not_found}.
 
-notify(Proc, Name) ->
-    notify(Proc, Name, 1).
+notify(Proc, Names) ->
+    todo. %TODO.
 
 
 %%

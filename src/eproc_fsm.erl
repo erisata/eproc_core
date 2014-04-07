@@ -1646,13 +1646,14 @@ handle_create(Module, Args, CreateOpts, CustomOpts) ->
 %%
 %%  Loads the instance and starts it if needed.
 %%
-handle_start(FsmRef, StartOpts, State = #state{store = Store, lim_res = LimRes}) ->
+handle_start(FsmRef, StartOpts, State = #state{store = Store}) ->
     case eproc_store:load_instance(Store, FsmRef) of
         {ok, Instance = #instance{id = InstId, status = Status}} when Status =:= running; Status =:= resuming ->
-            ok = limits_setup(State#state{inst_id = InstId}),
-            case limits_notify(InstId, ?LIMIT_RES, 1, LimRes) of
+            StateWithInstId = State#state{inst_id = InstId},
+            ok = limits_setup(StateWithInstId),
+            case limits_notify_res(StateWithInstId) of
                 ok ->
-                    case start_loaded(Instance, StartOpts, State) of
+                    case start_loaded(Instance, StartOpts, StateWithInstId) of
                         {ok, NewState} ->
                             lager:debug("FSM started, ref=~p.", [FsmRef]),
                             {online, NewState};
@@ -1892,9 +1893,17 @@ perform_transition(Trigger, TransitionFun, State) ->
     end,
 
     %%  Save transition.
-    InstStatus = case ProcAction of
-        cont -> running;
-        stop -> completed
+    {FinalProcAction, InstStatus, Interrupts} = case ProcAction of
+        cont ->
+            case limits_notify_trn(State, TransitionMsgs) of
+                ok ->
+                    {cont, running, undefined};
+                {reached, Reached} ->
+                    lager:notice("FSM id=~p suspended, limits ~p reached.", [InstId, Reached]),
+                    {stop, suspended, [#interrupt{reason = {fault, {limits, Reached}}}]}
+            end;
+        stop ->
+            {stop, completed, undefined}
     end,
     Transition = #transition{
         inst_id = InstId,
@@ -1909,7 +1918,8 @@ perform_transition(Trigger, TransitionFun, State) ->
         trn_messages = RegisteredMsgRefs,
         attr_last_id = LastAttrId,
         attr_actions = ExplicitAttrActions ++ AttrActions,
-        inst_status  = InstStatus
+        inst_status  = InstStatus,
+        interrupts   = Interrupts
     },
     {ok, InstId, TrnNr} = eproc_store:add_transition(Store, Transition, TransitionMsgs),
 
@@ -1926,7 +1936,7 @@ perform_transition(Trigger, TransitionFun, State) ->
         trn_nr = TrnNr,
         attrs = NewAttrs
     },
-    {ProcAction, TransitionReply, NewState}.
+    {FinalProcAction, TransitionReply, NewState}.
 
 
 %%
@@ -2168,13 +2178,24 @@ create_prepare_send(Module, Args, Options) ->
 
 
 %%
-%%  Notify counter.
+%%  Notify restart counter.
 %%
-limits_notify(_InstId, _CounterName, _Count, undefined) ->
+limits_notify_res(#state{lim_res = undefined}) ->
     ok;
 
-limits_notify(InstId, CounterName, Count, _LimitSpec) ->
-    eproc_limits:notify(?LIMIT_PROC(InstId), CounterName, Count).
+limits_notify_res(#state{inst_id = InstId}) ->
+    eproc_limits:notify(?LIMIT_PROC(InstId), ?LIMIT_RES, 1).
+
+
+%%
+%%  Notify transition and sent messages counters.
+%%
+limits_notify_trn(#state{lim_trn = undefined, lim_msg = undefined}, _Msgs) ->
+    ok;
+
+limits_notify_trn(#state{inst_id = InstId, lim_trn = LimTrn, lim_msg = LimMsg}, Msgs) ->
+    CounterNames = [],
+    eproc_limits:notify(?LIMIT_PROC(InstId), CounterNames).
 
 
 %%
