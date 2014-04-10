@@ -188,7 +188,8 @@
 -define(LIMIT_PROC(IID), {'eproc_fsm$limits', IID}).
 -define(LIMIT_RES, res).
 -define(LIMIT_TRN, trn).
--define(LIMIT_MSG, msg).
+-define(LIMIT_MSG_ALL, {msg, all}).
+-define(LIMIT_MSG_DST(D), {msg, {dst, D}}).
 
 
 -type name() :: {via, Registry :: module(), InstId :: inst_id()}.
@@ -658,7 +659,7 @@ create(Module, Args, Options) ->
 %%      Delays will be effective on transition ends.
 %%      The action `notify` will cause the FSM to suspend itself after processing the transition.
 %%      The default is `undefined`. In such case the eproc_limits will not be used.
-%%  `{limit_sent_msgs, {all, eproc_limits:limit_spec()} | [{dest, Destination, eproc_limits:limit_spec()}]}`
+%%  `{limit_sent_msgs, [{all, eproc_limits:limit_spec()} | {dest, Destination, eproc_limits:limit_spec()}]}`
 %%  :   Limits number of messages sent by the FSM.
 %%      The counter will be updated in only on ends of transitions.
 %%      As a consequence, the delays will be effective on transition ends.
@@ -2205,12 +2206,25 @@ limits_notify_trn(#state{inst_id = InstId, lim_trn = LimTrn, lim_msg = LimMsg}, 
 limits_setup(#state{inst_id = InstId, lim_res = LimRes, lim_trn = LimTrn, lim_msg = LimMsg}) ->
     CounterProc = ?LIMIT_PROC(InstId),
     SetupCounterFun = fun
-        (_CounterName, undefined) -> ok;
-        (CounterName, LimitSpec) -> eproc_limits:setup(CounterProc, CounterName, LimitSpec)
+        (_CounterName, undefined) ->
+            ok;
+        (CounterName, LimitSpec) ->
+            eproc_limits:setup(CounterProc, CounterName, LimitSpec)
+    end,
+    SetupMsgCounterFun = fun
+        ({all, LimitSpec}) ->
+            ok = SetupCounterFun(?LIMIT_MSG_ALL, LimitSpec);
+        ({dest, Dst, LimitSpec}) ->
+            ok = SetupCounterFun(?LIMIT_MSG_DST(Dst), LimitSpec)
     end,
     ok = SetupCounterFun(?LIMIT_RES, LimRes),
     ok = SetupCounterFun(?LIMIT_TRN, LimTrn),
-    ok = SetupCounterFun(?LIMIT_MSG, LimMsg).
+    case LimMsg of
+        undefined ->
+            ok;
+        _ when is_list(LimMsg) ->
+            ok = lists:foreach(LimMsg)
+    end.
 
 
 %%
@@ -2225,7 +2239,8 @@ limits_reset(#state{inst_id = InstId, lim_res = LimRes, lim_trn = LimTrn, lim_ms
     end,
     ok = ResetCounterFun(?LIMIT_RES, LimRes),
     ok = ResetCounterFun(?LIMIT_TRN, LimTrn),
-    ok = ResetCounterFun(?LIMIT_MSG, LimMsg).
+    %ok = ResetCounterFun(?LIMIT_MSG, LimMsg),  TODO
+    ok.
 
 
 %%
@@ -2240,7 +2255,8 @@ limits_cleanup(#state{inst_id = InstId, lim_res = LimRes, lim_trn = LimTrn, lim_
     end,
     ok = CleanupCounterFun(?LIMIT_RES, LimRes),
     ok = CleanupCounterFun(?LIMIT_TRN, LimTrn),
-    ok = CleanupCounterFun(?LIMIT_MSG, LimMsg).
+    %ok = CleanupCounterFun(?LIMIT_MSG, LimMsg),    TODO
+    ok.
 
 
 
