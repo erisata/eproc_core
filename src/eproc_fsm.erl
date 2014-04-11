@@ -155,7 +155,7 @@
 %%  in the callback (process-side) functions.
 %%
 -export([
-    reply/2
+    reply/2, suspend/1
 ]).
 
 %%
@@ -1055,8 +1055,6 @@ kill(FsmRef, Options) ->
 %%
 %%  This function depends on `eproc_registry`.
 %%
-%%  TODO: Add suspend by FSM.
-%%
 -spec suspend(
         FsmRef  :: fsm_ref() | otp_ref(),
         Options :: list()
@@ -1079,6 +1077,26 @@ suspend(FsmRef, Options) ->
                 {error, Reason} ->
                     {error, Reason}
             end
+    end.
+
+
+%%
+%%  Suspends the current FSM. This function can only be called
+%%  by the FSM callback module, in the `handle_state/3` function.
+%%
+%%  This function does not suspend the FSM immediatelly. It rather
+%%  orders the suspending on the end of the current transition.
+%%
+%%  If this function is called in the beginning of the transition,
+%%  the next callbacks in the transition (`entry` and `exit`)
+%%  will be called as usual.
+%%
+-spec suspend(Reason :: term()) -> ok.
+
+suspend(Reason) ->
+    case erlang:put('eproc_fsm$suspend', {true, Reason}) of
+        false -> ok;
+        {true, _OldReason} -> ok
     end.
 
 
@@ -1863,6 +1881,7 @@ perform_transition(Trigger, TransitionFun, State) ->
     } = Trigger,
 
     erlang:put('eproc_fsm$messages', []),
+    erlang:put('eproc_fsm$suspend', false),
     TrnNr = LastTrnNr + 1,
     TrnStart = erlang:now(),
     {ok, TrnAttrs} = eproc_fsm_attr:transition_start(InstId, TrnNr, SName, Attrs),
@@ -1906,14 +1925,20 @@ perform_transition(Trigger, TransitionFun, State) ->
     %%  Save transition.
     {FinalProcAction, InstStatus, Interrupts, Delay} = case ProcAction of
         cont ->
-            case limits_notify_trn(State, TransitionMsgs) of
-                ok ->
-                    {cont, running, undefined, undefined};
-                {delay, D} ->
-                    {cont, running, undefined, D};
-                {reached, Reached} ->
-                    lager:notice("FSM id=~p suspended, limits ~p reached.", [InstId, Reached]),
-                    {stop, suspended, [#interrupt{reason = {fault, {limits, Reached}}}], undefined}
+            case erlang:erase('eproc_fsm$suspend') of
+                {true, SuspReason} ->
+                    lager:notice("FSM id=~p suspended, impl reason ~p.", [InstId, SuspReason]),
+                    {stop, suspended, [#interrupt{reason = {impl, SuspReason}}], undefined};
+                false ->
+                    case limits_notify_trn(State, TransitionMsgs) of
+                        ok ->
+                            {cont, running, undefined, undefined};
+                        {delay, D} ->
+                            {cont, running, undefined, D};
+                        {reached, Reached} ->
+                            lager:notice("FSM id=~p suspended, limits ~p reached.", [InstId, Reached]),
+                            {stop, suspended, [#interrupt{reason = {fault, {limits, Reached}}}], undefined}
+                    end
             end;
         stop ->
             {stop, completed, undefined, undefined}
