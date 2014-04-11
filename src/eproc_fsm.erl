@@ -1329,7 +1329,8 @@ resolve_start_spec(FsmRef, {mfa, {Module, Function, Args}}) when is_atom(Module)
     store       :: store_ref(),     %% A store reference.
     lim_res     :: term(),          %% Instance limits: restart counter limit specs.
     lim_trn     :: term(),          %% Instance limits: transition counter limit specs.
-    lim_msg     :: term()           %% Instance limits: sent messages counter limit specs.
+    lim_msg_all :: term(),          %% Instance limits: counter limit specs for all sent messages.
+    lim_msg_dst :: term()           %% Instance limits: counter limit specs for sent messages by destination.
 }).
 
 
@@ -1343,12 +1344,22 @@ resolve_start_spec(FsmRef, {mfa, {Module, Function, Args}}) when is_atom(Module)
 %%  restarting the engine with a lot of running fsm's.
 %%
 init({FsmRef, StartOpts}) ->
+    {LimMsgAll, LimMsgDst} = case proplists:get_value(limit_sent_msgs, StartOpts, undefined) of
+        undefined ->
+            {undefined, undefined};
+        LimMsg ->
+            {
+                case [ L      || {all, L}     <- LimMsg ] of [] -> undefined; [L] -> L  end,
+                case [ {D, L} || {dest, D, L} <- LimMsg ] of [] -> undefined; DL  -> DL end
+            }
+    end,
     State = #state{
-        store    = resolve_store(StartOpts),
-        registry = resolve_registry(StartOpts),
-        lim_res  = proplists:get_value(limit_restarts,    StartOpts, undefined),
-        lim_trn  = proplists:get_value(limit_transitions, StartOpts, undefined),
-        lim_msg  = proplists:get_value(limit_sent_msgs,   StartOpts, undefined)
+        store       = resolve_store(StartOpts),
+        registry    = resolve_registry(StartOpts),
+        lim_res     = proplists:get_value(limit_restarts,    StartOpts, undefined),
+        lim_trn     = proplists:get_value(limit_transitions, StartOpts, undefined),
+        lim_msg_all = LimMsgAll,
+        lim_msg_dst = LimMsgDst
     },
     self() ! {'eproc_fsm$start', FsmRef, StartOpts},
     {ok, State}.
@@ -1652,7 +1663,7 @@ handle_start(FsmRef, StartOpts, State = #state{store = Store}) ->
         {ok, Instance = #instance{id = InstId, status = Status}} when Status =:= running; Status =:= resuming ->
             StateWithInstId = State#state{inst_id = InstId},
             ok = limits_setup(StateWithInstId),
-            case limits_notify_res(StateWithInstId) of
+            case limits_notify_res(StateWithInstId) of  % TODO: delay
                 ok ->
                     case start_loaded(Instance, StartOpts, StateWithInstId) of
                         {ok, NewState} ->
@@ -1896,7 +1907,7 @@ perform_transition(Trigger, TransitionFun, State) ->
     %%  Save transition.
     {FinalProcAction, InstStatus, Interrupts} = case ProcAction of
         cont ->
-            case limits_notify_trn(State, TransitionMsgs) of
+            case limits_notify_trn(State, TransitionMsgs) of    % TODO: delay
                 ok ->
                     {cont, running, undefined};
                 {reached, Reached} ->
@@ -2191,72 +2202,90 @@ limits_notify_res(#state{inst_id = InstId}) ->
 %%
 %%  Notify transition and sent messages counters.
 %%
-limits_notify_trn(#state{lim_trn = undefined, lim_msg = undefined}, _Msgs) ->
+limits_notify_trn(#state{lim_trn = undefined, lim_msg_all = undefined, lim_msg_dst = undefined}, _Msgs) ->
     ok;
 
-limits_notify_trn(#state{inst_id = InstId, lim_trn = LimTrn, lim_msg = LimMsg}, Msgs) ->
-    CounterNames = [],
-    eproc_limits:notify(?LIMIT_PROC(InstId), CounterNames).
+limits_notify_trn(#state{inst_id = InstId, lim_msg_all = undefined, lim_msg_dst = undefined}, _Msgs) ->
+    eproc_limits:notify(?LIMIT_PROC(InstId), [{?LIMIT_TRN, 1}]);
+
+limits_notify_trn(State, Msgs) ->
+    #state{
+        inst_id = InstId,
+        lim_trn = LimTrn,
+        lim_msg_all = LimMsgAll,
+        lim_msg_dst = LimMsgDst
+    } = State,
+    DstMsgCountersFun = fun (#message{receiver = Receiver}, Counters) ->
+        case lists:keyfind(Receiver, 1, Counters) of
+            false   -> Counters;
+            {CN, C} -> lists:keyreplace(CN, 1, Counters, {CN, C + 1})
+        end
+    end,
+    TrnCounters = case LimTrn of
+        undefined -> [];
+        _ -> [{?LIMIT_TRN, 1}]
+    end,
+    MsgAllCounters = case LimMsgAll of
+        undefined -> [];
+        _ -> [{?LIMIT_MSG_ALL, length(Msgs)}]
+    end,
+    MsgDstCounters = case LimMsgDst of
+        undefined -> [];
+        _ ->
+            MDCs = lists:foldl(DstMsgCountersFun, [ {D, 0} || {D, _L} <- LimMsgDst ], Msgs),
+            [ {?LIMIT_MSG_DST(D), C} || {D, C} <- MDCs ]
+    end,
+    AllCounters = lists:append([TrnCounters, MsgAllCounters, MsgDstCounters]),
+    eproc_limits:notify(?LIMIT_PROC(InstId), AllCounters).
 
 
 %%
-%%  Setup limit counters.
-%%  TODO: MSGS special case.
+%%  Invokes specified function on all counters that have limits defined.
 %%
-limits_setup(#state{inst_id = InstId, lim_res = LimRes, lim_trn = LimTrn, lim_msg = LimMsg}) ->
+limits_action(State, Fun) ->
+    #state{
+        inst_id = InstId,
+        lim_res = LimRes,
+        lim_trn = LimTrn,
+        lim_msg_all = LimMsgAll,
+        lim_msg_dst = LimMsgDst
+    } = State,
     CounterProc = ?LIMIT_PROC(InstId),
     SetupCounterFun = fun
-        (_CounterName, undefined) ->
-            ok;
-        (CounterName, LimitSpec) ->
-            eproc_limits:setup(CounterProc, CounterName, LimitSpec)
+        (_CounterName, undefined) -> ok;
+        (CounterName,  LimitSpec) -> Fun(CounterProc, CounterName, LimitSpec)
     end,
-    SetupMsgCounterFun = fun
-        ({all, LimitSpec}) ->
-            ok = SetupCounterFun(?LIMIT_MSG_ALL, LimitSpec);
-        ({dest, Dst, LimitSpec}) ->
-            ok = SetupCounterFun(?LIMIT_MSG_DST(Dst), LimitSpec)
+    SetupMsgDstCounterFun = fun ({Dst, LimitSpec}) ->
+        ok = SetupCounterFun(?LIMIT_MSG_DST(Dst), LimitSpec)
     end,
-    ok = SetupCounterFun(?LIMIT_RES, LimRes),
-    ok = SetupCounterFun(?LIMIT_TRN, LimTrn),
-    case LimMsg of
-        undefined ->
-            ok;
-        _ when is_list(LimMsg) ->
-            ok = lists:foreach(LimMsg)
+    ok = SetupCounterFun(?LIMIT_RES,     LimRes),
+    ok = SetupCounterFun(?LIMIT_TRN,     LimTrn),
+    ok = SetupCounterFun(?LIMIT_MSG_ALL, LimMsgAll),
+    ok = case LimMsgDst of
+        undefined -> ok;
+        _ when is_list(LimMsgDst) -> lists:foreach(SetupMsgDstCounterFun, LimMsgDst)
     end.
 
 
 %%
-%%  Reset limit counters.
-%%  TODO: MSGS special case.
+%%  Setup limit counters.
 %%
-limits_reset(#state{inst_id = InstId, lim_res = LimRes, lim_trn = LimTrn, lim_msg = LimMsg}) ->
-    CounterProc = ?LIMIT_PROC(InstId),
-    ResetCounterFun = fun
-        (_CounterName, undefined) -> ok;
-        (CounterName, _LimitSpec) -> eproc_limits:reset(CounterProc, CounterName)
-    end,
-    ok = ResetCounterFun(?LIMIT_RES, LimRes),
-    ok = ResetCounterFun(?LIMIT_TRN, LimTrn),
-    %ok = ResetCounterFun(?LIMIT_MSG, LimMsg),  TODO
-    ok.
+limits_setup(State) ->
+    limits_action(State, fun eproc_limits:setup/3).
+
+
+%%
+%%  Reset limit counters.
+%%
+limits_reset(State) ->
+    limits_action(State, fun (P, C, _L) -> eproc_limits:reset(P, C) end).
 
 
 %%
 %%  Cleanup limit counters.
-%%  TODO: MSGS special case.
 %%
-limits_cleanup(#state{inst_id = InstId, lim_res = LimRes, lim_trn = LimTrn, lim_msg = LimMsg}) ->
-    CounterProc = ?LIMIT_PROC(InstId),
-    CleanupCounterFun = fun
-        (_CounterName, undefined) -> ok;
-        (CounterName, _LimitSpec) -> eproc_limits:cleanup(CounterProc, CounterName)
-    end,
-    ok = CleanupCounterFun(?LIMIT_RES, LimRes),
-    ok = CleanupCounterFun(?LIMIT_TRN, LimTrn),
-    %ok = CleanupCounterFun(?LIMIT_MSG, LimMsg),    TODO
-    ok.
+limits_cleanup(State) ->
+    limits_action(State, fun (P, C, _L) -> eproc_limits:cleanup(P, C) end).
 
 
 
@@ -2319,6 +2348,41 @@ split_options_test_() -> [
             {register, x}, {source, x}, {timeout, x}, {store, x}, {registry, x}, {user, x}, {some, y}
         ])
     )].
+
+%%
+%%  Unit tests for `limits_action/2`.
+%%
+limits_action_test() ->
+    State = #state{inst_id = iid, lim_res = r, lim_trn = t, lim_msg_all = ma, lim_msg_dst = [{d1, md1}, {d2, md2}]},
+    ok = meck:new(eproc_fsm_limits_action_mock, [non_strict]),
+    ok = meck:expect(eproc_fsm_limits_action_mock, some, fun (?LIMIT_PROC(iid), _, _) -> ok end),
+    ok = limits_action(State, fun eproc_fsm_limits_action_mock:some/3),
+    ?assertEqual(1, meck:num_calls(eproc_fsm_limits_action_mock, some, ['_', ?LIMIT_RES, r])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm_limits_action_mock, some, ['_', ?LIMIT_TRN, t])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm_limits_action_mock, some, ['_', ?LIMIT_MSG_ALL, ma])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm_limits_action_mock, some, ['_', ?LIMIT_MSG_DST(d1), md1])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm_limits_action_mock, some, ['_', ?LIMIT_MSG_DST(d2), md2])),
+    ?assertEqual(5, meck:num_calls(eproc_fsm_limits_action_mock, some, '_')),
+    ?assert(meck:validate(eproc_fsm_limits_action_mock)),
+    ok = meck:unload(eproc_fsm_limits_action_mock).
+
+%%
+%%  Unit tests for `limits_notify_trn/2`.
+%%
+limits_notify_trn_test() ->
+    State = #state{inst_id = iid, lim_res = r, lim_trn = t, lim_msg_all = ma, lim_msg_dst = [{d1, md1}, {d2, md2}]},
+    Msgs = [#message{receiver = d1}, #message{receiver = d1}, #message{receiver = d2}, #message{receiver = d3}],
+    ok = meck:new(eproc_limits, []),
+    ok = meck:expect(eproc_limits, notify, fun (?LIMIT_PROC(iid), _) -> perfect end),
+    ?assertEqual(perfect, limits_notify_trn(State, Msgs)),
+    [{_, {_, _, [_, Counters]}, _}] = meck:history(eproc_limits),
+    ?assertEqual(
+        [{?LIMIT_TRN, 1}, {?LIMIT_MSG_ALL, 4}, {?LIMIT_MSG_DST(d1), 2}, {?LIMIT_MSG_DST(d2), 1}],
+        lists:sort(Counters)
+    ),
+    ?assert(meck:validate(eproc_limits)),
+    ok = meck:unload(eproc_limits).
+
 
 -endif.
 

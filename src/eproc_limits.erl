@@ -234,7 +234,10 @@ setup(ProcessName, CounterName, Spec) ->
         {delay, DelayMS :: integer()} |
         {error, {not_found, CounterName :: term()}}.
 
-notify(ProcessName, CounterName, Count) ->
+notify(_ProcessName, _CounterName, 0) ->
+    ok;
+
+notify(ProcessName, CounterName, Count) when Count > 0 ->
     case ets:lookup(?MODULE, {ProcessName, CounterName}) of
         [] ->
             {error, {not_found, CounterName}};
