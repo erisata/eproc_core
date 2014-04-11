@@ -364,13 +364,13 @@ start_link_opts_limit_restarts_test() ->
             }}
     end),
     ok = meck:expect(eproc_limits, setup, fun
-        ({'eproc_fsm$limits', 100}, res, {series, 100, 1000, notify}) -> ok
+        ({'eproc_fsm$limits', 100}, res, {series, some, 100, 1000, notify}) -> ok
     end),
     ok = meck:expect(eproc_limits, notify, fun
         ({'eproc_fsm$limits', 100}, res, 1) -> ok
     end),
 
-    {ok, PID1} = eproc_fsm:start_link({inst, 100}, [{store, store}, {limit_restarts, {series, 100, 1000, notify}}]),
+    {ok, PID1} = eproc_fsm:start_link({inst, 100}, [{store, store}, {limit_restarts, {series, some, 100, 1000, notify}}]),
     {ok, PID2} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID1)),
     ?assert(eproc_fsm:is_online(PID2)),
@@ -401,7 +401,7 @@ start_link_restart_suspend_test() ->
             {ok, InstId}
     end),
     ok = meck:expect(eproc_limits, setup, fun
-        ({'eproc_fsm$limits', 100}, res, {series, 100, 1000, notify}) -> ok
+        ({'eproc_fsm$limits', 100}, res, {series, some, 100, 1000, notify}) -> ok
     end),
     ok = meck:expect(eproc_limits, notify, fun
         ({'eproc_fsm$limits', 100}, res, 1) -> {reached, [res]}
@@ -410,7 +410,7 @@ start_link_restart_suspend_test() ->
         ({'eproc_fsm$limits', 100}, res) -> ok
     end),
     OldTrapExit = erlang:process_flag(trap_exit, true),
-    {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}, {limit_restarts, {series, 100, 1000, notify}}]),
+    {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}, {limit_restarts, {series, some, 100, 1000, notify}}]),
     ?assert(receive {'EXIT', PID, normal}  -> true after 1000 -> false end),
     erlang:process_flag(trap_exit, OldTrapExit),
     ?assertEqual(false, eproc_fsm:is_online(PID)),
@@ -422,6 +422,39 @@ start_link_restart_suspend_test() ->
     ?assertEqual(0, meck:num_calls(eproc_fsm__void, '_', '_')),
     ?assert(meck:validate([eproc_store, eproc_limits, eproc_fsm__void])),
     ok = meck:unload([eproc_store, eproc_limits, eproc_fsm__void]).
+
+
+%%
+%%  Check, if delay on restart works.
+%%
+start_link_restart_delay_test() ->
+    ok = meck:new(eproc_store, []),
+    ok = meck:new(eproc_limits, []),
+    ok = meck:new(eproc_fsm__void, [passthrough]),
+    ok = meck:expect(eproc_store, load_instance, fun
+        (store, {inst, 100}) ->
+            {ok, #instance{
+                id = 100, group = 200, name = name, module = eproc_fsm__void,
+                args = {a}, opts = [], status = running, created = erlang:now(),
+                state = #inst_state{sname = [], sdata = {state, undefined}, attr_last_id = 0, attrs_active = []}
+            }}
+    end),
+    ok = meck:expect(eproc_limits, setup, fun
+        ({'eproc_fsm$limits', 100}, res, {series, some, 100, 1000, {delay, 300}}) -> ok
+    end),
+    ok = meck:expect(eproc_limits, notify, fun
+        ({'eproc_fsm$limits', 100}, res, 1) -> {delay, 300}
+    end),
+    {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}, {limit_restarts, {series, some, 100, 1000, {delay, 300}}}]),
+    {TimeUS, _} = timer:tc(fun () -> ?assert(eproc_fsm:is_online(PID)) end),
+    TimeMS = TimeUS div 1000,
+    ?assertEqual(true, (TimeMS > 290) and (TimeMS < 500)),
+    ?assertEqual(1, meck:num_calls(eproc_store, load_instance, '_')),
+    ?assertEqual(1, meck:num_calls(eproc_limits, setup, '_')),
+    ?assertEqual(1, meck:num_calls(eproc_limits, notify, '_')),
+    ?assert(meck:validate([eproc_store, eproc_limits, eproc_fsm__void])),
+    ok = meck:unload([eproc_store, eproc_limits, eproc_fsm__void]),
+    ok = unlink_kill(PID).
 
 
 %%
@@ -826,8 +859,8 @@ send_event_restart_unreg_test() ->
             {ok, InstId, TrnNr}
     end),
     ok = meck:expect(eproc_limits, setup, fun
-        ({'eproc_fsm$limits', 100}, res, {series, 100, 1000, notify}) -> ok;
-        ({'eproc_fsm$limits', 200}, res, {series, 100, 1000, notify}) -> ok
+        ({'eproc_fsm$limits', 100}, res, {series, some, 100, 1000, notify}) -> ok;
+        ({'eproc_fsm$limits', 200}, res, {series, some, 100, 1000, notify}) -> ok
     end),
     ok = meck:expect(eproc_limits, notify, fun
         ({'eproc_fsm$limits', 100}, res, 1) -> ok;
@@ -842,8 +875,8 @@ send_event_restart_unreg_test() ->
         ([], {event, done}, StateData = {state, 200}) ->
             {final_state, [done], StateData}
     end),
-    {ok, PID1} = eproc_fsm:start_link({inst, 100}, [{store, store}, {limit_restarts, {series, 100, 1000, notify}}]),
-    {ok, PID2} = eproc_fsm:start_link({inst, 200}, [{store, store}, {limit_restarts, {series, 100, 1000, notify}}]),
+    {ok, PID1} = eproc_fsm:start_link({inst, 100}, [{store, store}, {limit_restarts, {series, some, 100, 1000, notify}}]),
+    {ok, PID2} = eproc_fsm:start_link({inst, 200}, [{store, store}, {limit_restarts, {series, some, 100, 1000, notify}}]),
     ?assert(eproc_fsm:is_online(PID1)),
     ?assert(eproc_fsm:is_online(PID2)),
     unlink(PID1),
@@ -862,6 +895,116 @@ send_event_restart_unreg_test() ->
     ?assert(meck:validate([eproc_store, eproc_limits, eproc_fsm__void])),
     ok = meck:unload([eproc_store, eproc_limits, eproc_fsm__void]),
     ok = unlink_kill([PID1, PID2]).
+
+
+%%
+%%  TODO: Check if process is suspended on transition, if requested by FSM implementation.
+%%
+send_event_suspend_by_user_test() ->
+    ?assert(todo).
+
+
+%%
+%%  Check if process is suspended on transition, if transition limit reached.
+%%
+send_event_limit_suspend_test() ->
+    ok = meck:new(eproc_store, []),
+    ok = meck:new(eproc_limits, []),
+    ok = meck:new(eproc_fsm__seq, [passthrough]),
+    ok = meck:expect(eproc_store, load_instance, fun
+        (store, {inst, 100}) ->
+            {ok, #instance{
+                id = 100, group = 200, name = name, module = eproc_fsm__seq,
+                args = {}, opts = [], status = running, created = erlang:now(),
+                state = #inst_state{
+                    inst_id = 100,
+                    trn_nr = 1,
+                    sname = [incrementing],
+                    sdata = {state, 5},
+                    attr_last_id = 0,
+                    attrs_active = []
+                }
+            }}
+    end),
+    ok = meck:expect(eproc_store, add_transition, fun
+        (store, #transition{inst_id = InstId, number = TrnNr = 2, inst_status = suspended, interrupts = Ints}, [#message{}]) ->
+            [#interrupt{reason = {fault, {limits, [{trn, [some]}]}}}] = Ints,
+            {ok, InstId, TrnNr}
+    end),
+    ok = meck:expect(eproc_limits, setup, fun
+        ({'eproc_fsm$limits', 100}, trn, {series, some, 100, 0, notify}) -> ok
+    end),
+    ok = meck:expect(eproc_limits, notify, fun
+        ({'eproc_fsm$limits', 100}, [{trn, 1}]) -> {reached, [{trn, [some]}]}
+    end),
+    ok = meck:expect(eproc_limits, cleanup, fun
+        ({'eproc_fsm$limits', 100}, trn) -> ok
+    end),
+    {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}, {limit_transitions, {series, some, 100, 0, notify}}]),
+    ?assert(eproc_fsm:is_online(PID)),
+    OldTrapExit = erlang:process_flag(trap_exit, true),
+    ?assertEqual(ok, eproc_fsm:send_event(PID, skip, [{source, {test, test}}])),
+    ?assert(receive {'EXIT', PID, normal}  -> true; AntMsg -> AntMsg after 1000 -> false end),
+    erlang:process_flag(trap_exit, OldTrapExit),
+    ?assertEqual(false, eproc_fsm:is_online(PID)),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {event, skip}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
+    ?assertEqual(1, meck:num_calls(eproc_store, add_transition, '_')),
+    ?assertEqual(1, meck:num_calls(eproc_limits, setup, '_')),
+    ?assertEqual(1, meck:num_calls(eproc_limits, notify, '_')),
+    ?assert(meck:validate([eproc_store, eproc_limits, eproc_fsm__seq])),
+    ok = meck:unload([eproc_store, eproc_limits, eproc_fsm__seq]),
+    ok = unlink_kill(PID).
+
+
+%%
+%%  Check if process is delayed on transition, if transition limit reached.
+%%
+send_event_limit_delay_test() ->
+    ok = meck:new(eproc_store, []),
+    ok = meck:new(eproc_limits, []),
+    ok = meck:new(eproc_fsm__seq, [passthrough]),
+    ok = meck:expect(eproc_store, load_instance, fun
+        (store, {inst, 100}) ->
+            {ok, #instance{
+                id = 100, group = 200, name = name, module = eproc_fsm__seq,
+                args = {}, opts = [], status = running, created = erlang:now(),
+                state = #inst_state{
+                    inst_id = 100,
+                    trn_nr = 1,
+                    sname = [incrementing],
+                    sdata = {state, 5},
+                    attr_last_id = 0,
+                    attrs_active = []
+                }
+            }}
+    end),
+    ok = meck:expect(eproc_store, add_transition, fun
+        (store, #transition{inst_id = InstId, number = TrnNr = 2}, [#message{}]) ->
+            {ok, InstId, TrnNr}
+    end),
+    ok = meck:expect(eproc_limits, setup, fun
+        ({'eproc_fsm$limits', 100}, trn, {series, some, 100, 0, {delay, 300}}) -> ok
+    end),
+    ok = meck:expect(eproc_limits, notify, fun
+        ({'eproc_fsm$limits', 100}, [{trn, 1}]) -> {delay, 300}
+    end),
+    {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}, {limit_transitions, {series, some, 100, 0, {delay, 300}}}]),
+    ?assert(eproc_fsm:is_online(PID)),
+    ?assertEqual(ok, eproc_fsm:send_event(PID, skip, [{source, {test, test}}])),
+    %%
+    {TimeUS, _} = timer:tc(fun () -> ?assert(eproc_fsm:is_online(PID)) end),
+    TimeMS = TimeUS div 1000,
+    ?assertEqual(true, (TimeMS > 290) and (TimeMS < 500)),
+    %%
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {event, skip}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
+    ?assertEqual(1, meck:num_calls(eproc_store, add_transition, '_')),
+    ?assertEqual(1, meck:num_calls(eproc_limits, setup, '_')),
+    ?assertEqual(1, meck:num_calls(eproc_limits, notify, '_')),
+    ?assert(meck:validate([eproc_store, eproc_limits, eproc_fsm__seq])),
+    ok = meck:unload([eproc_store, eproc_limits, eproc_fsm__seq]),
+    ok = unlink_kill(PID).
 
 
 %%
