@@ -53,13 +53,13 @@ init({}) ->
         undefined -> {ok, []}
     end,
 
-    RestartSpecs = [{restart,
-        {eproc_restart, start_link, []},
-        permanent, 10000, worker, [eproc_restart]
+    LimitsSpecs = [{limits,
+        {eproc_limits, start_link, []},
+        permanent, 10000, worker, [eproc_limits]
     }],
 
     {ok, {{one_for_all, 100, 10},
-        lists:append([StoreSpecs, RegistrySpecs, RestartSpecs])
+        lists:append([StoreSpecs, RegistrySpecs, LimitsSpecs])
     }}.
 
 

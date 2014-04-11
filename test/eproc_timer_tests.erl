@@ -190,12 +190,29 @@ event_fired_test() ->
     end),
     {ok, State1} = eproc_fsm_attr:init([first], 0, []),
     {ok, State2} = eproc_fsm_attr:transition_start(0, 0, [first], State1),
-    ok = eproc_timer:set(some, 100, msg1, next),
+    ok = eproc_timer:set(some, {100, ms}, msg1, next),
     {ok, _Actions3, _LastAttrId3, State3} = eproc_fsm_attr:transition_end(0, 0, [second], State2),
     ok = receive TimerMsg -> ok after 300 -> TimerMsg = undefined end,
     ?assertMatch({trigger, _State4, #trigger_spec{}, _Action}, eproc_fsm_attr:event(TimerMsg, State3)),
     ?assertEqual(1, meck:num_calls(eproc_fsm, register_message, '_')),
     ?assert(meck:validate([eproc_fsm])),
     ok = meck:unload([eproc_fsm]).
+
+
+%%
+%%  Check if `duration_to_ms/1` works.
+%%
+duration_to_ms_test_() -> [
+    ?_assertEqual(2, eproc_timer:duration_to_ms({2, ms})),
+    ?_assertEqual(2000, eproc_timer:duration_to_ms({2, s})),
+    ?_assertEqual(2000, eproc_timer:duration_to_ms({2, sec})),
+    ?_assertEqual(120000, eproc_timer:duration_to_ms({2, min})),
+    ?_assertEqual(7200000, eproc_timer:duration_to_ms({2, hour})),
+    ?_assertEqual(172800000, eproc_timer:duration_to_ms({2, day})),
+    ?_assertEqual(1209600000, eproc_timer:duration_to_ms({2, week})),
+    ?_assertEqual(5184000000, eproc_timer:duration_to_ms({2, month})),
+    ?_assertEqual(63072000000, eproc_timer:duration_to_ms({2, year})),
+    ?_assertEqual(2010, eproc_timer:duration_to_ms([{2, s}, {10, ms}]))
+    ].
 
 

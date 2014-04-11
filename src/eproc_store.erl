@@ -104,7 +104,7 @@
 -callback set_instance_suspended(
         StoreArgs   :: term(),
         FsmRef      :: fsm_ref(),
-        Reason      :: #user_action{} | {fault, Reason :: term()} | {impl, Reason :: binary()}
+        Reason      :: #user_action{} | {fault, Reason :: term()} | {impl, Reason :: term()}
     ) ->
         {ok, inst_id()}.
 

@@ -19,9 +19,9 @@
 %%
 
 -type proplist()        :: [{term(), term()}].
--type datetime()        :: calendar:datetime().     % {Date, Time} in UTC
--type timestamp()       :: erlang:timestamp().      % {Mega, Secs, Micro}
--type duration()        :: integer().               % in ms.
+-type datetime()        :: calendar:datetime().             % {Date, Time} in UTC
+-type timestamp()       :: erlang:timestamp().              % {Mega, Secs, Micro}
+-type duration()        :: eproc_timer:duration_spec().     % {1, min}, etc.
 -type mfargs()          :: {Module :: module(), Function :: atom(), Args :: [term()]}.
 
 %%
@@ -212,7 +212,7 @@
     trn_nr      :: trn_nr(),            %% Transition at which the FSM was suspended or 0, if in the initial state.
     status      :: active | closed,     %% Interrupt status.
     suspended   :: timestamp(),         %% When the FSM was suspended.
-    reason      :: #user_action{} | {fault, Reason :: term()} | {impl, Reason :: binary()},
+    reason      :: #user_action{} | {fault, Reason :: term()} | {impl, Reason :: term()},
     resumes     :: [#resume_attempt{}]  %% Last resume attempt in the head of the list.
 }).
 

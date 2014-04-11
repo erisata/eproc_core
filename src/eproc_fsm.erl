@@ -102,9 +102,9 @@
 %%      Functions `send_create_event/3` and `sync_send_create_event/4` can only
 %%      be called if FSM used with the registry.
 %%
-%%  `eproc_restart`
-%%  :   can be used to limit FSM restarts. This component is only used if
-%%      start option `restart` is provided with the corresponding value.
+%%  `eproc_limits`
+%%  :   can be used to limit FSM restarts, transitions or sent messages.
+%%      This component is only used if start option `limit_*` are provided.
 %%
 %%
 %%  Common FSM options
@@ -156,7 +156,7 @@
 %%  in the callback (process-side) functions.
 %%
 -export([
-    reply/2
+    reply/2, suspend/1
 ]).
 
 %%
@@ -186,6 +186,11 @@
 %%
 -include("eproc.hrl").
 -define(DEFAULT_TIMEOUT, 5000).
+-define(LIMIT_PROC(IID), {'eproc_fsm$limits', IID}).
+-define(LIMIT_RES, res).
+-define(LIMIT_TRN, trn).
+-define(LIMIT_MSG_ALL, {msg, all}).
+-define(LIMIT_MSG_DST(D), {msg, {dst, D}}).
 
 
 -type name() :: {via, Registry :: module(), InstId :: inst_id()}.
@@ -588,18 +593,6 @@
 %%          with the actual FSM reference (`{inst, InstId}`). It should be needed
 %%          to call `eproc_fsm:start_link/2` later on.
 %%
-%%  `{max_transitions, integer() | infinity}` - TODO
-%%  :   Maximal allowed number of transitions.
-%%      When this limit will be reached, the FSM will be suspended.
-%%
-%%  `{max_errors, integer() | infinity}` - TODO
-%%  :   Maximal allowed number of errors in the FSM.
-%%      When this limit will be reached, the FSM will be suspended.
-%%
-%%  `{max_sent_msgs, integer() | infinity}` - TODO
-%%  :   Maximal allowed number of messages sent by the FSM.
-%%      When this limit will be reached, the FSM will be suspended.
-%%
 -spec create(
         Module  :: module(),
         Args    :: term(),
@@ -642,17 +635,6 @@ create(Module, Args, Options) ->
 %%
 %%  Options supprted by this function:
 %%
-%%  `{restart, list()}`
-%%  :   specifies options used to limit process restart rate and duration. These
-%%      options are passed to `eproc_restart:restarted/2`. See docs for that function
-%%      for more details. If this option is not specified, [] is used as a default.
-%%  `{register, (id | name | both)}`
-%%  :   specifies, what to register to the `eproc_registry` on startup.
-%%      The registration is performed asynchronously and the id or name are those
-%%      loaded from the store during startup. These registration options are independent
-%%      from the FsmName parameter. The FSM register nothing if this option is not
-%%      provided. The startup will fail if this option is provided but registry
-%%      is not configured for the `eproc_core` application (app environment).
 %%  `{store, StoreRef}`
 %%  :   a store to be used by the instance. If this option not provided, a store specified
 %%      in the `eproc_core` application environment is used.
@@ -660,11 +642,37 @@ create(Module, Args, Options) ->
 %%  :   a registry to be used by the instance. If this option not provided, a registry
 %%      specified in the `eproc_core` application environment is used. `eproc_core` can
 %%      cave no registry specified. In that case the registry will not be used.
+%%  `{register, (id | name | both)}`
+%%  :   specifies, what to register to the `eproc_registry` on startup.
+%%      The registration is performed asynchronously and the id or name are those
+%%      loaded from the store during startup. These registration options are independent
+%%      from the FsmName parameter. The FSM register nothing if this option is not
+%%      provided. The startup will fail if this option is provided but registry
+%%      is not configured for the `eproc_core` application (app environment).
 %%  `{start_sync, Sync :: boolean()}`
 %%  :   starts FSM synchronously if `Sync = true` and asynchronously otherwise.
 %%      Default is `false` (asynchronously). If FSM is started synchonously,
 %%      FSM id and name will be registered within the EProc Registry before
 %%      this function exits, if requested.
+%%  `{limit_restarts, eproc_limits:limit_spec()}`
+%%  :   Limits restarts of the FSM.
+%%      Delays will be effective on process startup.
+%%      The action `notify` will cause the FSM to suspend itself.
+%%      The default is `undefined`. In such case the eproc_limits will not be used.
+%%  `{limit_transitions, eproc_limits:limit_spec()}`
+%%  :   Limits number of transition for the FSM.
+%%      Delays will be effective on transition ends.
+%%      The action `notify` will cause the FSM to suspend itself after processing the transition.
+%%      The default is `undefined`. In such case the eproc_limits will not be used.
+%%  `{limit_sent_msgs, [{all, eproc_limits:limit_spec()} | {dest, Destination, eproc_limits:limit_spec()}]}`
+%%  :   Limits number of messages sent by the FSM.
+%%      The counter will be updated in only on ends of transitions.
+%%      As a consequence, the delays will be effective on transition ends.
+%%      The action `notify` will cause the FSM to suspend itself after processing the transition.
+%%      The default is `undefined`. In such case the eproc_limits will not be used.
+%%  `{max_idle, TimeMS}`
+%%  :   TODO: Suspend process if it is idle for to long.
+%%      TODO: Support for hibernation should be added here.
 %%
 -spec start_link(
         FsmName     :: {local, atom()} | {global, term()} | {via, module(), term()},
@@ -1083,6 +1091,26 @@ suspend(FsmRef, Options) ->
 
 
 %%
+%%  Suspends the current FSM. This function can only be called
+%%  by the FSM callback module, in the `handle_state/3` function.
+%%
+%%  This function does not suspend the FSM immediatelly. It rather
+%%  orders the suspending on the end of the current transition.
+%%
+%%  If this function is called in the beginning of the transition,
+%%  the next callbacks in the transition (`entry` and `exit`)
+%%  will be called as usual.
+%%
+-spec suspend(Reason :: term()) -> ok.
+
+suspend(Reason) ->
+    case erlang:put('eproc_fsm$suspend', {true, Reason}) of
+        false -> ok;
+        {true, _OldReason} -> ok
+    end.
+
+
+%%
 %%  Resumes previously suspended FSM instance. If the FSM is not suspended
 %%  (still suspending or just running), an error will be rised.
 %%  While performing resume, the FSM will be marked as running
@@ -1328,7 +1356,10 @@ resolve_start_spec(FsmRef, {mfa, {Module, Function, Args}}) when is_atom(Module)
     attrs       :: term(),          %% State for the `eproc_fsm_attr` module.
     registry    :: registry_ref(),  %% A registry reference.
     store       :: store_ref(),     %% A store reference.
-    restart     :: list()           %% Restart options.
+    lim_res     :: term(),          %% Instance limits: restart counter limit specs.
+    lim_trn     :: term(),          %% Instance limits: transition counter limit specs.
+    lim_msg_all :: term(),          %% Instance limits: counter limit specs for all sent messages.
+    lim_msg_dst :: term()           %% Instance limits: counter limit specs for sent messages by destination.
 }).
 
 
@@ -1342,10 +1373,22 @@ resolve_start_spec(FsmRef, {mfa, {Module, Function, Args}}) when is_atom(Module)
 %%  restarting the engine with a lot of running fsm's.
 %%
 init({FsmRef, StartOpts}) ->
+    {LimMsgAll, LimMsgDst} = case proplists:get_value(limit_sent_msgs, StartOpts, undefined) of
+        undefined ->
+            {undefined, undefined};
+        LimMsg ->
+            {
+                case [ L      || {all, L}     <- LimMsg ] of [] -> undefined; [L] -> L  end,
+                case [ {D, L} || {dest, D, L} <- LimMsg ] of [] -> undefined; DL  -> DL end
+            }
+    end,
     State = #state{
-        store    = resolve_store(StartOpts),
-        registry = resolve_registry(StartOpts),
-        restart  = proplists:get_value(restart, StartOpts, [])
+        store       = resolve_store(StartOpts),
+        registry    = resolve_registry(StartOpts),
+        lim_res     = proplists:get_value(limit_restarts,    StartOpts, undefined),
+        lim_trn     = proplists:get_value(limit_transitions, StartOpts, undefined),
+        lim_msg_all = LimMsgAll,
+        lim_msg_dst = LimMsgDst
     },
     self() ! {'eproc_fsm$start', FsmRef, StartOpts},
     {ok, State}.
@@ -1368,11 +1411,9 @@ handle_call({'eproc_fsm$sync_send_event', Event, EventSrc}, From, State) ->
     },
     TransitionFun = fun (Trg, St) -> perform_event_transition(Trg, [], St) end,
     case perform_transition(Trigger, TransitionFun, State) of
-        {cont, noreply,        NewState} -> {noreply, NewState};
-        {cont, {reply, Reply}, NewState} -> {reply, Reply, NewState};
-        {stop, noreply,        NewState} -> shutdown(NewState);
-        {stop, {reply, Reply}, NewState} -> shutdown(Reply, NewState);
-        {error, Reason}                  -> {stop, {error, Reason}, State}
+        {cont, NewState} -> {noreply, NewState};
+        {stop, NewState} -> shutdown(NewState);
+        {error, Reason}  -> {stop, {error, Reason}, State}
     end.
 
 
@@ -1390,9 +1431,9 @@ handle_cast({'eproc_fsm$send_event', Event, EventSrc}, State) ->
     },
     TransitionFun = fun (Trg, St) -> perform_event_transition(Trg, [], St) end,
     case perform_transition(Trigger, TransitionFun, State) of
-        {cont, noreply, NewState} -> {noreply, NewState};
-        {stop, noreply, NewState} -> shutdown(NewState);
-        {error, Reason}           -> {stop, {error, Reason}, State}
+        {cont, NewState} -> {noreply, NewState};
+        {stop, NewState} -> shutdown(NewState);
+        {error, Reason}  -> {stop, {error, Reason}, State}
     end;
 
 handle_cast({'eproc_fsm$kill'}, State = #state{inst_id = InstId}) ->
@@ -1423,9 +1464,9 @@ handle_info(Event, State = #state{attrs = Attrs}) ->
         {trigger, NewAttrs, Trigger, AttrAction} ->
             TransitionFun = fun (Trg, St) -> perform_event_transition(Trg, [AttrAction], St) end,
             case perform_transition(Trigger, TransitionFun, State#state{attrs = NewAttrs}) of
-                {cont, noreply, NewState} -> {noreply, NewState};
-                {stop, noreply, NewState} -> shutdown(NewState);
-                {error, Reason}           -> {stop, {error, Reason}, State#state{attrs = NewAttrs}}
+                {cont, NewState} -> {noreply, NewState};
+                {stop, NewState} -> shutdown(NewState);
+                {error, Reason}  -> {stop, {error, Reason}, State#state{attrs = NewAttrs}}
             end;
         unknown ->
             Trigger = #trigger_spec{
@@ -1438,9 +1479,9 @@ handle_info(Event, State = #state{attrs = Attrs}) ->
             },
             TransitionFun = fun (Trg, St) -> perform_event_transition(Trg, [], St) end,
             case perform_transition(Trigger, TransitionFun, State) of
-                {cont, noreply, NewState} -> {noreply, NewState};
-                {stop, noreply, NewState} -> shutdown(NewState);
-                {error, Reason}           -> {stop, {error, Reason}, State}
+                {cont, NewState} -> {noreply, NewState};
+                {stop, NewState} -> shutdown(NewState);
+                {error, Reason}  -> {stop, {error, Reason}, State}
             end
     end.
 
@@ -1467,17 +1508,9 @@ code_change(_OldVsn, State, _Extra) ->
 %%
 %%  Shutdown the FSM.
 %%
-shutdown(State = #state{inst_id = InstId, restart = RestartOpts}) ->
-    eproc_restart:cleanup({?MODULE, InstId}, RestartOpts),
+shutdown(State) ->
+    ok = limits_cleanup(State),
     {stop, normal, State}.
-
-
-%%
-%%  Shutdown the FSM with a reply msg.
-%%
-shutdown(Reply, State = #state{inst_id = InstId, restart = RestartOpts}) ->
-    eproc_restart:cleanup({?MODULE, InstId}, RestartOpts),
-    {stop, normal, Reply, State}.
 
 
 %%
@@ -1644,12 +1677,22 @@ handle_create(Module, Args, CreateOpts, CustomOpts) ->
 %%
 %%  Loads the instance and starts it if needed.
 %%
-handle_start(FsmRef, StartOpts, State = #state{store = Store, restart = RestartOpts}) ->
+handle_start(FsmRef, StartOpts, State = #state{store = Store}) ->
     case eproc_store:load_instance(Store, FsmRef) of
         {ok, Instance = #instance{id = InstId, status = Status}} when Status =:= running; Status =:= resuming ->
-            case eproc_restart:restarted({?MODULE, InstId}, RestartOpts) of
+            StateWithInstId = State#state{inst_id = InstId},
+            ok = limits_setup(StateWithInstId),
+            LimitsResult = case limits_notify_res(StateWithInstId) of
+                {delay, D} ->
+                    lager:debug("FSM id=~p is going to sleep for ~p ms on startup.", [InstId, D]),
+                    timer:sleep(D),
+                    ok;
+                Other ->
+                    Other
+            end,
+            case LimitsResult of
                 ok ->
-                    case start_loaded(Instance, StartOpts, State) of
+                    case start_loaded(Instance, StartOpts, StateWithInstId) of
                         {ok, NewState} ->
                             lager:debug("FSM started, ref=~p, pid=~p.", [FsmRef, self()]),
                             {online, NewState};
@@ -1657,9 +1700,12 @@ handle_start(FsmRef, StartOpts, State = #state{store = Store, restart = RestartO
                             lager:warning("Failed to start FSM, ref=~p, error=~p.", [FsmRef, Reason]),
                             {offline, InstId}
                     end;
-                fail ->
+                {reached, Limits} ->
                     {ok, InstId} = eproc_store:set_instance_suspended(Store, FsmRef, {fault, restart_limit}),
-                    lager:notice("Suspending FSM on startup, give up restarting, ref=~p, id=~p.", [FsmRef, InstId]),
+                    lager:notice(
+                        "Suspending FSM on startup, give up restarting, ref=~p, id=~p, limits ~p reached.",
+                        [FsmRef, InstId, Limits]
+                    ),
                     {offline, InstId}
             end;
         {ok, #instance{id = InstId, status = Status}} ->
@@ -1706,10 +1752,8 @@ start_loaded(Instance, StartOpts, State) ->
                 #resume_attempt{upd_sname = undefined, upd_sdata = undefined, upd_script = undefined} ->
                     case init_loaded(Instance, LastSName, LastSData, State) of
                         {ok, NewState} ->
+                            ok = limits_reset(State),
                             ok = eproc_store:set_instance_resumed(Store, InstId, LastTrnNr),
-                            %%
-                            %%  TODO: Reset limit counters.
-                            %%
                             {ok, NewState};
                         {error, Reason} ->
                             {error, Reason}
@@ -1717,6 +1761,7 @@ start_loaded(Instance, StartOpts, State) ->
                 #resume_attempt{upd_sname = UpdSName, upd_sdata = UpdSData, resumed = #user_action{user = ResumedUser}} ->
                     case init_loaded(Instance, UpdSName, UpdSData, State) of
                         {ok, NewState} ->
+                            ok = limits_reset(State),
                             Trigger = #trigger_spec{
                                 type = admin,
                                 source = ResumedUser,
@@ -1725,13 +1770,10 @@ start_loaded(Instance, StartOpts, State) ->
                                 reply_fun = undefined,
                                 src_arg = false
                             },
-                            %%
-                            %%  TODO: Reset limit counters.
-                            %%
                             TransitionFun = fun (T, S) -> perform_resume_transition(T, ResumeAttempt, S) end,
                             case perform_transition(Trigger, TransitionFun, NewState) of
-                                {cont, noreply, ResumedState} -> {ok, ResumedState};
-                                {error, Reason}               -> {error, Reason}
+                                {cont, ResumedState} -> {ok, ResumedState};
+                                {error, Reason}      -> {error, Reason}
                             end;
                         {error, Reason} ->
                             {error, Reason}
@@ -1845,10 +1887,12 @@ perform_transition(Trigger, TransitionFun, State) ->
     #trigger_spec{
         type = TriggerType,
         source = TriggerSrc,
-        message = TriggerMsg
+        message = TriggerMsg,
+        reply_fun = ReplyFun
     } = Trigger,
 
     erlang:put('eproc_fsm$messages', []),
+    erlang:put('eproc_fsm$suspend', false),
     TrnNr = LastTrnNr + 1,
     TrnStart = erlang:now(),
     {ok, TrnAttrs} = eproc_fsm_attr:transition_start(InstId, TrnNr, SName, Attrs),
@@ -1890,9 +1934,25 @@ perform_transition(Trigger, TransitionFun, State) ->
     end,
 
     %%  Save transition.
-    InstStatus = case ProcAction of
-        cont -> running;
-        stop -> completed
+    {FinalProcAction, InstStatus, Interrupts, Delay} = case ProcAction of
+        cont ->
+            case erlang:erase('eproc_fsm$suspend') of
+                {true, SuspReason} ->
+                    lager:notice("FSM id=~p suspended, impl reason ~p.", [InstId, SuspReason]),
+                    {stop, suspended, [#interrupt{reason = {impl, SuspReason}}], undefined};
+                false ->
+                    case limits_notify_trn(State, TransitionMsgs) of
+                        ok ->
+                            {cont, running, undefined, undefined};
+                        {delay, D} ->
+                            {cont, running, undefined, D};
+                        {reached, Reached} ->
+                            lager:notice("FSM id=~p suspended, limits ~p reached.", [InstId, Reached]),
+                            {stop, suspended, [#interrupt{reason = {fault, {limits, Reached}}}], undefined}
+                    end
+            end;
+        stop ->
+            {stop, completed, undefined, undefined}
     end,
     Transition = #transition{
         inst_id = InstId,
@@ -1907,7 +1967,8 @@ perform_transition(Trigger, TransitionFun, State) ->
         trn_messages = RegisteredMsgRefs,
         attr_last_id = LastAttrId,
         attr_actions = ExplicitAttrActions ++ AttrActions,
-        inst_status  = InstStatus
+        inst_status  = InstStatus,
+        interrupts   = Interrupts
     },
     {ok, InstId, TrnNr} = eproc_store:add_transition(Store, Transition, TransitionMsgs),
 
@@ -1917,6 +1978,20 @@ perform_transition(Trigger, TransitionFun, State) ->
     end,
     {ok, _} = register_message(TriggerSrc, {inst, InstId}, RefForReg(RequestMsgRef), RefForReg(ResponseMsgRef)),
 
+    %%  Reply, if needed.
+    ok = case TransitionReply of
+        noreply -> ok;
+        {reply, R} -> ReplyFun(R)
+    end,
+
+    %% Wait a bit, if needed.
+    case Delay of
+        undefined -> ok;
+        _ ->
+            lager:debug("FSM id=~p is going to sleep for ~p ms on transition.", [InstId, Delay]),
+            timer:sleep(Delay)
+    end,
+
     %% Ok, save changes in the state.
     NewState = State#state{
         sname = NewSName,
@@ -1924,7 +1999,7 @@ perform_transition(Trigger, TransitionFun, State) ->
         trn_nr = TrnNr,
         attrs = NewAttrs
     },
-    {ProcAction, TransitionReply, NewState}.
+    {FinalProcAction, NewState}.
 
 
 %%
@@ -2119,17 +2194,16 @@ split_options(Options) ->
 split_options(Prop = {N, _}, {Create, Start, Send, Common, Unknown}) when
         N =:= group;
         N =:= name;
-        N =:= start_spec;
-        N =:= max_transitions;
-        N =:= max_errors;
-        N =:= max_sent_msgs
+        N =:= start_spec
         ->
     {[Prop | Create], Start, Send, Common, Unknown};
 
 split_options(Prop = {N, _}, {Create, Start, Send, Common, Unknown}) when
-        N =:= restart;
         N =:= register;
-        N =:= start_sync
+        N =:= start_sync;
+        N =:= limit_restarts;
+        N =:= limit_transitions;
+        N =:= limit_sent_msgs
         ->
     {Create, [Prop | Start], Send, Common, Unknown};
 
@@ -2186,6 +2260,104 @@ start_sync(Other, _StartOpts) ->
     Other.
 
 
+%%  Notify restart counter.
+%%
+limits_notify_res(#state{lim_res = undefined}) ->
+    ok;
+
+limits_notify_res(#state{inst_id = InstId}) ->
+    eproc_limits:notify(?LIMIT_PROC(InstId), ?LIMIT_RES, 1).
+
+
+%%
+%%  Notify transition and sent messages counters.
+%%
+limits_notify_trn(#state{lim_trn = undefined, lim_msg_all = undefined, lim_msg_dst = undefined}, _Msgs) ->
+    ok;
+
+limits_notify_trn(#state{inst_id = InstId, lim_msg_all = undefined, lim_msg_dst = undefined}, _Msgs) ->
+    eproc_limits:notify(?LIMIT_PROC(InstId), [{?LIMIT_TRN, 1}]);
+
+limits_notify_trn(State, Msgs) ->
+    #state{
+        inst_id = InstId,
+        lim_trn = LimTrn,
+        lim_msg_all = LimMsgAll,
+        lim_msg_dst = LimMsgDst
+    } = State,
+    DstMsgCountersFun = fun (#message{receiver = Receiver}, Counters) ->
+        case lists:keyfind(Receiver, 1, Counters) of
+            false   -> Counters;
+            {CN, C} -> lists:keyreplace(CN, 1, Counters, {CN, C + 1})
+        end
+    end,
+    TrnCounters = case LimTrn of
+        undefined -> [];
+        _ -> [{?LIMIT_TRN, 1}]
+    end,
+    MsgAllCounters = case LimMsgAll of
+        undefined -> [];
+        _ -> [{?LIMIT_MSG_ALL, length(Msgs)}]
+    end,
+    MsgDstCounters = case LimMsgDst of
+        undefined -> [];
+        _ ->
+            MDCs = lists:foldl(DstMsgCountersFun, [ {D, 0} || {D, _L} <- LimMsgDst ], Msgs),
+            [ {?LIMIT_MSG_DST(D), C} || {D, C} <- MDCs ]
+    end,
+    AllCounters = lists:append([TrnCounters, MsgAllCounters, MsgDstCounters]),
+    eproc_limits:notify(?LIMIT_PROC(InstId), AllCounters).
+
+
+%%
+%%  Invokes specified function on all counters that have limits defined.
+%%
+limits_action(State, Fun) ->
+    #state{
+        inst_id = InstId,
+        lim_res = LimRes,
+        lim_trn = LimTrn,
+        lim_msg_all = LimMsgAll,
+        lim_msg_dst = LimMsgDst
+    } = State,
+    CounterProc = ?LIMIT_PROC(InstId),
+    SetupCounterFun = fun
+        (_CounterName, undefined) -> ok;
+        (CounterName,  LimitSpec) -> Fun(CounterProc, CounterName, LimitSpec)
+    end,
+    SetupMsgDstCounterFun = fun ({Dst, LimitSpec}) ->
+        ok = SetupCounterFun(?LIMIT_MSG_DST(Dst), LimitSpec)
+    end,
+    ok = SetupCounterFun(?LIMIT_RES,     LimRes),
+    ok = SetupCounterFun(?LIMIT_TRN,     LimTrn),
+    ok = SetupCounterFun(?LIMIT_MSG_ALL, LimMsgAll),
+    ok = case LimMsgDst of
+        undefined -> ok;
+        _ when is_list(LimMsgDst) -> lists:foreach(SetupMsgDstCounterFun, LimMsgDst)
+    end.
+
+
+%%
+%%  Setup limit counters.
+%%
+limits_setup(State) ->
+    limits_action(State, fun eproc_limits:setup/3).
+
+
+%%
+%%  Reset limit counters.
+%%
+limits_reset(State) ->
+    limits_action(State, fun (P, C, _L) -> eproc_limits:reset(P, C) end).
+
+
+%%
+%%  Cleanup limit counters.
+%%
+limits_cleanup(State) ->
+    limits_action(State, fun (P, C, _L) -> eproc_limits:cleanup(P, C) end).
+
+
 
 %% =============================================================================
 %%  Unit tests for private functions.
@@ -2194,7 +2366,7 @@ start_sync(Other, _StartOpts) ->
 -include_lib("eunit/include/eunit.hrl").
 
 %%
-%%  Unit tests for resolve_event_src/1.
+%%  Unit tests for `resolve_event_src/1`.
 %%
 resolve_event_src_test_() -> [
     fun () ->
@@ -2226,7 +2398,7 @@ resolve_event_src_test_() -> [
     end].
 
 %%
-%%  Unit tests for split_options/1.
+%%  Unit tests for `split_options/1`.
 %%
 split_options_test_() -> [
     ?_assertMatch(
@@ -2235,18 +2407,52 @@ split_options_test_() -> [
     ),
     ?_assertMatch(
         {ok,
-            [{group, x}, {name, x}, {start_spec, x}, {max_transitions, x}, {max_errors, x}, {max_sent_msgs, x}],
-            [{restart, x}, {register, x}, {start_sync, x}],
+            [{group, x}, {name, x}, {start_spec, x}],
+            [{limit_restarts, x}, {limit_transitions, x}, {limit_sent_msgs, x}, {register, x}, {start_sync, x}],
             [{source, x}],
             [{timeout, x}, {store, x}, {registry, x}, {user, x}],
             [{some, y}]
         },
         split_options([
-            {group, x}, {name, x}, {start_spec, x}, {max_transitions, x}, {max_errors, x}, {max_sent_msgs, x},
-            {restart, x}, {register, x}, {start_sync, x}, {source, x}, {timeout, x}, {store, x}, {registry, x},
-            {user, x}, {some, y}
+            {group, x}, {name, x}, {start_spec, x}, {limit_restarts, x}, {limit_transitions, x}, {limit_sent_msgs, x},
+            {register, x}, {start_sync, x}, {source, x}, {timeout, x}, {store, x}, {registry, x}, {user, x}, {some, y}
         ])
     )].
+
+%%
+%%  Unit tests for `limits_action/2`.
+%%
+limits_action_test() ->
+    State = #state{inst_id = iid, lim_res = r, lim_trn = t, lim_msg_all = ma, lim_msg_dst = [{d1, md1}, {d2, md2}]},
+    ok = meck:new(eproc_fsm_limits_action_mock, [non_strict]),
+    ok = meck:expect(eproc_fsm_limits_action_mock, some, fun (?LIMIT_PROC(iid), _, _) -> ok end),
+    ok = limits_action(State, fun eproc_fsm_limits_action_mock:some/3),
+    ?assertEqual(1, meck:num_calls(eproc_fsm_limits_action_mock, some, ['_', ?LIMIT_RES, r])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm_limits_action_mock, some, ['_', ?LIMIT_TRN, t])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm_limits_action_mock, some, ['_', ?LIMIT_MSG_ALL, ma])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm_limits_action_mock, some, ['_', ?LIMIT_MSG_DST(d1), md1])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm_limits_action_mock, some, ['_', ?LIMIT_MSG_DST(d2), md2])),
+    ?assertEqual(5, meck:num_calls(eproc_fsm_limits_action_mock, some, '_')),
+    ?assert(meck:validate(eproc_fsm_limits_action_mock)),
+    ok = meck:unload(eproc_fsm_limits_action_mock).
+
+%%
+%%  Unit tests for `limits_notify_trn/2`.
+%%
+limits_notify_trn_test() ->
+    State = #state{inst_id = iid, lim_res = r, lim_trn = t, lim_msg_all = ma, lim_msg_dst = [{d1, md1}, {d2, md2}]},
+    Msgs = [#message{receiver = d1}, #message{receiver = d1}, #message{receiver = d2}, #message{receiver = d3}],
+    ok = meck:new(eproc_limits, []),
+    ok = meck:expect(eproc_limits, notify, fun (?LIMIT_PROC(iid), _) -> perfect end),
+    ?assertEqual(perfect, limits_notify_trn(State, Msgs)),
+    [{_, {_, _, [_, Counters]}, _}] = meck:history(eproc_limits),
+    ?assertEqual(
+        [{?LIMIT_TRN, 1}, {?LIMIT_MSG_ALL, 4}, {?LIMIT_MSG_DST(d1), 2}, {?LIMIT_MSG_DST(d2), 1}],
+        lists:sort(Counters)
+    ),
+    ?assert(meck:validate(eproc_limits)),
+    ok = meck:unload(eproc_limits).
+
 
 -endif.
 

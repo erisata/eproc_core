@@ -20,9 +20,19 @@
 %%
 -module(eproc_timer).
 -behaviour(eproc_fsm_attr).
--export([set/4, set/3, set/2, cancel/1]).
+-export([set/4, set/3, set/2, cancel/1, duration_to_ms/1]).
 -export([init/1, handle_created/3, handle_updated/4, handle_removed/2, handle_event/3]).
+-export_type([duration/0]).
 -include("eproc.hrl").
+
+
+-type duration_elem() :: {integer(), ms | s | sec | min | hour | day | week | month | year}.
+
+%%
+%%  Describes duration in human readable format.
+%%
+-type duration_spec() :: duration_elem() | [duration_elem()] | integer().
+
 
 -define(MAX_ATOMIC_DELAY, 4294967295).
 
@@ -82,6 +92,53 @@ set(After, Event) ->
 %%
 cancel(Name) ->
     eproc_fsm_attr:action(?MODULE, Name, {timer, remove}).
+
+
+%%
+%%  Converts human readable duration specification to milliseconds.
+%%  Conversion is made approximatly, assuming all months are of 30 days
+%%  and years are of 365 days.
+%%
+%%  Esample specs:
+%%
+%%      {3, min}
+%%      {100, hour}
+%%      [{1, min}, {10, s}]
+%%
+-spec duration_to_ms(duration()) -> integer().
+
+duration_to_ms({N, ms}) ->
+    N;
+
+duration_to_ms({N, s}) ->
+    N * 1000;
+
+duration_to_ms({N, sec}) ->
+    N * 1000;
+
+duration_to_ms({N, min}) ->
+    N * 60 * 1000;
+
+duration_to_ms({N, hour}) ->
+    N * 60 * 60 * 1000;
+
+duration_to_ms({N, day}) ->
+    N * 24 * 60 * 60 * 1000;
+
+duration_to_ms({N, week}) ->
+    N * 7 * 24 * 60 * 60 * 1000;
+
+duration_to_ms({N, month}) ->
+    N * 30 * 24 * 60 * 60 * 1000;
+
+duration_to_ms({N, year}) ->
+    N * 365 * 24 * 60 * 60 * 1000;
+
+duration_to_ms(Spec) when is_integer(Spec) ->
+    Spec;
+
+duration_to_ms(Spec) when is_list(Spec) ->
+    lists:sum(lists:map(fun duration_to_ms/1, Spec)).
 
 
 
@@ -173,8 +230,9 @@ handle_event(Attribute, _State, fired) ->
 %%
 %%  Starts a timer.
 %%
-start_timer(AttrId, #data{start = Start, delay = Delay}) ->
+start_timer(AttrId, #data{start = Start, delay = DelaySpec}) ->
     Now = erlang:now(),
+    Delay = duration_to_ms(DelaySpec),
     Left = Delay - (timer:now_diff(Start, Now) div 1000),
     if
         Left < 0 ->
