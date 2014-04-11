@@ -30,12 +30,11 @@
 %%  the following rules apply:
 %%
 %%    * If several limits with delay actions are triggered,
-%%      maximum of all the delays is used.
+%%      maximum of all the delays is returned.
 %%    * If delay is triggered together with notification,
-%%      the process is not delayed and the notifications
-%%      are returned immediatelly.
+%%      the delays are ignored and the notifications are returned.
 %%
-%%  Each process can have several counters, that can be later
+%%  Each process can have several counters, that can be later notified,
 %%  reset or cleaned up in one go. Altrough process name is an
 %%  arbitraty term and is not related to Erlang process in any way.
 %%
@@ -93,8 +92,6 @@
 %%  Delay actions are discussed above. The `notify` action causes
 %%  the `notify/2-3` function to return names of the reached limits
 %%  in form of `{reached, [LimitName]}`.
-%%
-%%  TODO: Add action: {call, {Module, Function, Args}}.
 %%
 -type limit_action() :: notify | exp_delay() | const_delay().
 
@@ -201,22 +198,22 @@ start_link() ->
 %%  counter state is reset.
 %%
 -spec setup(
-        Proc :: term(),
-        Name :: term(),
+        ProcessName :: term(),
+        CounterName :: term(),
         Spec :: undefined | limit_spec() | [limit_spec()]
     ) ->
         ok.
 
-setup(Proc, Name, Spec) ->
+setup(ProcessName, CounterName, Spec) ->
     Specs = case Spec of
         undefined         -> [];
         L when is_list(L) -> L;
         S                 -> [S]
     end,
-    Counter = case ets:lookup(?MODULE, {Proc, Name}) of
+    Counter = case ets:lookup(?MODULE, {ProcessName, CounterName}) of
         [C = #counter{specs = Specs}] -> C;
-        [_] -> init_counter(Proc, Name, Specs);
-        [] -> init_counter(Proc, Name, Specs)
+        [_] -> init_counter(ProcessName, CounterName, Specs);
+        [] -> init_counter(ProcessName, CounterName, Specs)
     end,
     true = ets:insert(?MODULE, Counter),
     ok.
@@ -228,47 +225,65 @@ setup(Proc, Name, Spec) ->
 %%  Timestamp for all such events will be considered the same.
 %%
 -spec notify(
-        Proc    :: term(),
-        Name    :: term(),
-        Count   :: integer()
+        ProcessName :: term(),
+        CounterName :: term(),
+        Count       :: integer()
     ) ->
-        ok | {reached, [LimitName :: term()]} | {error, not_found}.
+        ok |
+        {reached, [LimitName :: term()]} |
+        {delay, DelayMS :: integer()} |
+        {error, {not_found, CounterName :: term()}}.
 
-notify(Proc, Name, Count) ->
-    case ets:lookup(?MODULE, {Proc, Name}) of
+notify(ProcessName, CounterName, Count) ->
+    case ets:lookup(?MODULE, {ProcessName, CounterName}) of
         [] ->
-            {error, not_found};
+            {error, {not_found, CounterName}};
         [Counter] ->
-            {ReachedLimits, NewCounter} = handle_notif(Counter, Count),
+            {Response, NewCounter} = case handle_notif(Counter, Count) of
+                {[], 0, C} -> {ok, C};
+                {[], D, C} -> {{delay, D}, C};
+                {R, _D, C} -> {{reached, R}, C}
+            end,
             true = ets:insert(?MODULE, NewCounter),
-            case ReachedLimits of
-                [] -> ok;
-                _ -> {reached, ReachedLimits}
-            end
+            Response
     end.
 
 
 %%
-%%  Updates several counters at once.
+%%  Updates several counters at once. Returns all reached limits or
+%%  maximal delay or ok, if all counters respond with ok.
 %%
 -spec notify(
-        Proc    :: term(),
-        Names   :: [{Name :: term(), Count :: integer()}]
+        ProcessName :: term(),
+        Counters    :: [{CounterName :: term(), Count :: integer()}]
     ) ->
-        ok | {reached, [LimitName :: term()]} | {error, not_found}.
+        ok |
+        {reached, [{CounterName :: term(), [LimitName :: term()]}]} |
+        {delay, DelayMS :: integer()} |
+        {error, {not_found, CounterName :: term()}}.
 
-notify(Proc, Names) ->
-    todo. %TODO.
+notify(ProcessName, Counters) ->
+    AggregateFun = fun
+        ({_, {error, E}},   _Other           ) -> {error, E};
+        ({N, {reached, R}}, {reached, OtherR}) -> {reached, [{N, R} | OtherR]};
+        ({_, _Other},       {reached, OtherR}) -> {reached, OtherR};
+        ({N, {reached, R}}, _Other           ) -> {reached, [{N, R}]};
+        ({_, {delay, D}},   {delay, OtherD}  ) -> {delay, erlang:max(D, OtherD)};
+        ({_, {delay, D}},   ok               ) -> {delay, D};
+        ({_, ok},           Other            ) -> Other
+    end,
+    Results = [ {N, notify(ProcessName, N, C)} || {N, C} <- lists:reverse(Counters) ],
+    lists:foldl(AggregateFun, ok, Results).
 
 
 %%
 %%  Resets state of a particular counter.
 %%
--spec reset(Proc :: term(), Name :: term()) -> ok.
+-spec reset(ProcessName :: term(), CounterName :: term()) -> ok.
 
-reset(Proc, Name) ->
-    [#counter{specs = Specs}] = ets:lookup(?MODULE, {Proc, Name}),
-    NewCounter = init_counter(Proc, Name, Specs),
+reset(ProcessName, CounterName) ->
+    [#counter{specs = Specs}] = ets:lookup(?MODULE, {ProcessName, CounterName}),
+    NewCounter = init_counter(ProcessName, CounterName, Specs),
     true = ets:insert(?MODULE, NewCounter),
     ok.
 
@@ -277,10 +292,10 @@ reset(Proc, Name) ->
 %%  Resets all counters of the specified process.
 %%  This function is slower than `reset/2`.
 %%
--spec reset(Proc :: term()) -> ok.
+-spec reset(ProcessName :: term()) -> ok.
 
-reset(Proc) ->
-    Counters = ets:match_object(?MODULE, #counter{proc = Proc, _ = '_'}),
+reset(ProcessName) ->
+    Counters = ets:match_object(?MODULE, #counter{proc = ProcessName, _ = '_'}),
     ResetFun = fun (#counter{key = {P, N}, specs = S}) ->
         C = init_counter(P, N, S),
         true = ets:insert(?MODULE, C)
@@ -291,10 +306,10 @@ reset(Proc) ->
 %%
 %%  Cleanup single process counter.
 %%
--spec cleanup(Proc :: term(), Name :: term()) -> ok.
+-spec cleanup(ProcessName :: term(), CounterName :: term()) -> ok.
 
-cleanup(Proc, Name) ->
-    true = ets:delete(?MODULE, {Proc, Name}),
+cleanup(ProcessName, CounterName) ->
+    true = ets:delete(?MODULE, {ProcessName, CounterName}),
     ok.
 
 
@@ -302,10 +317,10 @@ cleanup(Proc, Name) ->
 %%  Cleanup all counters of the specified process.
 %%  This function is slower than `cleanup/2`.
 %%
--spec cleanup(Proc :: term()) -> ok.
+-spec cleanup(ProcessName :: term()) -> ok.
 
-cleanup(Proc) ->
-    true = ets:match_delete(?MODULE, #counter{proc = Proc, _ = '_'}),
+cleanup(ProcessName) ->
+    true = ets:match_delete(?MODULE, #counter{proc = ProcessName, _ = '_'}),
     ok.
 
 
@@ -370,11 +385,11 @@ code_change(_OldVsn, State, _Extra) ->
 %%
 %%  Initializes a counter.
 %%
-init_counter(Proc, Name, Specs) ->
+init_counter(ProcessName, CounterName, Specs) ->
     Now = os:timestamp(),
     #counter{
-        key = {Proc, Name},
-        proc = Proc,
+        key = {ProcessName, CounterName},
+        proc = ProcessName,
         specs = Specs,
         limits = lists:map(fun init_limits/1, Specs),
         tstamps = [{Now, 0}]
@@ -396,13 +411,7 @@ handle_notif(Counter = #counter{specs = Specs, limits = Limits, tstamps = TStamp
     {NewLimits, MaxDelay, MaxInterval, ReachedLimits} = handle_limit(Specs, Limits, TStamps, Now, Count),
     FilteredTStamps = cleanup_tstamps(TStamps, Now, MaxInterval),
     NewCounter = Counter#counter{limits = NewLimits, tstamps = [ThisTStamp | FilteredTStamps]},
-    case {ReachedLimits, MaxDelay} of
-        {[], D} when D > 0 ->
-            timer:sleep(MaxDelay),
-            {ReachedLimits, NewCounter};
-        {_, _} ->
-            {ReachedLimits, NewCounter}
-    end.
+    {ReachedLimits, MaxDelay, NewCounter}.
 
 
 %%

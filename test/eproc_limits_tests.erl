@@ -30,9 +30,11 @@ main_test_() ->
         test_rate_single(PID),
         test_rate_multi(PID),
         test_mixed_limit(PID),
+        test_multi_limit(PID),
         test_delay_const(PID),
         test_delay_exp(PID),
         test_delay_mixed(PID),
+        test_delay_multi(PID),
         test_setup_update(PID),
         test_reset_single(PID),
         test_reset_all(PID),
@@ -56,13 +58,14 @@ cleanup(PID) ->
 test_empty(_PID) ->
     Proc = ?MODULE,
     Name = ?LINE,
-    eproc_limits:setup(Proc, Name, undefined),
-    {ElapsedUS, ok} = timer:tc(fun () ->
-        TestFun = fun (_) -> ok = eproc_limits:notify(Proc, Name, 1) end,
-        lists:foreach(TestFun, lists:seq(1, 100))
-    end),
+    ok = eproc_limits:setup(Proc, Name, undefined),
+    TestFun = fun (_, Prev) ->
+        This = ok =:= eproc_limits:notify(Proc, Name, 1),
+        This and Prev
+    end,
+    Resp = lists:foldl(TestFun, true, lists:seq(1, 1000)),
     ok = eproc_limits:cleanup(Proc, Name),
-    ?_assert(ElapsedUS < 1000000). % 1 s
+    ?_assertEqual(true, Resp).
 
 
 %%
@@ -71,7 +74,7 @@ test_empty(_PID) ->
 test_series_single(_PID) ->
     Proc = ?MODULE,
     Name = ?LINE,
-    eproc_limits:setup(Proc, Name, {series, some, 3, {150, ms}, notify}),
+    ok  = eproc_limits:setup(Proc, Name, {series, some, 3, {150, ms}, notify}),
     R11 = eproc_limits:notify(Proc, Name, 1),
     R12 = eproc_limits:notify(Proc, Name, 1),
     R13 = eproc_limits:notify(Proc, Name, 1),
@@ -81,7 +84,7 @@ test_series_single(_PID) ->
     R22 = eproc_limits:notify(Proc, Name, 1),
     R23 = eproc_limits:notify(Proc, Name, 1),
     R24 = eproc_limits:notify(Proc, Name, 1),
-    ok = eproc_limits:cleanup(Proc, Name),
+    ok  = eproc_limits:cleanup(Proc, Name),
     ?_assertMatch(
         [ok, ok, ok, {reached, [some]}, ok, ok, ok, {reached, [some]}],
         [R11, R12, R13, R14, R21, R22, R23, R24]
@@ -94,7 +97,7 @@ test_series_single(_PID) ->
 test_series_multi(_PID) ->
     Proc = ?MODULE,
     Name = ?LINE,
-    eproc_limits:setup(Proc, Name, [
+    ok = eproc_limits:setup(Proc, Name, [
         {series, short, 3, {150, ms}, notify},
         {series, long, 5, {1, hour}, notify}
     ]),
@@ -107,7 +110,7 @@ test_series_multi(_PID) ->
     R22 = eproc_limits:notify(Proc, Name, 1),
     R23 = eproc_limits:notify(Proc, Name, 1),
     R24 = eproc_limits:notify(Proc, Name, 1),
-    ok = eproc_limits:cleanup(Proc, Name),
+    ok  = eproc_limits:cleanup(Proc, Name),
     ?_assertMatch(
         [ok, ok, ok, {reached, [short]}, ok, {reached, [long]}, {reached, [long]}, {reached, [short, long]}],
         [R11, R12, R13, R14, R21, R22, R23, R24]
@@ -120,7 +123,7 @@ test_series_multi(_PID) ->
 test_rate_single(_PID) ->
     Proc = ?MODULE,
     Name = ?LINE,
-    eproc_limits:setup(Proc, Name, {rate, some, 3, {150, ms}, notify}),
+    ok  = eproc_limits:setup(Proc, Name, {rate, some, 3, {150, ms}, notify}),
     R11 = eproc_limits:notify(Proc, Name, 1),
     R12 = eproc_limits:notify(Proc, Name, 1),
     R13 = eproc_limits:notify(Proc, Name, 1),
@@ -130,7 +133,7 @@ test_rate_single(_PID) ->
     R22 = eproc_limits:notify(Proc, Name, 1),
     R23 = eproc_limits:notify(Proc, Name, 1),
     R24 = eproc_limits:notify(Proc, Name, 1),
-    ok = eproc_limits:cleanup(Proc, Name),
+    ok  = eproc_limits:cleanup(Proc, Name),
     ?_assertMatch(
         [ok, ok, ok, {reached, [some]}, ok, ok, ok, {reached, [some]}],
         [R11, R12, R13, R14, R21, R22, R23, R24]
@@ -143,7 +146,7 @@ test_rate_single(_PID) ->
 test_rate_multi(_PID) ->
     Proc = ?MODULE,
     Name = ?LINE,
-    eproc_limits:setup(Proc, Name, [
+    ok = eproc_limits:setup(Proc, Name, [
         {rate, short, 3, {150, ms}, notify},
         {rate, long,  5, {1, s},    notify}
     ]),
@@ -169,7 +172,7 @@ test_rate_multi(_PID) ->
 test_mixed_limit(_PID) ->
     Proc = ?MODULE,
     Name = ?LINE,
-    eproc_limits:setup(Proc, Name, [
+    ok = eproc_limits:setup(Proc, Name, [
         {series, short, 3, {150, ms}, notify},
         {rate,   long,  5, {1, s},    notify}
     ]),
@@ -191,7 +194,29 @@ test_mixed_limit(_PID) ->
     ).
 
 
-%TODO: add test for updating multiple counters with notify.
+%%
+%%  Check if notify with several counters works.
+%%
+test_multi_limit(_PID) ->
+    Proc = ?MODULE,
+    Name1 = ?LINE,
+    Name2 = ?LINE,
+    ok = eproc_limits:setup(Proc, Name1, {series, some, 1, {150, ms}, notify}),
+    ok = eproc_limits:setup(Proc, Name2, {series, some, 3, {150, ms}, notify}),
+    R1 = eproc_limits:notify(Proc, [{Name1, 1}, {Name2, 1}]),
+    R2 = eproc_limits:notify(Proc, [{Name1, 1}, {Name2, 1}]),
+    R3 = eproc_limits:notify(Proc, [{Name1, 1}, {Name2, 1}]),
+    R4 = eproc_limits:notify(Proc, [{Name1, 1}, {Name2, 1}]),
+    ok = eproc_limits:cleanup(Proc),
+    ?_assertMatch(
+        [
+            ok,
+            {reached, [{Name1, [some]}]},
+            {reached, [{Name1, [some]}]},
+            {reached, [{Name1, [some]}, {Name2, [some]}]}
+        ],
+        [R1, R2, R3, R4]
+    ).
 
 
 %%
@@ -200,16 +225,13 @@ test_mixed_limit(_PID) ->
 test_delay_const(_PID) ->
     Proc = ?MODULE,
     Name = ?LINE,
-    eproc_limits:setup(Proc, Name, {series, some, 0, {1, s}, {delay, 50}}),
-    {ElapsedUS, ok} = timer:tc(fun () ->
-        ok = eproc_limits:notify(Proc, Name, 1),
-        ok = eproc_limits:notify(Proc, Name, 1),
-        ok = eproc_limits:notify(Proc, Name, 1),
-        ok = eproc_limits:notify(Proc, Name, 1)
-    end),
+    ok = eproc_limits:setup(Proc, Name, {series, some, 0, {1, s}, {delay, {50, ms}}}),
+    {delay, D1} = eproc_limits:notify(Proc, Name, 1),
+    {delay, D2} = eproc_limits:notify(Proc, Name, 1),
+    {delay, D3} = eproc_limits:notify(Proc, Name, 1),
+    {delay, D4} = eproc_limits:notify(Proc, Name, 1),
     ok = eproc_limits:cleanup(Proc, Name),
-    ElapsedMS = ElapsedUS div 1000,
-    ?_assert((200 =< ElapsedMS) and (ElapsedMS < 500)).
+    ?_assertEqual([50, 50, 50, 50], [D1, D2, D3, D4]).
 
 
 %%
@@ -218,17 +240,15 @@ test_delay_const(_PID) ->
 test_delay_exp(_PID) ->
     Proc = ?MODULE,
     Name = ?LINE,
-    eproc_limits:setup(Proc, Name, {series, some, 0, {1, s}, {delay, 10, 2.0, 80}}),
-    {ElapsedUS, ok} = timer:tc(fun () ->
-        ok = eproc_limits:notify(Proc, Name, 1),    % Delay of 10ms.
-        ok = eproc_limits:notify(Proc, Name, 1),    % Delay of 20ms.
-        ok = eproc_limits:notify(Proc, Name, 1),    % Delay of 40ms.
-        ok = eproc_limits:notify(Proc, Name, 1),    % Delay of 80ms.
-        ok = eproc_limits:notify(Proc, Name, 1),    % Delay of 80ms.
-        ok = eproc_limits:notify(Proc, Name, 1)     % Delay of 80ms.
-    end),
-    ElapsedMS = ElapsedUS div 1000,
-    ?_assert((310 =< ElapsedMS) and  (ElapsedMS < 600)).
+    ok = eproc_limits:setup(Proc, Name, {series, some, 0, {1, s}, {delay, 10, 2.0, 80}}),
+    {delay, D1} = eproc_limits:notify(Proc, Name, 1),
+    {delay, D2} = eproc_limits:notify(Proc, Name, 1),
+    {delay, D3} = eproc_limits:notify(Proc, Name, 1),
+    {delay, D4} = eproc_limits:notify(Proc, Name, 1),
+    {delay, D5} = eproc_limits:notify(Proc, Name, 1),
+    {delay, D6} = eproc_limits:notify(Proc, Name, 1),
+    ok = eproc_limits:cleanup(Proc, Name),
+    ?_assertEqual([10, 20, 40, 80, 80, 80], [D1, D2, D3, D4, D5, D6]).
 
 
 %%
@@ -237,23 +257,38 @@ test_delay_exp(_PID) ->
 test_delay_mixed(_PID) ->
     Proc = ?MODULE,
     Name = ?LINE,
-    eproc_limits:setup(Proc, Name, [
+    ok = eproc_limits:setup(Proc, Name, [
         {series, some, 0, {1, s}, {delay, 40}},
         {series, some, 0, {1, s}, {delay, 10, 2.0, 160}}
     ]),
-    {ElapsedUS, ok} = timer:tc(fun () ->
-        ok = eproc_limits:notify(Proc, Name, 1),    % Delay of 40ms.
-        ok = eproc_limits:notify(Proc, Name, 1),    % Delay of 40ms.
-        ok = eproc_limits:notify(Proc, Name, 1),    % Delay of 40ms.
-        ok = eproc_limits:notify(Proc, Name, 1),    % Delay of 80ms.
-        ok = eproc_limits:notify(Proc, Name, 1),    % Delay of 160ms.
-        ok = eproc_limits:notify(Proc, Name, 1)     % Delay of 160ms.
-    end),
-    ElapsedMS = ElapsedUS div 1000,
-    ?_assert((520 =< ElapsedMS) and  (ElapsedMS < 700)).
+    {delay, D1} = eproc_limits:notify(Proc, Name, 1),
+    {delay, D2} = eproc_limits:notify(Proc, Name, 1),
+    {delay, D3} = eproc_limits:notify(Proc, Name, 1),
+    {delay, D4} = eproc_limits:notify(Proc, Name, 1),
+    {delay, D5} = eproc_limits:notify(Proc, Name, 1),
+    {delay, D6} = eproc_limits:notify(Proc, Name, 1),
+    ok = eproc_limits:cleanup(Proc, Name),
+    ?_assertEqual([40, 40, 40, 80, 160, 160], [D1, D2, D3, D4, D5, D6]).
 
 
-%TODO: add test for updating multiple counters with delays.
+%%
+%%  Check if notify with several counters works with delays.
+%%
+test_delay_multi(_PID) ->
+    Proc = ?MODULE,
+    Name1 = ?LINE,
+    Name2 = ?LINE,
+    ok = eproc_limits:setup(Proc, Name1, {series, some, 1, {150, ms}, {delay, 100}}),
+    ok = eproc_limits:setup(Proc, Name2, {series, some, 3, {150, ms}, {delay, 200}}),
+    R1 = eproc_limits:notify(Proc, [{Name1, 1}, {Name2, 1}]),
+    R2 = eproc_limits:notify(Proc, [{Name1, 1}, {Name2, 1}]),
+    R3 = eproc_limits:notify(Proc, [{Name1, 1}, {Name2, 1}]),
+    R4 = eproc_limits:notify(Proc, [{Name1, 1}, {Name2, 1}]),
+    ok = eproc_limits:cleanup(Proc),
+    ?_assertMatch(
+        [ok, {delay, 100}, {delay, 100}, {delay, 200}],
+        [R1, R2, R3, R4]
+    ).
 
 
 %%
@@ -287,7 +322,7 @@ test_setup_update(_PID) ->
 test_reset_single(_PID) ->
     Proc = ?MODULE,
     Name = ?LINE,
-    eproc_limits:setup(Proc, Name, {rate, some, 3, {150, ms}, notify}),
+    ok  = eproc_limits:setup(Proc, Name, {rate, some, 3, {150, ms}, notify}),
     R11 = eproc_limits:notify(Proc, Name, 1),
     R12 = eproc_limits:notify(Proc, Name, 1),
     R13 = eproc_limits:notify(Proc, Name, 1),
@@ -297,7 +332,7 @@ test_reset_single(_PID) ->
     R22 = eproc_limits:notify(Proc, Name, 1),
     R23 = eproc_limits:notify(Proc, Name, 1),
     R24 = eproc_limits:notify(Proc, Name, 1),
-    ok = eproc_limits:cleanup(Proc, Name),
+    ok  = eproc_limits:cleanup(Proc, Name),
     ?_assertMatch(
         [ok, ok, ok, {reached, [some]}, ok, ok, ok, {reached, [some]}],
         [R11, R12, R13, R14, R21, R22, R23, R24]
@@ -310,7 +345,7 @@ test_reset_single(_PID) ->
 test_reset_all(_PID) ->
     Proc = ?MODULE,
     Name = ?LINE,
-    eproc_limits:setup(Proc, Name, {rate, some, 3, {150, ms}, notify}),
+    ok  = eproc_limits:setup(Proc, Name, {rate, some, 3, {150, ms}, notify}),
     R11 = eproc_limits:notify(Proc, Name, 1),
     R12 = eproc_limits:notify(Proc, Name, 1),
     R13 = eproc_limits:notify(Proc, Name, 1),
@@ -320,7 +355,7 @@ test_reset_all(_PID) ->
     R22 = eproc_limits:notify(Proc, Name, 1),
     R23 = eproc_limits:notify(Proc, Name, 1),
     R24 = eproc_limits:notify(Proc, Name, 1),
-    ok = eproc_limits:cleanup(Proc, Name),
+    ok  = eproc_limits:cleanup(Proc, Name),
     ?_assertMatch(
         [ok, ok, ok, {reached, [some]}, ok, ok, ok, {reached, [some]}],
         [R11, R12, R13, R14, R21, R22, R23, R24]
@@ -337,7 +372,7 @@ test_cleanup_single(_PID) ->
     ok = eproc_limits:notify(Proc, Name, 1),
     ok = eproc_limits:cleanup(Proc, Name),
     ok = eproc_limits:cleanup(Proc, Name),
-    ?_assertEqual({error, not_found}, eproc_limits:notify(Proc, Name, 1)).
+    ?_assertEqual({error, {not_found, Name}}, eproc_limits:notify(Proc, Name, 1)).
 
 
 %%
@@ -350,6 +385,6 @@ test_cleanup_all(_PID) ->
     ok = eproc_limits:notify(Proc, Name, 1),
     ok = eproc_limits:cleanup(Proc),
     ok = eproc_limits:cleanup(Proc),
-    ?_assertEqual({error, not_found}, eproc_limits:notify(Proc, Name, 1)).
+    ?_assertEqual({error, {not_found, Name}}, eproc_limits:notify(Proc, Name, 1)).
 
 
