@@ -1382,11 +1382,9 @@ handle_call({'eproc_fsm$sync_send_event', Event, EventSrc}, From, State) ->
     },
     TransitionFun = fun (Trg, St) -> perform_event_transition(Trg, [], St) end,
     case perform_transition(Trigger, TransitionFun, State) of
-        {cont, noreply,        NewState} -> {noreply, NewState};
-        {cont, {reply, Reply}, NewState} -> {reply, Reply, NewState};
-        {stop, noreply,        NewState} -> shutdown(NewState);
-        {stop, {reply, Reply}, NewState} -> shutdown(Reply, NewState);
-        {error, Reason}                  -> {stop, {error, Reason}, State}
+        {cont, NewState} -> {noreply, NewState};
+        {stop, NewState} -> shutdown(NewState);
+        {error, Reason}  -> {stop, {error, Reason}, State}
     end.
 
 
@@ -1404,9 +1402,9 @@ handle_cast({'eproc_fsm$send_event', Event, EventSrc}, State) ->
     },
     TransitionFun = fun (Trg, St) -> perform_event_transition(Trg, [], St) end,
     case perform_transition(Trigger, TransitionFun, State) of
-        {cont, noreply, NewState} -> {noreply, NewState};
-        {stop, noreply, NewState} -> shutdown(NewState);
-        {error, Reason}           -> {stop, {error, Reason}, State}
+        {cont, NewState} -> {noreply, NewState};
+        {stop, NewState} -> shutdown(NewState);
+        {error, Reason}  -> {stop, {error, Reason}, State}
     end;
 
 handle_cast({'eproc_fsm$kill'}, State = #state{inst_id = InstId}) ->
@@ -1437,9 +1435,9 @@ handle_info(Event, State = #state{attrs = Attrs}) ->
         {trigger, NewAttrs, Trigger, AttrAction} ->
             TransitionFun = fun (Trg, St) -> perform_event_transition(Trg, [AttrAction], St) end,
             case perform_transition(Trigger, TransitionFun, State#state{attrs = NewAttrs}) of
-                {cont, noreply, NewState} -> {noreply, NewState};
-                {stop, noreply, NewState} -> shutdown(NewState);
-                {error, Reason}           -> {stop, {error, Reason}, State#state{attrs = NewAttrs}}
+                {cont, NewState} -> {noreply, NewState};
+                {stop, NewState} -> shutdown(NewState);
+                {error, Reason}  -> {stop, {error, Reason}, State#state{attrs = NewAttrs}}
             end;
         unknown ->
             Trigger = #trigger_spec{
@@ -1452,9 +1450,9 @@ handle_info(Event, State = #state{attrs = Attrs}) ->
             },
             TransitionFun = fun (Trg, St) -> perform_event_transition(Trg, [], St) end,
             case perform_transition(Trigger, TransitionFun, State) of
-                {cont, noreply, NewState} -> {noreply, NewState};
-                {stop, noreply, NewState} -> shutdown(NewState);
-                {error, Reason}           -> {stop, {error, Reason}, State}
+                {cont, NewState} -> {noreply, NewState};
+                {stop, NewState} -> shutdown(NewState);
+                {error, Reason}  -> {stop, {error, Reason}, State}
             end
     end.
 
@@ -1484,14 +1482,6 @@ code_change(_OldVsn, State, _Extra) ->
 shutdown(State) ->
     ok = limits_cleanup(State),
     {stop, normal, State}.
-
-
-%%
-%%  Shutdown the FSM with a reply msg.
-%%
-shutdown(Reply, State) ->
-    ok = limits_cleanup(State),
-    {stop, normal, Reply, State}.
 
 
 %%
@@ -1663,7 +1653,15 @@ handle_start(FsmRef, StartOpts, State = #state{store = Store}) ->
         {ok, Instance = #instance{id = InstId, status = Status}} when Status =:= running; Status =:= resuming ->
             StateWithInstId = State#state{inst_id = InstId},
             ok = limits_setup(StateWithInstId),
-            case limits_notify_res(StateWithInstId) of  % TODO: delay
+            LimitsResult = case limits_notify_res(StateWithInstId) of
+                {delay, D} ->
+                    lager:debug("FSM id=~p is going to sleep for ~p ms on startup.", [InstId, D]),
+                    timer:sleep(D),
+                    ok;
+                Other ->
+                    Other
+            end,
+            case LimitsResult of
                 ok ->
                     case start_loaded(Instance, StartOpts, StateWithInstId) of
                         {ok, NewState} ->
@@ -1745,8 +1743,8 @@ start_loaded(Instance, StartOpts, State) ->
                             },
                             TransitionFun = fun (T, S) -> perform_resume_transition(T, ResumeAttempt, S) end,
                             case perform_transition(Trigger, TransitionFun, NewState) of
-                                {cont, noreply, ResumedState} -> {ok, ResumedState};
-                                {error, Reason}               -> {error, Reason}
+                                {cont, ResumedState} -> {ok, ResumedState};
+                                {error, Reason}      -> {error, Reason}
                             end;
                         {error, Reason} ->
                             {error, Reason}
@@ -1860,7 +1858,8 @@ perform_transition(Trigger, TransitionFun, State) ->
     #trigger_spec{
         type = TriggerType,
         source = TriggerSrc,
-        message = TriggerMsg
+        message = TriggerMsg,
+        reply_fun = ReplyFun
     } = Trigger,
 
     erlang:put('eproc_fsm$messages', []),
@@ -1905,17 +1904,19 @@ perform_transition(Trigger, TransitionFun, State) ->
     end,
 
     %%  Save transition.
-    {FinalProcAction, InstStatus, Interrupts} = case ProcAction of
+    {FinalProcAction, InstStatus, Interrupts, Delay} = case ProcAction of
         cont ->
-            case limits_notify_trn(State, TransitionMsgs) of    % TODO: delay
+            case limits_notify_trn(State, TransitionMsgs) of
                 ok ->
-                    {cont, running, undefined};
+                    {cont, running, undefined, undefined};
+                {delay, D} ->
+                    {cont, running, undefined, D};
                 {reached, Reached} ->
                     lager:notice("FSM id=~p suspended, limits ~p reached.", [InstId, Reached]),
-                    {stop, suspended, [#interrupt{reason = {fault, {limits, Reached}}}]}
+                    {stop, suspended, [#interrupt{reason = {fault, {limits, Reached}}}], undefined}
             end;
         stop ->
-            {stop, completed, undefined}
+            {stop, completed, undefined, undefined}
     end,
     Transition = #transition{
         inst_id = InstId,
@@ -1941,6 +1942,20 @@ perform_transition(Trigger, TransitionFun, State) ->
     end,
     {ok, _} = register_message(TriggerSrc, {inst, InstId}, RefForReg(RequestMsgRef), RefForReg(ResponseMsgRef)),
 
+    %%  Reply, if needed.
+    ok = case TransitionReply of
+        noreply -> ok;
+        {reply, R} -> ReplyFun(R)
+    end,
+
+    %% Wait a bit, if needed.
+    case Delay of
+        undefined -> ok;
+        _ ->
+            lager:debug("FSM id=~p is going to sleep for ~p ms on transition.", [InstId, Delay]),
+            timer:sleep(Delay)
+    end,
+
     %% Ok, save changes in the state.
     NewState = State#state{
         sname = NewSName,
@@ -1948,7 +1963,7 @@ perform_transition(Trigger, TransitionFun, State) ->
         trn_nr = TrnNr,
         attrs = NewAttrs
     },
-    {FinalProcAction, TransitionReply, NewState}.
+    {FinalProcAction, NewState}.
 
 
 %%
