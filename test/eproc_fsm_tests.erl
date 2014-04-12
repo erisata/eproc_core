@@ -1558,9 +1558,68 @@ resume_reject_test() ->
 
 
 %%
-%%  TODO: Check if register_message/* works.
+%%  Check if `register_message/4` works in the case of outgoing messages (sent by FSM).
 %%
-register_message_test() ->
+register_message_outgoing_test() ->
+    ok = meck:new(eproc_store, []),
+    ok = meck:new(eproc_fsm__seq, [passthrough]),
+    ok = meck:expect(eproc_store, load_instance, fun
+        (store, {inst, 100}) ->
+            {ok, #instance{
+                id = 100, group = 200, name = name, module = eproc_fsm__seq,
+                args = {}, opts = [], status = running, created = erlang:now(),
+                state = #inst_state{
+                    inst_id = 100, trn_nr = 1, sname = [incrementing],
+                    sdata = {state, 5}, attr_last_id = 1, attrs_active = []
+                }
+            }}
+    end),
+    ok = meck:expect(eproc_store, add_transition, fun
+        (store, Transition = #transition{inst_id = InstId, number = TrnNr = 2}, Messages) ->
+            #transition{
+                trigger_type = event,
+                trigger_msg  = #msg_ref{id = {InstId, TrnNr, 0}, peer = {test, test}},
+                trigger_resp = undefined,
+                trn_messages = TrnMsgs,
+                inst_status  = running
+            } = Transition,
+            ?assertEqual(1, length([ ok || #message{body = flip} <- Messages ])),
+            ?assertEqual(1, length([ ok || #message{body = msg1} <- Messages ])),
+            ?assertEqual(1, length([ ok || #message{body = msg2} <- Messages ])),
+            ?assertEqual(1, length([ ok || #message{body = msg3} <- Messages ])),
+            ?assertEqual(4, length(Messages)),
+            ?assertEqual(3, length(TrnMsgs)),
+            {ok, InstId, TrnNr}
+    end),
+    ok = meck:expect(eproc_fsm__seq, handle_state, fun
+        ([incrementing], {event, flip}, St) ->
+            Src = {inst, eproc_fsm:id()},
+            Dst = {some, out},
+            Now = {1, 2, 3},
+            {ok, registered} = eproc_fsm:register_message(Src, Dst, {msg, msg1, Now}, undefined),
+            {ok, registered} = eproc_fsm:register_message(Src, Dst, {msg, msg2, Now}, {msg, msg3, Now}),
+            {next_state, [decrementing], St};
+        ([incrementing], {exit,  [decrementing]}, St) -> {ok, St};
+        ([decrementing], {entry, [incrementing]}, St) -> {ok, St}
+    end),
+    {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
+    ?assert(eproc_fsm:is_online(PID)),
+    ?assertEqual(ok, eproc_fsm:send_event(PID, flip, [{source, {test, test}}])),
+    ?assertEqual(true, eproc_fsm:is_online(PID)),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {event, flip}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {exit, [decrementing]}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[decrementing], {entry, [incrementing]}, '_'])),
+    ?assertEqual(3, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
+    ?assertEqual(1, meck:num_calls(eproc_store, add_transition, '_')),
+    ?assert(meck:validate([eproc_store, eproc_fsm__seq])),
+    ok = meck:unload([eproc_store, eproc_fsm__seq]),
+    ok = unlink_kill(PID).
+
+
+%%
+%%  TODO: Check if `register_message/4` works in the case of incoming messages (received by FSM).
+%%
+register_message_incoming_test() ->
     ?assert(todo).
 
 

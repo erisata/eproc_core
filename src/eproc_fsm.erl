@@ -1976,6 +1976,7 @@ perform_transition(Trigger, TransitionFun, State) ->
         (undefined) -> undefined;
         (#msg_ref{id = I}) -> {ref, I}
     end,
+    %%  TODO: Review this place.
     {ok, _} = register_message(TriggerSrc, {inst, InstId}, RefForReg(RequestMsgRef), RefForReg(ResponseMsgRef)),
 
     %%  Reply, if needed.
