@@ -1623,7 +1623,20 @@ register_message_incoming_test() ->
     ?assert(todo).
 
 
-% TODO: Check if resolve_start_spec/* works.
+%%
+%%  Check if `resolve_start_spec/2` works.
+%%
+resolve_start_spec_test_() -> [
+    ?_assertEqual(
+        {start_link_args, [{inst, i}, [opts]]},
+        eproc_fsm:resolve_start_spec({inst, i}, {default, [opts]})
+    ),
+    ?_assertEqual(
+        {start_link_mfa, {m, f, [a1, {inst, a}, a3]}},
+        eproc_fsm:resolve_start_spec({inst, a}, {mfa, {m, f, [a1, '$fsm_ref', a3]}})
+    )].
+
 
 % TODO: Test handling of crashes in callbacks in sync and async calls.
+
 

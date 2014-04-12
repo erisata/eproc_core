@@ -231,7 +231,7 @@
     trigger_type    :: trigger_type(),                  %% Type of the trigger, initiated the transition.
     trigger_msg     :: msg_ref(),                       %% Message initiated the transition.
     trigger_resp    :: msg_ref() | undefined,           %% Response to the trigger if the event was synchronous.
-    trn_messages    :: [msg_ref],                       %% Messages sent and received during transition, not including trigger and its response.
+    trn_messages    :: [msg_ref()],                     %% Messages sent and received during transition, not including trigger and its response.
     attr_last_id    :: integer(),                       %% Last action id.
     attr_actions    :: [#attr_action{}],                %% All attribute actions performed in this transition.
     inst_status     :: inst_status(),                   %% Instance status, after the transition.
