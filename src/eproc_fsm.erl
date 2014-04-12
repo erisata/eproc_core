@@ -1438,11 +1438,11 @@ handle_cast({'eproc_fsm$send_event', Event, EventSrc}, State) ->
 
 handle_cast({'eproc_fsm$kill'}, State = #state{inst_id = InstId}) ->
     lager:notice("FSM id=~p killed.", [InstId]),
-    {stop, normal, State};
+    shutdown(State);
 
 handle_cast({'eproc_fsm$suspend'}, State = #state{inst_id = InstId}) ->
     lager:notice("FSM id=~p suspended.", [InstId]),
-    {stop, normal, State}.
+    shutdown(State).
 
 
 %%
@@ -1490,14 +1490,17 @@ handle_info(Event, State = #state{attrs = Attrs}) ->
 %%  Invoked, when the FSM terminates.
 %%
 terminate(_Reason, _State) ->
-    ok. % TODO
+    ok. % TODO: Call CB:terminate
 
 
 %%
 %%  Invoked in the case of code upgrade.
 %%
 code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.    % TODO
+    {ok, State}.    % TODO: Call CB:code_change.
+
+
+% TODO: Call format_status from somewhere.
 
 
 
@@ -1522,7 +1525,7 @@ resolve_timeout(Options) ->
 
 
 %%
-%%  TODO: Comment.
+%%  Classifies options to start options and unknown options.
 %%
 resolve_start_link_opts(Options) ->
     {ok, [], StartOpts, [], CommonOpts, UnknownOpts} = split_options(Options),
