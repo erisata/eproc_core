@@ -78,7 +78,7 @@ inst_value() ->
         opts = [{o, p}],
         start_spec = undefined,
         status = running,
-        created = erlang:now(),
+        created = os:timestamp(),
         terminated = undefined,
         archived = undefined,
         state = #inst_state{
@@ -276,7 +276,7 @@ eproc_store_core_test_add_transition(Config) ->
         number = 1,
         sname = [s1],
         sdata = d1,
-        timestamp = erlang:now(),
+        timestamp = os:timestamp(),
         duration = 13,
         trigger_type = event,
         trigger_msg = #msg_ref{id = 1011, peer = {connector, some}},
@@ -287,9 +287,9 @@ eproc_store_core_test_add_transition(Config) ->
         inst_status = running,
         interrupts = undefined
     },
-    Msg11 = #message{id = 1011, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m11},
-    Msg12 = #message{id = 1012, sender = {connector, some}, receiver = {inst, IID1}, resp_to = 1011,      date = erlang:now(), body = m12},
-    Msg13 = #message{id = 1013, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m13},
+    Msg11 = #message{id = 1011, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m11},
+    Msg12 = #message{id = 1012, sender = {connector, some}, receiver = {inst, IID1}, resp_to = 1011,      date = os:timestamp(), body = m12},
+    Msg13 = #message{id = 1013, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m13},
     {ok, IID1, 1} = eproc_store:add_transition(Store, Trn1, [Msg11, Msg12, Msg13]),
     {ok, #instance{status = running, state = #inst_state{
         inst_id = IID1, trn_nr = 1,
@@ -308,7 +308,7 @@ eproc_store_core_test_add_transition(Config) ->
         trn_messages = [],
         attr_actions = []
     },
-    Msg21 = #message{id = 1021, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m21},
+    Msg21 = #message{id = 1021, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m21},
     {ok, IID1, 2} = eproc_store:add_transition(Store, Trn2, [Msg21]),
     {ok, #instance{status = running, state = #inst_state{
         inst_id = IID1, trn_nr = 2,
@@ -329,7 +329,7 @@ eproc_store_core_test_add_transition(Config) ->
         inst_status = suspended,
         interrupts = [#interrupt{reason = {fault, some_reason}}]
     },
-    Msg31 = #message{id = 1031, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m31},
+    Msg31 = #message{id = 1031, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m31},
     {ok, IID1, 3} = eproc_store:add_transition(Store, Trn3, [Msg31]),
     {ok, #instance{status = suspended, state = #inst_state{
         inst_id = IID1, trn_nr = 3,
@@ -360,7 +360,7 @@ eproc_store_core_test_add_transition(Config) ->
         inst_status = running,
         interrupts = undefined
     },
-    Msg41 = #message{id = 1041, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m41},
+    Msg41 = #message{id = 1041, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m41},
     {ok, IID1, 4} = eproc_store:add_transition(Store, Trn4, [Msg41]),
     {ok, #instance{status = running, state = #inst_state{
         inst_id = IID1, trn_nr = 4,
@@ -381,7 +381,7 @@ eproc_store_core_test_add_transition(Config) ->
         inst_status = completed,
         interrupts = undefined
     },
-    Msg51 = #message{id = 1051, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m51},
+    Msg51 = #message{id = 1051, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m51},
     {ok, IID1, 5} = eproc_store:add_transition(Store, Trn5, [Msg51]),
     {ok, #instance{status = completed, state = #inst_state{
         inst_id = IID1, trn_nr = 5,
@@ -402,7 +402,7 @@ eproc_store_core_test_add_transition(Config) ->
         inst_status = running,
         interrupts = undefined
     },
-    Msg61 = #message{id = 1061, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m61},
+    Msg61 = #message{id = 1061, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m61},
     {error, terminated} = eproc_store:add_transition(Store, Trn6, [Msg61]),
     {ok, #instance{status = completed, state = #inst_state{
         inst_id = IID1, trn_nr = 5,
@@ -456,7 +456,7 @@ eproc_store_core_test_attrs(Config) ->
     %%
     Trn1 = #transition{
         inst_id = IID1, number = 1, sname = [s1], sdata = d1,
-        timestamp = erlang:now(), duration = 13, trigger_type = event,
+        timestamp = os:timestamp(), duration = 13, trigger_type = event,
         trigger_msg = #msg_ref{id = 1011, peer = {connector, some}},
         trigger_resp = undefined,
         trn_messages = [],
@@ -466,7 +466,7 @@ eproc_store_core_test_attrs(Config) ->
         ],
         inst_status = running,interrupts = undefined
     },
-    Msg11 = #message{id = 1011, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m11},
+    Msg11 = #message{id = 1011, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m11},
     {ok, IID1, 1} = eproc_store:add_transition(Store, Trn1, [Msg11]),
     {ok, #instance{status = running, state = #inst_state{
         inst_id = IID1, trn_nr = 1,
@@ -501,7 +501,7 @@ eproc_store_core_test_attrs(Config) ->
             #attr_action{module = m2, attr_id = 2, needs_store = true, action = {create, n11, [], some}}
         ]
     },
-    Msg21 = #message{id = 1021, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = erlang:now(), body = m21},
+    Msg21 = #message{id = 1021, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m21},
     ok = try eproc_store:add_transition(Store, Trn2, [Msg21]) of
         {ok, IID1, _} -> error
     catch

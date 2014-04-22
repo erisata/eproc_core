@@ -167,7 +167,8 @@
     is_state_valid/1,
     is_next_state_valid/1,
     is_fsm_ref/1,
-    register_message/4,
+    register_sent_msg/3,
+    register_resp_msg/4,
     resolve_start_spec/2
 ]).
 
@@ -278,6 +279,50 @@
 -opaque start_spec()  ::
     {default, StartOpts :: list()} |
     {mfa, MFArgs ::mfargs()}.
+
+
+
+%% =============================================================================
+%%  Internal state of the module.
+%% =============================================================================
+
+%%
+%%  Internal state of the `eproc_fsm`.
+%%
+-record(state, {
+    inst_id     :: inst_id(),       %% Id of the current instance.
+    module      :: module(),        %% Implementation of the user FSM.
+    sname       :: state_name(),    %% User FSM state name.
+    sdata       :: state_data(),    %% User FSM state data.
+    rt_field    :: integer(),       %% Runtime data field in the sdata.
+    rt_default  :: term(),          %% Default value for the runtime field.
+    trn_nr      :: trn_nr(),        %% Number of the last processed transition.
+    attrs       :: term(),          %% State for the `eproc_fsm_attr` module.
+    registry    :: registry_ref(),  %% A registry reference.
+    store       :: store_ref(),     %% A store reference.
+    lim_res     :: term(),          %% Instance limits: restart counter limit specs.
+    lim_trn     :: term(),          %% Instance limits: transition counter limit specs.
+    lim_msg_all :: term(),          %% Instance limits: counter limit specs for all sent messages.
+    lim_msg_dst :: term()           %% Instance limits: counter limit specs for sent messages by destination.
+}).
+
+
+%%
+%%  Structures for message registration.
+%%
+-record(msg_reg, {
+    dst         :: event_src(),
+    sent_mid    :: msg_id(),
+    sent_msg    :: {ref, msg_id()} | {msg, term(), timestamp()},
+    resp_mid    :: undefined | msg_id(),
+    resp_msg    :: undefined | {ref, msg_id()} | {msg, term(), timestamp()}
+}).
+-record(msg_regs, {
+    inst_id     :: inst_id(),
+    trn_nr      :: trn_nr(),
+    next_msg_nr :: integer(),
+    registered  :: [#msg_reg{}]
+}).
 
 
 
@@ -932,8 +977,14 @@ sync_send_create_event(Module, Args, Event, Options) ->
 
 send_event(FsmRef, Event, Options) ->
     {ok, EventSrc} = resolve_event_src(Options),
+    {ok, EventDst} = resolve_event_dst(FsmRef),
     {ok, ResolvedFsmRef} = resolve_fsm_ref(FsmRef, Options),
-    gen_server:cast(ResolvedFsmRef, {'eproc_fsm$send_event', Event, EventSrc}).
+    case register_sent_msg(EventSrc, EventDst, {msg, Event, os:timestamp()}) of
+        {ok, MsgId} ->
+            ok = gen_server:cast(ResolvedFsmRef, {'eproc_fsm$send_event', Event, EventSrc, MsgId});
+        {error, not_fsm} ->
+            ok = gen_server:cast(ResolvedFsmRef, {'eproc_fsm$send_event', Event, EventSrc, undefined})
+    end.
 
 
 %%
@@ -982,9 +1033,21 @@ send_event(FsmRef, Event) ->
 
 sync_send_event(FsmRef, Event, Options) ->
     {ok, EventSrc} = resolve_event_src(Options),
+    {ok, EventDst} = resolve_event_dst(FsmRef),
     {ok, Timeout}  = resolve_timeout(Options),
     {ok, ResolvedFsmRef} = resolve_fsm_ref(FsmRef, Options),
-    gen_server:call(ResolvedFsmRef, {'eproc_fsm$sync_send_event', Event, EventSrc}, Timeout).
+    case register_sent_msg(EventSrc, EventDst, {msg, Event, os:timestamp()}) of
+        {ok, CallMsgId} ->
+            CallMsg = {'eproc_fsm$sync_send_event', Event, EventSrc, CallMsgId},
+            {ok, InstId, RespMsgId, Resp} = gen_server:call(ResolvedFsmRef, CallMsg, Timeout),
+            {ok, RespMsgId} = register_resp_msg(EventSrc, {inst, InstId}, CallMsgId, {ref, RespMsgId}),
+            Resp;
+        {error, not_fsm} ->
+            CallMsg = {'eproc_fsm$sync_send_event', Event, EventSrc, undefined},
+            {ok, _InstId, _RespMsgId, Resp} = gen_server:call(ResolvedFsmRef, CallMsg, Timeout),
+            Resp
+    end.
+
 
 
 %%
@@ -1281,37 +1344,107 @@ reply(To, Reply) ->
     To(Reply).
 
 
-%%
+%%  TODO
 %%  This function is used by modules sending outgoing messages
 %%  from the FSM, like connectors.
 %%
 %%  Target FSM is responsible for storing message to the DB. If the event
 %%  recipient is not FSM, the sending FSM is responsible for storing the event.
 %%
--spec register_message(
+% -spec register_out_msg(
+%         Src    :: event_src(),
+%         Dst    :: event_src(),
+%         Req    :: {ref, msg_id()} | {msg, term(), timestamp()},
+%         Res    :: {ref, msg_id()} | {msg, term(), timestamp()} | undefined
+%     ) ->
+%         {ok, skipped | registered} |
+%         {error, Reason :: term()}.
+%
+% %%  Event between FSMs.
+% register_out_msg({inst, _SrcInstId}, Dst = {inst, _DstInstId}, Req = {ref, _ReqId}, Res) ->
+%     Messages = erlang:get('eproc_fsm$msg_regs'),
+%     Messages = erlang:put('eproc_fsm$msg_regs', [{msg_reg, Dst, Req, Res} | Messages]),
+%     {ok, registered};
+%
+% %%  Source is not FSM and target is FSM.
+% register_out_msg(_EventSrc, {inst, _DstInstId}, {ref, _ReqId}, _Res) ->
+%     {ok, skipped};
+%
+% %%  Source is FSM and target is not.
+% register_out_msg({inst, _SrcInstId}, Dst, Req = {msg, _ReqBody, _ReqDate}, Res) ->
+%     Messages = erlang:get('eproc_fsm$msg_regs'),
+%     Messages = erlang:put('eproc_fsm$msg_regs', [{msg_reg, Dst, Req, Res} | Messages]),
+%     {ok, registered}.
+%
+
+
+%%
+%%  TODO: Description.
+%%
+-spec register_sent_msg(
         Src    :: event_src(),
         Dst    :: event_src(),
-        Req    :: {ref, msg_id()} | {msg, term(), timestamp()},
-        Res    :: {ref, msg_id()} | {msg, term(), timestamp()} | undefined
+        Msg    :: {ref, msg_id()} | {msg, term(), timestamp()}
     ) ->
-        {ok, skipped | registered} |
-        {error, Reason :: term()}.
+        {ok, msg_id()} |
+        {error, not_fsm}.
 
-%%  Event between FSMs.
-register_message({inst, _SrcInstId}, Dst = {inst, _DstInstId}, Req = {ref, _ReqId}, Res) ->
-    Messages = erlang:get('eproc_fsm$messages'),
-    Messages = erlang:put('eproc_fsm$messages', [{msg_reg, Dst, Req, Res} | Messages]),
-    {ok, registered};
+%%  Event between FSMs (if Dst = {inst, _}) or FSM sends external event.
+%%  The sending FSM is responsible for storing the message.
+register_sent_msg({inst, SrcInstId}, Dst, SentMsg) ->
+    MsgRegs = #msg_regs{
+        inst_id     = SrcInstId,
+        trn_nr      = TrnNr,
+        next_msg_nr = NextMsgNr,
+        registered  = Registered
+    } = erlang:get('eproc_fsm$msg_regs'),
+    {NewNextMsgNr, NewMsgId} = case SentMsg of
+        {ref, MsgId}                -> {NextMsgNr,     MsgId};
+        {msg, _MsgBody, _MsgTStamp} -> {NextMsgNr + 1, {SrcInstId, TrnNr, NextMsgNr}}
+    end,
+    NewMsgReg = #msg_reg{dst = Dst, sent_mid = NewMsgId, sent_msg = SentMsg},
+    NewRegistered = [NewMsgReg | Registered],
+    erlang:put('eproc_fsm$msg_regs', MsgRegs#msg_regs{next_msg_nr = NewNextMsgNr, registered = NewRegistered}),
+    {ok, NewMsgId};
 
-%%  Source is not FSM and target is FSM.
-register_message(_EventSrc, {inst, _DstInstId}, {ref, _ReqId}, _Res) ->
-    {ok, skipped};
+%%  FSM received an external event (if Dst = {inst, _}) or the event is not related to FSMs.
+%%  The receiving FSM is responsible for storing the message.
+register_sent_msg(_Src, _Dst, _Msg) ->
+    {error, not_fsm}.
 
-%%  Source is FSM and target is not.
-register_message({inst, _SrcInstId}, Dst, Req = {msg, _ReqBody, _ReqDate}, Res) ->
-    Messages = erlang:get('eproc_fsm$messages'),
-    Messages = erlang:put('eproc_fsm$messages', [{msg_reg, Dst, Req, Res} | Messages]),
-    {ok, registered}.
+
+%%
+%%  TODO: Description.
+%%
+-spec register_resp_msg(
+        Src         :: event_src(),
+        Dst         :: event_src(),
+        CallMsgId   :: msg_id(),
+        RespMsg     :: {ref, msg_id()} | {msg, term(), timestamp()}
+    ) ->
+        {ok, msg_id()} |
+        {error, no_sent}.
+
+register_resp_msg({inst, SrcInstId}, Dst, CallMsgId, RespMsg) ->
+    MsgRegs = #msg_regs{
+        inst_id     = SrcInstId,
+        trn_nr      = TrnNr,
+        next_msg_nr = NextMsgNr,
+        registered  = Registered
+    } = erlang:get('eproc_fsm$msg_regs'),
+    case lists:keyfind(CallMsgId, #msg_reg.sent_mid, Registered) of
+        false ->
+            {error, no_sent};
+        MsgReg ->
+            {NewNextMsgNr, NewMsgId} = case RespMsg of
+                {ref, MsgId}                -> {NextMsgNr,     MsgId};
+                {msg, _MsgBody, _MsgTStamp} -> {NextMsgNr + 1, {SrcInstId, TrnNr, NextMsgNr}}
+            end,
+            NewMsgReg = MsgReg#msg_reg{dst = Dst, resp_mid = NewMsgId, resp_msg = RespMsg},
+            NewRegistered = lists:keyreplace(CallMsgId, #msg_reg.sent_mid, Registered, NewMsgReg),
+            erlang:put('eproc_fsm$msg_regs', MsgRegs#msg_regs{next_msg_nr = NewNextMsgNr, registered = NewRegistered}),
+            {ok, NewMsgId}
+    end.
 
 
 %%
@@ -1335,32 +1468,6 @@ resolve_start_spec(FsmRef, {mfa, {Module, Function, Args}}) when is_atom(Module)
     end,
     ResolvedArgs = lists:map(FsmRefMapFun, Args),
     {start_link_mfa, {Module, Function, ResolvedArgs}}.
-
-
-
-%% =============================================================================
-%%  Internal state of the module.
-%% =============================================================================
-
-%%
-%%  Internal state of the `eproc_fsm`.
-%%
--record(state, {
-    inst_id     :: inst_id(),       %% Id of the current instance.
-    module      :: module(),        %% Implementation of the user FSM.
-    sname       :: state_name(),    %% User FSM state name.
-    sdata       :: state_data(),    %% User FSM state data.
-    rt_field    :: integer(),       %% Runtime data field in the sdata.
-    rt_default  :: term(),          %% Default value for the runtime field.
-    trn_nr      :: trn_nr(),        %% Number of the last processed transition.
-    attrs       :: term(),          %% State for the `eproc_fsm_attr` module.
-    registry    :: registry_ref(),  %% A registry reference.
-    store       :: store_ref(),     %% A store reference.
-    lim_res     :: term(),          %% Instance limits: restart counter limit specs.
-    lim_trn     :: term(),          %% Instance limits: transition counter limit specs.
-    lim_msg_all :: term(),          %% Instance limits: counter limit specs for all sent messages.
-    lim_msg_dst :: term()           %% Instance limits: counter limit specs for sent messages by destination.
-}).
 
 
 
@@ -1420,10 +1527,11 @@ handle_call({'eproc_fsm$sync_send_event', Event, EventSrc}, From, State) ->
 %%
 %%  Asynchronous messages.
 %%
-handle_cast({'eproc_fsm$send_event', Event, EventSrc}, State) ->
+handle_cast({'eproc_fsm$send_event', Event, EventSrc, MsgId}, State) ->
     Trigger = #trigger_spec{
         type = event,
         source = EventSrc,
+       %msg_id = MsgId,             % TODO
         message = Event,
         sync = false,
         reply_fun = undefined,
@@ -1575,6 +1683,16 @@ resolve_event_src(SendOptions) ->
 
 
 %%
+%%  Returns destination FSM reference, used to pass it to `regisrer_out_msg/3`.
+%%
+resolve_event_dst({inst, InstId}) ->
+    {ok, {inst, InstId}};
+
+resolve_event_dst(_) ->
+    {ok, {inst, undefined}}.
+
+
+%%
 %%  Resolves instance reference.
 %%
 resolve_fsm_ref(FsmRef, Options) ->
@@ -1635,7 +1753,7 @@ resolve_user_action(CommonOpts) ->
     end,
     #user_action{
         user = User,
-        time = erlang:now(),
+        time = os:timestamp(),
         comment = Comment
     }.
 
@@ -1894,20 +2012,20 @@ perform_transition(Trigger, TransitionFun, State) ->
         reply_fun = ReplyFun
     } = Trigger,
 
-    erlang:put('eproc_fsm$messages', []),
+    erlang:put('eproc_fsm$msg_regs', []),
     erlang:put('eproc_fsm$suspend', false),
     TrnNr = LastTrnNr + 1,
-    TrnStart = erlang:now(),
+    TrnStart = os:timestamp(),
     {ok, TrnAttrs} = eproc_fsm_attr:transition_start(InstId, TrnNr, SName, Attrs),
     {ok, ProcAction, NewSName, NewSData, TransitionReply, Reply, ExplicitAttrActions} = TransitionFun(Trigger, State),
     {ok, AttrActions, LastAttrId, NewAttrs} = eproc_fsm_attr:transition_end(InstId, TrnNr, NewSName, TrnAttrs),
-    TrnEnd = erlang:now(),
+    TrnEnd = os:timestamp(),
 
     %%  Collect all messages.
     {RegisteredMsgs, RegisteredMsgRefs, InstId, TrnNr, _LastMsgNr} = lists:foldr(
         fun registered_messages/2,
         {[], [], InstId, TrnNr, 2},
-        erlang:erase('eproc_fsm$messages')
+        erlang:erase('eproc_fsm$msg_regs')
     ),
     RequestMsgId = {InstId, TrnNr, 0},
     RequestMsgRef = #msg_ref{id = RequestMsgId, peer = TriggerSrc},
@@ -1975,13 +2093,13 @@ perform_transition(Trigger, TransitionFun, State) ->
     },
     {ok, InstId, TrnNr} = eproc_store:add_transition(Store, Transition, TransitionMsgs),
 
-    RefForReg = fun
-        (undefined) -> undefined;
-        (#msg_ref{id = I}) -> {ref, I}
-    end,
-    %%  TODO: Review this place.
-    {ok, _} = register_message(TriggerSrc, {inst, InstId}, RefForReg(RequestMsgRef), RefForReg(ResponseMsgRef)),
-
+%     RefForReg = fun
+%         (undefined) -> undefined;
+%         (#msg_ref{id = I}) -> {ref, I}
+%     end,
+%     %%  TODO: Review this place: Change response of this message.
+%     {ok, _} = register_out_msg(TriggerSrc, {inst, InstId}, RefForReg(RequestMsgRef), RefForReg(ResponseMsgRef)),
+%
     %%  Reply, if needed.
     ok = case TransitionReply of
         noreply -> ok;

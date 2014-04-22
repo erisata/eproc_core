@@ -391,7 +391,7 @@ read_active_interrupt(InstId) ->
 write_instance_terminated(#instance{id = InstId, name = Name}, Status, Reason) ->
     true = ets:update_element(?INST_TBL, InstId, [
         {#instance.status,      Status},
-        {#instance.terminated,  erlang:now()},
+        {#instance.terminated,  os:timestamp()},
         {#instance.term_reason, Reason}
     ]),
     case Name of
@@ -416,7 +416,7 @@ write_instance_suspended(InstId, Reason) ->
         inst_id     = InstId,
         trn_nr      = undefined,
         status      = active,
-        suspended   = erlang:now(),
+        suspended   = os:timestamp(),
         reason      = Reason,
         resumes     = []
     },

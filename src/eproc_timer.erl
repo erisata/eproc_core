@@ -62,7 +62,7 @@
 %%
 %%
 set(Name, After, Event, Scope) ->
-    Now = erlang:now(),
+    Now = os:timestamp(),
     {ok, registered} = eproc_fsm:register_message({inst, eproc_fsm:id()}, {timer, Name}, {msg, Event, Now}, undefined),
     ok = eproc_fsm_attr:action(?MODULE, Name, {timer, After, Event}, Scope).
 
@@ -71,7 +71,7 @@ set(Name, After, Event, Scope) ->
 %%
 %%
 set(After, Event, Scope) ->
-    Now = erlang:now(),
+    Now = os:timestamp(),
     Name = undefined,
     {ok, registered} = eproc_fsm:register_message({inst, eproc_fsm:id()}, {timer, Name}, {msg, Event, Now}, undefined),
     ok = eproc_fsm_attr:action(?MODULE, Name, {timer, After, Event}, Scope).
@@ -81,7 +81,7 @@ set(After, Event, Scope) ->
 %%
 %%
 set(After, Event) ->
-    Now = erlang:now(),
+    Now = os:timestamp(),
     Name = undefined,
     {ok, registered} = eproc_fsm:register_message({inst, eproc_fsm:id()}, {timer, Name}, {msg, Event, Now}, undefined),
     ok = eproc_fsm_attr:action(?MODULE, Name, {timer, After, Event}, next).
@@ -162,7 +162,7 @@ init(ActiveAttrs) ->
 %%  Attribute created.
 %%
 handle_created(#attribute{attr_id = AttrId}, {timer, After, Event}, _Scope) ->
-    Data = #data{start = erlang:now(), delay = After, event = Event},
+    Data = #data{start = os:timestamp(), delay = After, event = Event},
     {ok, State} = start_timer(AttrId, Data),
     {create, Data, State, false};
 
@@ -175,7 +175,7 @@ handle_created(_Attribute, {timer, remove}, _Scope) ->
 %%
 handle_updated(Attribute, AttrState, {timer, After, Event}, _Scope) ->
     #attribute{attr_id = AttrId} = Attribute,
-    NewData = #data{start = erlang:now(), delay = After, event = Event},
+    NewData = #data{start = os:timestamp(), delay = After, event = Event},
     ok = stop_timer(AttrState),
     {ok, NewState} = start_timer(AttrId, NewData),
     {update, NewData, NewState, false};
@@ -231,7 +231,7 @@ handle_event(Attribute, _State, fired) ->
 %%  Starts a timer.
 %%
 start_timer(AttrId, #data{start = Start, delay = DelaySpec}) ->
-    Now = erlang:now(),
+    Now = os:timestamp(),
     Delay = duration_to_ms(DelaySpec),
     Left = Delay - (timer:now_diff(Start, Now) div 1000),
     if
