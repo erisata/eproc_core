@@ -131,7 +131,6 @@
 %%  :   indicates a user initiaten an action. This option is mainly
 %%      used for administrative actions: kill, suspend and resume.
 %%
-%%  TODO: Error handling.
 %%  TODO: Attachment support.
 %%
 -module(eproc_fsm).
@@ -167,8 +166,10 @@
     is_state_valid/1,
     is_next_state_valid/1,
     is_fsm_ref/1,
-    register_sent_msg/3,
-    register_resp_msg/4,
+    register_sent_msg/5,
+    register_resp_msg/6,
+    registered_send/4,
+    registered_sync_send/4,
     resolve_start_spec/2
 ]).
 
@@ -192,6 +193,10 @@
 -define(LIMIT_TRN, trn).
 -define(LIMIT_MSG_ALL, {msg, all}).
 -define(LIMIT_MSG_DST(D), {msg, {dst, D}}).
+-define(MSGID_REQUEST(I, T), {I, T, 0, recv}).
+-define(MSGID_REPLY(I, T),   {I, T, 1, sent}).
+-define(MSGID_SENT(I, T, M), {I, T, M, sent}).
+-define(MSGID_RECV(I, T, M), {I, T, M, recv}).
 
 
 -type name() :: {via, Registry :: module(), InstId :: inst_id()}.
@@ -313,9 +318,11 @@
 -record(msg_reg, {
     dst         :: event_src(),
     sent_mid    :: msg_id(),
-    sent_msg    :: {ref, msg_id()} | {msg, term(), timestamp()},
+    sent_msg    :: term(),
+    sent_time   :: timestamp(),
     resp_mid    :: undefined | msg_id(),
-    resp_msg    :: undefined | {ref, msg_id()} | {msg, term(), timestamp()}
+    resp_msg    :: undefined | term(),
+    resp_time   :: undefined | timestamp()
 }).
 -record(msg_regs, {
     inst_id     :: inst_id(),
@@ -979,12 +986,10 @@ send_event(FsmRef, Event, Options) ->
     {ok, EventSrc} = resolve_event_src(Options),
     {ok, EventDst} = resolve_event_dst(FsmRef),
     {ok, ResolvedFsmRef} = resolve_fsm_ref(FsmRef, Options),
-    case register_sent_msg(EventSrc, EventDst, {msg, Event, os:timestamp()}) of
-        {ok, MsgId} ->
-            ok = gen_server:cast(ResolvedFsmRef, {'eproc_fsm$send_event', Event, EventSrc, MsgId});
-        {error, not_fsm} ->
-            ok = gen_server:cast(ResolvedFsmRef, {'eproc_fsm$send_event', Event, EventSrc, undefined})
-    end.
+    {ok, _SentMsgId} = registered_send(EventSrc, EventDst, Event, fun (SentMsgId) ->
+        ok = gen_server:cast(ResolvedFsmRef, {'eproc_fsm$send_event', Event, EventSrc, SentMsgId})
+    end),
+    ok.
 
 
 %%
@@ -1036,18 +1041,12 @@ sync_send_event(FsmRef, Event, Options) ->
     {ok, EventDst} = resolve_event_dst(FsmRef),
     {ok, Timeout}  = resolve_timeout(Options),
     {ok, ResolvedFsmRef} = resolve_fsm_ref(FsmRef, Options),
-    case register_sent_msg(EventSrc, EventDst, {msg, Event, os:timestamp()}) of
-        {ok, CallMsgId} ->
-            CallMsg = {'eproc_fsm$sync_send_event', Event, EventSrc, CallMsgId},
-            {ok, InstId, RespMsgId, Resp} = gen_server:call(ResolvedFsmRef, CallMsg, Timeout),
-            {ok, RespMsgId} = register_resp_msg(EventSrc, {inst, InstId}, CallMsgId, {ref, RespMsgId}),
-            Resp;
-        {error, not_fsm} ->
-            CallMsg = {'eproc_fsm$sync_send_event', Event, EventSrc, undefined},
-            {ok, _InstId, _RespMsgId, Resp} = gen_server:call(ResolvedFsmRef, CallMsg, Timeout),
-            Resp
-    end.
-
+    {ok, _SentMsgId, _RespMsgId, RespMsg} = registered_sync_send(EventSrc, EventDst, Event, fun (SentMsgId) ->
+        CallMsg = {'eproc_fsm$sync_send_event', Event, EventSrc, SentMsgId},
+        {ok, InstId, RespMsgId, RespMsg} = gen_server:call(ResolvedFsmRef, CallMsg, Timeout),
+        {ok, RespMsg, RespMsgId, {inst, InstId}}
+    end),
+    RespMsg.
 
 
 %%
@@ -1339,113 +1338,127 @@ is_online(FsmRef) ->
         ok |
         {error, Reason :: term()}.
 
-reply(To, Reply) ->
-    noreply = erlang:put('eproc_fsm$reply', {reply, Reply}),
-    To(Reply).
-
-
-%%  TODO
-%%  This function is used by modules sending outgoing messages
-%%  from the FSM, like connectors.
-%%
-%%  Target FSM is responsible for storing message to the DB. If the event
-%%  recipient is not FSM, the sending FSM is responsible for storing the event.
-%%
-% -spec register_out_msg(
-%         Src    :: event_src(),
-%         Dst    :: event_src(),
-%         Req    :: {ref, msg_id()} | {msg, term(), timestamp()},
-%         Res    :: {ref, msg_id()} | {msg, term(), timestamp()} | undefined
-%     ) ->
-%         {ok, skipped | registered} |
-%         {error, Reason :: term()}.
-%
-% %%  Event between FSMs.
-% register_out_msg({inst, _SrcInstId}, Dst = {inst, _DstInstId}, Req = {ref, _ReqId}, Res) ->
-%     Messages = erlang:get('eproc_fsm$msg_regs'),
-%     Messages = erlang:put('eproc_fsm$msg_regs', [{msg_reg, Dst, Req, Res} | Messages]),
-%     {ok, registered};
-%
-% %%  Source is not FSM and target is FSM.
-% register_out_msg(_EventSrc, {inst, _DstInstId}, {ref, _ReqId}, _Res) ->
-%     {ok, skipped};
-%
-% %%  Source is FSM and target is not.
-% register_out_msg({inst, _SrcInstId}, Dst, Req = {msg, _ReqBody, _ReqDate}, Res) ->
-%     Messages = erlang:get('eproc_fsm$msg_regs'),
-%     Messages = erlang:put('eproc_fsm$msg_regs', [{msg_reg, Dst, Req, Res} | Messages]),
-%     {ok, registered}.
-%
+reply({InstId, TrnNr, ReplyFun}, Reply) ->
+    ReplyMsgId = ?MSGID_REPLY(InstId, TrnNr),
+    noreply = erlang:put('eproc_fsm$reply', {reply, ReplyMsgId, Reply}),
+    ReplyFun(InstId, ReplyMsgId, Reply).
 
 
 %%
-%%  TODO: Description.
+%%  Register an outgoing message, sent by the FSM. This function is used by
+%%  modules sending outgoing messages from the FSM, like connectors.
 %%
-%%  TODO: Add functions: register_sent(..., Fun), register_sync_sent(..., Fun).
+%%  See also: `registered_send` and `registered_sync_send`.
 %%
 -spec register_sent_msg(
-        Src    :: event_src(),
-        Dst    :: event_src(),
-        Msg    :: {ref, msg_id()} | {msg, term(), timestamp()}
+        Src         :: event_src(),
+        Dst         :: event_src(),
+        SentMsgId   :: msg_id() | undefined,
+        SentMsg     :: term(),
+        Timestamp   :: timestamp()
     ) ->
         {ok, msg_id()} |
         {error, not_fsm}.
 
 %%  Event between FSMs (if Dst = {inst, _}) or FSM sends external event.
 %%  The sending FSM is responsible for storing the message.
-register_sent_msg({inst, SrcInstId}, Dst, SentMsg) ->
+register_sent_msg({inst, SrcInstId}, Dst, SentMsgId, SentMsg, Timestamp) ->
     MsgRegs = #msg_regs{
         inst_id     = SrcInstId,
         trn_nr      = TrnNr,
         next_msg_nr = NextMsgNr,
         registered  = Registered
     } = erlang:get('eproc_fsm$msg_regs'),
-    {NewNextMsgNr, NewMsgId} = case SentMsg of
-        {ref, MsgId}                -> {NextMsgNr,     MsgId};
-        {msg, _MsgBody, _MsgTStamp} -> {NextMsgNr + 1, {SrcInstId, TrnNr, NextMsgNr}}
+    {NewNextMsgNr, NewMsgId} = case SentMsgId of
+        undefined            -> {NextMsgNr + 1, ?MSGID_SENT(SrcInstId, TrnNr, NextMsgNr)};
+        ?MSGID_RECV(I, T, M) -> {NextMsgNr,     ?MSGID_SENT(I,         T,     M        )}
     end,
-    NewMsgReg = #msg_reg{dst = Dst, sent_mid = NewMsgId, sent_msg = SentMsg},
+    NewMsgReg = #msg_reg{dst = Dst, sent_mid = NewMsgId, sent_msg = SentMsg, sent_time = Timestamp},
     NewRegistered = [NewMsgReg | Registered],
     erlang:put('eproc_fsm$msg_regs', MsgRegs#msg_regs{next_msg_nr = NewNextMsgNr, registered = NewRegistered}),
     {ok, NewMsgId};
 
 %%  FSM received an external event (if Dst = {inst, _}) or the event is not related to FSMs.
 %%  The receiving FSM is responsible for storing the message.
-register_sent_msg(_Src, _Dst, _Msg) ->
+register_sent_msg(_Src, _Dst, _SentMsgId, _SentMsg, _Timestamp) ->
     {error, not_fsm}.
 
 
 %%
-%%  TODO: Description.
+%%  Registers response message of the outgoing call made by FSM.
+%%  This function should be called only if corresponding call to
+%%  `register_sent_msg` returned `{ok, SentMsgId}`.
+%%
+%%  See also: `registered_sync_send`.
 %%
 -spec register_resp_msg(
         Src         :: event_src(),
         Dst         :: event_src(),
-        CallMsgId   :: msg_id(),
-        RespMsg     :: {ref, msg_id()} | {msg, term(), timestamp()}
+        SentMsgId   :: msg_id(),
+        RespMsgId   :: msg_id() | undefined,
+        RespMsg     :: term(),
+        Timestamp   :: timestamp()
     ) ->
         {ok, msg_id()} |
         {error, no_sent}.
 
-register_resp_msg({inst, SrcInstId}, Dst, CallMsgId, RespMsg) ->
+register_resp_msg({inst, SrcInstId}, Dst, SentMsgId, RespMsgId, RespMsg, Timestamp) ->
     MsgRegs = #msg_regs{
         inst_id     = SrcInstId,
         trn_nr      = TrnNr,
         next_msg_nr = NextMsgNr,
         registered  = Registered
     } = erlang:get('eproc_fsm$msg_regs'),
-    case lists:keyfind(CallMsgId, #msg_reg.sent_mid, Registered) of
+    case lists:keyfind(SentMsgId, #msg_reg.sent_mid, Registered) of
         false ->
             {error, no_sent};
         MsgReg ->
-            {NewNextMsgNr, NewMsgId} = case RespMsg of
-                {ref, MsgId}                -> {NextMsgNr,     MsgId};
-                {msg, _MsgBody, _MsgTStamp} -> {NextMsgNr + 1, {SrcInstId, TrnNr, NextMsgNr}}
+            {NewNextMsgNr, NewMsgId} = case RespMsgId of
+                undefined            -> {NextMsgNr + 1, ?MSGID_RECV(SrcInstId, TrnNr, NextMsgNr)};
+                ?MSGID_SENT(I, T, M) -> {NextMsgNr,     ?MSGID_RECV(I,         T,     M        )}
             end,
-            NewMsgReg = MsgReg#msg_reg{dst = Dst, resp_mid = NewMsgId, resp_msg = RespMsg},
-            NewRegistered = lists:keyreplace(CallMsgId, #msg_reg.sent_mid, Registered, NewMsgReg),
+            NewMsgReg = MsgReg#msg_reg{dst = Dst, resp_mid = NewMsgId, resp_msg = RespMsg, resp_time = Timestamp},
+            NewRegistered = lists:keyreplace(SentMsgId, #msg_reg.sent_mid, Registered, NewMsgReg),
             erlang:put('eproc_fsm$msg_regs', MsgRegs#msg_regs{next_msg_nr = NewNextMsgNr, registered = NewRegistered}),
             {ok, NewMsgId}
+    end.
+
+
+%%
+%%  Helper function for registering asynchronous outgoing message.
+%%  This function can be used instead of `register_sent_msg`.
+%%
+registered_send(EventSrc, EventDst, Event, SendFun) ->
+    case register_sent_msg(EventSrc, EventDst, undefined, Event, os:timestamp()) of
+        {ok, SentMsgId} ->
+            ok = SendFun(SentMsgId),
+            {ok, SentMsgId};
+        {error, not_fsm} ->
+            ok = SendFun(undefined),
+            {ok, undefined}
+    end.
+
+
+%%
+%%  Helper function for registering synchronous outgoing messages.
+%%  This function can be used instead of `register_sent_msg` and `register_resp_msg`.
+%%
+registered_sync_send(EventSrc, EventDst, Event, SendFun) ->
+    case register_sent_msg(EventSrc, EventDst, undefined, Event, os:timestamp()) of
+        {ok, SentMsgId} ->
+            {ok, OurRespMsgId} = case SendFun(SentMsgId) of
+                {ok, RespMsg, RespMsgId, UpdatedDst} ->
+                     register_resp_msg(EventSrc, UpdatedDst, SentMsgId, RespMsgId, RespMsg, os:timestamp());
+                {ok, RespMsg} ->
+                     register_resp_msg(EventSrc, EventDst, SentMsgId, undefined, RespMsg, os:timestamp())
+            end,
+            {ok, SentMsgId, OurRespMsgId, RespMsg};
+        {error, not_fsm} ->
+            case SendFun(undefined) of
+                {ok, RespMsg, _RespMsgId, _UpdatedDst} -> ok;
+                {ok, RespMsg} -> ok
+            end,
+            {ok, undefined, undefined, RespMsg}
     end.
 
 
@@ -1509,16 +1522,17 @@ init({FsmRef, StartOpts}) ->
 handle_call({'eproc_fsm$is_online'}, _From, State) ->
     {reply, true, State};
 
-handle_call({'eproc_fsm$sync_send_event', Event, EventSrc}, From, State) ->
+handle_call({'eproc_fsm$sync_send_event', Event, EventSrc, MsgId}, From, State) ->
     Trigger = #trigger_spec{
         type = sync,
         source = EventSrc,
         message = Event,
+        msg_id = MsgId,
         sync = true,
-        reply_fun = fun (R) -> gen_server:reply(From, R), ok end,
+        reply_fun = fun (IID, RMsgId, RMsg) -> gen_server:reply(From, {ok, IID, RMsgId, RMsg}), ok end,
         src_arg = false
     },
-    TransitionFun = fun (Trg, St) -> perform_event_transition(Trg, [], St) end,
+    TransitionFun = fun (Trg, TNr, St) -> perform_event_transition(Trg, TNr, [], St) end,
     case perform_transition(Trigger, TransitionFun, State) of
         {cont, NewState} -> {noreply, NewState};
         {stop, NewState} -> shutdown(NewState);
@@ -1533,13 +1547,13 @@ handle_cast({'eproc_fsm$send_event', Event, EventSrc, MsgId}, State) ->
     Trigger = #trigger_spec{
         type = event,
         source = EventSrc,
-       %msg_id = MsgId,             % TODO
         message = Event,
+        msg_id = MsgId,
         sync = false,
         reply_fun = undefined,
         src_arg = false
     },
-    TransitionFun = fun (Trg, St) -> perform_event_transition(Trg, [], St) end,
+    TransitionFun = fun (Trg, TNr, St) -> perform_event_transition(Trg, TNr, [], St) end,
     case perform_transition(Trigger, TransitionFun, State) of
         {cont, NewState} -> {noreply, NewState};
         {stop, NewState} -> shutdown(NewState);
@@ -1572,7 +1586,7 @@ handle_info(Event, State = #state{attrs = Attrs}) ->
         {handled, NewAttrs} ->
             {noreply, State#state{attrs = NewAttrs}};
         {trigger, NewAttrs, Trigger, AttrAction} ->
-            TransitionFun = fun (Trg, St) -> perform_event_transition(Trg, [AttrAction], St) end,
+            TransitionFun = fun (Trg, TNr, St) -> perform_event_transition(Trg, TNr, [AttrAction], St) end,
             case perform_transition(Trigger, TransitionFun, State#state{attrs = NewAttrs}) of
                 {cont, NewState} -> {noreply, NewState};
                 {stop, NewState} -> shutdown(NewState);
@@ -1583,11 +1597,12 @@ handle_info(Event, State = #state{attrs = Attrs}) ->
                 type = info,
                 source = undefined,
                 message = Event,
+                msg_id = undefined,
                 sync = false,
                 reply_fun = undefined,
                 src_arg = false
             },
-            TransitionFun = fun (Trg, St) -> perform_event_transition(Trg, [], St) end,
+            TransitionFun = fun (Trg, TNr, St) -> perform_event_transition(Trg, TNr, [], St) end,
             case perform_transition(Trigger, TransitionFun, State) of
                 {cont, NewState} -> {noreply, NewState};
                 {stop, NewState} -> shutdown(NewState);
@@ -1674,7 +1689,7 @@ resolve_start_spec(CreateOpts) ->
 resolve_event_src(SendOptions) ->
     case proplists:lookup(source, SendOptions) of
         none ->
-            case {eproc_event_src:source(), eproc_fsm:id()} of
+            case {eproc_event_src:source(), id()} of
                 {undefined, {ok, InstId}}     -> {ok, {inst, InstId}};
                 {undefined, {error, not_fsm}} -> {ok, undefined};
                 {EventSrc,  _}                -> {ok, EventSrc}
@@ -1889,11 +1904,12 @@ start_loaded(Instance, StartOpts, State) ->
                                 type = admin,
                                 source = ResumedUser,
                                 message = resume,
+                                msg_id = undefined,
                                 sync = false,
                                 reply_fun = undefined,
                                 src_arg = false
                             },
-                            TransitionFun = fun (T, S) -> perform_resume_transition(T, ResumeAttempt, S) end,
+                            TransitionFun = fun (_T, _TN, S) -> perform_resume_transition(ResumeAttempt, S) end,
                             case perform_transition(Trigger, TransitionFun, NewState) of
                                 {cont, ResumedState} -> {ok, ResumedState};
                                 {error, Reason}      -> {error, Reason}
@@ -2011,25 +2027,25 @@ perform_transition(Trigger, TransitionFun, State) ->
         type = TriggerType,
         source = TriggerSrc,
         message = TriggerMsg,
-        reply_fun = ReplyFun
+        msg_id = TriggerMsgId
     } = Trigger,
 
-    erlang:put('eproc_fsm$msg_regs', []),
-    erlang:put('eproc_fsm$suspend', false),
     TrnNr = LastTrnNr + 1,
     TrnStart = os:timestamp(),
+    erlang:put('eproc_fsm$msg_regs', #msg_regs{inst_id = InstId, trn_nr = TrnNr, next_msg_nr = 2, registered = []}),
+    erlang:put('eproc_fsm$suspend', false),
     {ok, TrnAttrs} = eproc_fsm_attr:transition_start(InstId, TrnNr, SName, Attrs),
-    {ok, ProcAction, NewSName, NewSData, TransitionReply, Reply, ExplicitAttrActions} = TransitionFun(Trigger, State),
+    {ok, ProcAction, NewSName, NewSData, Reply, ExplicitAttrActions} = TransitionFun(Trigger, TrnNr, State),
     {ok, AttrActions, LastAttrId, NewAttrs} = eproc_fsm_attr:transition_end(InstId, TrnNr, NewSName, TrnAttrs),
     TrnEnd = os:timestamp(),
 
     %%  Collect all messages.
-    {RegisteredMsgs, RegisteredMsgRefs, InstId, TrnNr, _LastMsgNr} = lists:foldr(
-        fun registered_messages/2,
-        {[], [], InstId, TrnNr, 2},
-        erlang:erase('eproc_fsm$msg_regs')
-    ),
-    RequestMsgId = {InstId, TrnNr, 0},
+    #msg_regs{registered = MsgRegs} = erlang:erase('eproc_fsm$msg_regs'),
+    {RegisteredMsgs, RegisteredMsgRefs, InstId} = lists:foldr(fun registered_messages/2, {[], [], InstId}, MsgRegs),
+    RequestMsgId = case TriggerMsgId of
+        undefined            -> ?MSGID_REQUEST(InstId, TrnNr);
+        ?MSGID_SENT(I, T, M) -> ?MSGID_RECV(I, T, M)
+    end,
     RequestMsgRef = #msg_ref{id = RequestMsgId, peer = TriggerSrc},
     RequestMsg = #message{
         id       = RequestMsgId,
@@ -2042,11 +2058,10 @@ perform_transition(Trigger, TransitionFun, State) ->
     {ResponseMsgRef, TransitionMsgs} = case Reply of
         noreply ->
             {undefined, [RequestMsg | RegisteredMsgs]};
-        {reply, ReplyMsg} ->
-            ResponseMsgId = {InstId, TrnNr, 1},
-            ResponseRef = #msg_ref{id = ResponseMsgId, peer = TriggerSrc},
+        {reply, ReplyMsgId, ReplyMsg} ->
+            ResponseRef = #msg_ref{id = ReplyMsgId, peer = TriggerSrc},
             ResponseMsg = #message{
-                id       = ResponseMsgId,
+                id       = ReplyMsgId,
                 sender   = {inst, InstId},
                 receiver = TriggerSrc,
                 resp_to  = RequestMsgId,
@@ -2095,19 +2110,6 @@ perform_transition(Trigger, TransitionFun, State) ->
     },
     {ok, InstId, TrnNr} = eproc_store:add_transition(Store, Transition, TransitionMsgs),
 
-%     RefForReg = fun
-%         (undefined) -> undefined;
-%         (#msg_ref{id = I}) -> {ref, I}
-%     end,
-%     %%  TODO: Review this place: Change response of this message.
-%     {ok, _} = register_out_msg(TriggerSrc, {inst, InstId}, RefForReg(RequestMsgRef), RefForReg(ResponseMsgRef)),
-%
-    %%  Reply, if needed.
-    ok = case TransitionReply of
-        noreply -> ok;
-        {reply, R} -> ReplyFun(R)
-    end,
-
     %% Wait a bit, if needed.
     case Delay of
         undefined -> ok;
@@ -2129,7 +2131,7 @@ perform_transition(Trigger, TransitionFun, State) ->
 %%
 %%  Performs actions specific for the resume-initiated transition.
 %%
-perform_resume_transition(_Trigger, ResumeAttempt, State) ->
+perform_resume_transition(ResumeAttempt, State) ->
     #state{
         sname = SName,
         sdata = SData
@@ -2149,14 +2151,15 @@ perform_resume_transition(_Trigger, ResumeAttempt, State) ->
             end,
             ok = lists:foreach(ScriptExecFun, UpdScript)
     end,
-    {ok, cont, SName, SData, noreply, noreply, []}.
+    {ok, cont, SName, SData, noreply, []}.
 
 
 %%
 %%  Performs actions specific for event-initiated transition.
 %%
-perform_event_transition(Trigger, InitAttrActions, State) ->
+perform_event_transition(Trigger, TrnNr, InitAttrActions, State) ->
     #state{
+        inst_id = InstId,
         module = Module,
         sname = SName,
         sdata = SData
@@ -2166,11 +2169,12 @@ perform_event_transition(Trigger, InitAttrActions, State) ->
         source = TriggerSrc,
         message = TriggerMsg,
         sync = TriggerSync,
-        reply_fun = From,
+        reply_fun = ReplyFun,
         src_arg = TriggerSrcArg
     } = Trigger,
     erlang:put('eproc_fsm$reply', noreply),
 
+    From = {InstId, TrnNr, ReplyFun},
     TriggerArg = case {TriggerSrcArg, TriggerSync} of
         {true,  true}  -> {TriggerType, TriggerSrc, From, TriggerMsg};
         {true,  false} -> {TriggerType, TriggerSrc, TriggerMsg};
@@ -2188,10 +2192,15 @@ perform_event_transition(Trigger, InitAttrActions, State) ->
     true = is_next_state_valid(NewSName),
 
     ExplicitReply = erlang:erase('eproc_fsm$reply'),
-    {ok, Reply} = case {TriggerSync, TransitionReply, ExplicitReply} of
-        {true,  {reply, TR}, noreply    } -> {ok, {reply, TR}};
-        {true,  noreply,     {reply, ER}} -> {ok, {reply, ER}};
-        {false, noreply,     noreply    } -> {ok, noreply}
+    Reply = case {TriggerSync, TransitionReply, ExplicitReply} of
+        {true, {reply, ReplyMsg}, noreply} ->
+            ReplyMsgId = ?MSGID_REPLY(InstId, TrnNr),
+            ReplyFun(InstId, ReplyMsgId, ReplyMsg),
+            {reply, ReplyMsgId, ReplyMsg};
+        {true, noreply, {reply, ReplyMsgId, ReplyMsg}} ->
+            {reply, ReplyMsgId, ReplyMsg};
+        {false, noreply, noreply} ->
+            noreply
     end,
 
     {ProcAction, SDataAfterTrn} = case TrnMode of
@@ -2205,7 +2214,7 @@ perform_event_transition(Trigger, InitAttrActions, State) ->
             {ok, SDataAfterExit} = perform_exit(SName, NewSName, NewSData, State),
             {stop, SDataAfterExit}
     end,
-    {ok, ProcAction, NewSName, SDataAfterTrn, TransitionReply, Reply, InitAttrActions}.
+    {ok, ProcAction, NewSName, SDataAfterTrn, Reply, InitAttrActions}.
 
 
 %%
@@ -2235,62 +2244,53 @@ perform_entry(PrevSName, NextSName, SData, #state{module = Module}) ->
 %%  Resolves messages and references that were registered during
 %%  particular transition.
 %%
-registered_messages(
-        {msg_reg, MsgDst, {ref, MsgId}, undefined},
-        {Msgs, Refs, InstId, TrnNr, MsgNr}
-        ) ->
-    NewRef = #msg_ref{id = MsgId, peer = MsgDst},
-    {Msgs, [NewRef | Refs], InstId, TrnNr, MsgNr};
-
-registered_messages(
-        {msg_reg, MsgDst, {ref, MsgReqId}, {ref, MsgResId}},
-        {Msgs, Refs, InstId, TrnNr, MsgNr}
-        ) ->
-    NewReqRef = #msg_ref{id = MsgReqId, peer = MsgDst},
-    NewResRef = #msg_ref{id = MsgResId, peer = MsgDst},
-    {Msgs, [NewReqRef, NewResRef | Refs], InstId, TrnNr, MsgNr};
-
-registered_messages(
-        {msg_reg, MsgDst, {msg, MsgBody, MsgDate}, undefined},
-        {Msgs, Refs, InstId, TrnNr, MsgNr}
-        ) ->
-    MsgId = {InstId, TrnNr, MsgNr},
-    NewRef = #msg_ref{id = MsgId, peer = MsgDst},
+registered_messages(MsgReg = #msg_reg{resp_mid = undefined}, {Msgs, Refs, InstId}) ->
+    #msg_reg{
+        dst = Destication,
+        sent_mid = SentMsgId,
+        sent_msg = SentMsgBody,
+        sent_time = SentTime
+    } = MsgReg,
+    NewRef = #msg_ref{id = SentMsgId, peer = Destication},
     NewMsg = #message{
-        id       = MsgId,
+        id       = SentMsgId,
         sender   = {inst, InstId},
-        receiver = MsgDst,
+        receiver = Destication,
         resp_to  = undefined,
-        date     = MsgDate,
-        body     = MsgBody
+        date     = SentTime,
+        body     = SentMsgBody
     },
-    {[NewMsg | Msgs], [NewRef | Refs], InstId, TrnNr, MsgNr + 1};
+    {[NewMsg | Msgs], [NewRef | Refs], InstId};
 
-registered_messages(
-        {msg_reg, MsgDst, {msg, MsgReqBody, MsgReqDate}, {msg, MsgResBody, MsgResDate}},
-        {Msgs, Refs, InstId, TrnNr, MsgNr}
-        ) ->
-    MsgReqId = {InstId, TrnNr, MsgNr},
-    MsgResId = {InstId, TrnNr, MsgNr + 1},
-    NewReqRef = #msg_ref{id = MsgReqId, peer = MsgDst},
-    NewResRef = #msg_ref{id = MsgResId, peer = MsgDst},
+registered_messages(MsgReg, {Msgs, Refs, InstId}) ->
+    #msg_reg{
+        dst = Destication,
+        sent_mid  = SentMsgId,
+        sent_msg  = SentMsgBody,
+        sent_time = SentTime,
+        resp_mid  = RespMsgId,
+        resp_msg  = RespMsgBody,
+        resp_time = RespTime
+    } = MsgReg,
+    NewReqRef = #msg_ref{id = SentMsgId, peer = Destication},
+    NewResRef = #msg_ref{id = RespMsgId, peer = Destication},
     NewReqMsg = #message{
-        id       = MsgReqId,
+        id       = SentMsgId,
         sender   = {inst, InstId},
-        receiver = MsgDst,
+        receiver = Destication,
         resp_to  = undefined,
-        date     = MsgReqDate,
-        body     = MsgReqBody
+        date     = SentTime,
+        body     = SentMsgBody
     },
     NewResMsg = #message{
-        id       = MsgResId,
-        sender   = MsgDst,
+        id       = RespMsgId,
+        sender   = Destication,
         receiver = {inst, InstId},
-        resp_to  = MsgReqId,
-        date     = MsgResDate,
-        body     = MsgResBody
+        resp_to  = SentMsgId,
+        date     = RespTime,
+        body     = RespMsgBody
     },
-    {[NewReqMsg, NewResMsg | Msgs], [NewReqRef, NewResRef | Refs], InstId, TrnNr, MsgNr + 2}.
+    {[NewReqMsg, NewResMsg | Msgs], [NewReqRef, NewResRef | Refs], InstId}.
 
 
 %%

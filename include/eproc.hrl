@@ -51,7 +51,7 @@
 -type store_ref()       :: eproc_store:ref().
 -type registry_ref()    :: eproc_registry:ref().
 -type trn_nr()          :: integer().
--type msg_id()          :: term().
+-type msg_id()          :: {inst_id(), trn_nr(), integer(), (sent | recv)}.
 -type party()           :: {inst, inst_id()} | {ext, term()}.
 -type scope()           :: list().
 -type script()          :: [(Call :: mfargs() | {Response :: term(), Call :: mfargs()})].
@@ -144,6 +144,7 @@
     type            :: trigger_type(),          %% Type of the trigger.
     source          :: event_src(),             %% Party, initiated the trigger, event source, admin name.
     message         :: term(),                  %% Event message / body.
+    msg_id          :: undefined | msg_id(),    %% Event message id, optional.
     sync = false    :: boolean(),               %% True, if the trigger expects an immediate response.
     reply_fun       :: undefined | function(),  %% Function used to sent response if the trigger is sync.
     src_arg         :: boolean()                %% If set to true, event source will be passed to an FSM implementation.

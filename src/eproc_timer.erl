@@ -42,7 +42,8 @@
 -record(data, {
     start,
     delay,
-    event
+    event_msg,
+    event_mid
 }).
 
 %%
@@ -63,28 +64,25 @@
 %%
 set(Name, After, Event, Scope) ->
     Now = os:timestamp(),
-    {ok, registered} = eproc_fsm:register_message({inst, eproc_fsm:id()}, {timer, Name}, {msg, Event, Now}, undefined),
-    ok = eproc_fsm_attr:action(?MODULE, Name, {timer, After, Event}, Scope).
+    {ok, InstId} = eproc_fsm:id(),
+    Src = {inst, InstId},
+    Dst = {timer, Name},
+    {ok, EventMsgId} = eproc_fsm:register_sent_msg(Src, Dst, undefined, Event, Now),
+    ok = eproc_fsm_attr:action(?MODULE, Name, {timer, After, EventMsgId, Event}, Scope).
 
 
 %%
 %%
 %%
 set(After, Event, Scope) ->
-    Now = os:timestamp(),
-    Name = undefined,
-    {ok, registered} = eproc_fsm:register_message({inst, eproc_fsm:id()}, {timer, Name}, {msg, Event, Now}, undefined),
-    ok = eproc_fsm_attr:action(?MODULE, Name, {timer, After, Event}, Scope).
+    set(undefined, After, Event, Scope).
 
 
 %%
 %%
 %%
 set(After, Event) ->
-    Now = os:timestamp(),
-    Name = undefined,
-    {ok, registered} = eproc_fsm:register_message({inst, eproc_fsm:id()}, {timer, Name}, {msg, Event, Now}, undefined),
-    ok = eproc_fsm_attr:action(?MODULE, Name, {timer, After, Event}, next).
+    set(undefined, After, Event, next).
 
 
 %%
@@ -161,8 +159,13 @@ init(ActiveAttrs) ->
 %%
 %%  Attribute created.
 %%
-handle_created(#attribute{attr_id = AttrId}, {timer, After, Event}, _Scope) ->
-    Data = #data{start = os:timestamp(), delay = After, event = Event},
+handle_created(#attribute{attr_id = AttrId}, {timer, After, EventMsgId, Event}, _Scope) ->
+    Data = #data{
+        start = os:timestamp(),
+        delay = After,
+        event_msg = Event,
+        event_mid = EventMsgId
+    },
     {ok, State} = start_timer(AttrId, Data),
     {create, Data, State, false};
 
@@ -173,9 +176,14 @@ handle_created(_Attribute, {timer, remove}, _Scope) ->
 %%
 %%  Attribute updated by user.
 %%
-handle_updated(Attribute, AttrState, {timer, After, Event}, _Scope) ->
+handle_updated(Attribute, AttrState, {timer, After, EventMsgId, Event}, _Scope) ->
     #attribute{attr_id = AttrId} = Attribute,
-    NewData = #data{start = os:timestamp(), delay = After, event = Event},
+    NewData = #data{
+        start = os:timestamp(),
+        delay = After,
+        event_msg = Event,
+        event_mid = EventMsgId
+    },
     ok = stop_timer(AttrState),
     {ok, NewState} = start_timer(AttrId, NewData),
     {update, NewData, NewState, false};
@@ -194,7 +202,7 @@ handle_removed(_Attribute, State) ->
 
 
 %%
-%%
+%%  Handle timer events.
 %%
 handle_event(Attribute, _State, long_delay) ->
     #attribute{
@@ -207,12 +215,13 @@ handle_event(Attribute, _State, long_delay) ->
 handle_event(Attribute, _State, fired) ->
     #attribute{
         name = Name,
-        data = #data{event = Event}
+        data = #data{event_msg = Event, event_mid = EventMsgId}
     } = Attribute,
     Trigger = #trigger_spec{
         type = timer,
         source = Name,
         message = Event,
+        msg_id = EventMsgId,
         sync = false,
         reply_fun = undefined,
         src_arg = true

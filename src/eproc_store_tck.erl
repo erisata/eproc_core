@@ -14,6 +14,8 @@
 %| limitations under the License.
 %\--------------------------------------------------------------------
 
+%%  TODO: Resolve missing Dst instance id for sent messages.
+
 %%
 %%  "Technology Compatibility Kit" for `eproc_store` implementations.
 %%  This module contains testcases, that should be valid for all the
