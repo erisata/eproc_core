@@ -1381,6 +1381,8 @@ reply(To, Reply) ->
 %%
 %%  TODO: Description.
 %%
+%%  TODO: Add functions: register_sent(..., Fun), register_sync_sent(..., Fun).
+%%
 -spec register_sent_msg(
         Src    :: event_src(),
         Dst    :: event_src(),
