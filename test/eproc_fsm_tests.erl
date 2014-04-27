@@ -21,6 +21,7 @@
 -compile([{parse_transform, lager_transform}]).
 -define(DEBUG, true).
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("hamcrest/include/hamcrest.hrl").
 -include("eproc.hrl").
 
 
@@ -1622,10 +1623,84 @@ register_outgoing_message_test() ->
 
 
 %%
-%%  TODO: Check if `register_message/4` works in the case of incoming messages (received by FSM).
+%%  Check if `register_*_msg/*` works in the case of incoming messages.
 %%
 register_incoming_message_test() ->
-    ?assert(todo).
+    ok = meck:new(eproc_store, []),
+    ok = meck:new(eproc_fsm__mock, [non_strict]),
+    ok = meck:expect(eproc_store, load_instance, fun
+        (store, {inst, 100}) ->
+            {ok, #instance{
+                id = 100, group = 200, name = name, module = eproc_fsm__mock,
+                args = {}, opts = [], status = running, created = erlang:now(),
+                state = #inst_state{
+                    inst_id = 100, trn_nr = 1, sname = [sa],
+                    sdata = {state, 5}, attr_last_id = 1, attrs_active = []
+                }
+            }}
+    end),
+    ok = meck:expect(eproc_store, add_transition, fun
+        (store, Transition = #transition{inst_id = InstId, number = TrnNr = 2}, Messages) ->
+            #transition{
+                trigger_type = sync,
+                trigger_msg  = #msg_ref{id = {InstId, TrnNr, 0, recv}, peer = {test, test}},
+                trigger_resp = #msg_ref{id = {InstId, TrnNr, 1, sent}, peer = {test, test}},
+                trn_messages = [],
+                inst_status  = running
+            } = Transition,
+            ?assertEqual(1, length([ ok || #message{body = get} <- Messages ])),
+            ?assertEqual(1, length([ ok || #message{body = res} <- Messages ])),
+            ?assertEqual(2, length(Messages)),
+            {ok, InstId, TrnNr};
+        (store, Transition = #transition{inst_id = InstId, number = TrnNr = 3}, Messages) ->
+            #transition{
+                trigger_type = sync,
+                trigger_msg  = #msg_ref{id = {200,    15,    20, recv}, peer = {inst, 200}},
+                trigger_resp = #msg_ref{id = {InstId, TrnNr, 1,  sent}, peer = {inst, 200}},
+                trn_messages = [],
+                inst_status  = running
+            } = Transition,
+            ?assertEqual(1, length([ ok || #message{body = get} <- Messages ])),
+            ?assertEqual(1, length([ ok || #message{body = res} <- Messages ])),
+            ?assertEqual(2, length(Messages)),
+            {ok, InstId, TrnNr};
+        (store, Transition = #transition{inst_id = InstId, number = TrnNr = 4}, Messages) ->
+            #transition{
+                trigger_type = event,
+                trigger_msg  = #msg_ref{id = {200, 15, 21, recv}, peer = {inst, 200}},
+                trigger_resp = undefined,
+                trn_messages = [],
+                inst_status  = running
+            } = Transition,
+            ?assertEqual(1, length([ ok || #message{body = set} <- Messages ])),
+            ?assertEqual(1, length(Messages)),
+            {ok, InstId, TrnNr}
+    end),
+    ok = meck:expect(eproc_fsm__mock, init, 2, ok),
+    ok = meck:expect(eproc_fsm__mock, code_change, 4, {ok, [sa], {state, 5}}),
+    ok = meck:expect(eproc_fsm__mock, handle_state, fun
+        ([sa], {sync, _, get}, St) -> {reply_same, res, St};
+        ([sa], {event, set},   St) -> {next_state, [sb], St};
+        ([sa], {exit,  [sb]},  St) -> {ok, St};
+        ([sb], {entry, [sa]},  St) -> {ok, St}
+    end),
+    %% Execute the test.
+    {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
+    ?assert(eproc_fsm:is_online(PID)),
+    ?assertEqual(res, eproc_fsm:sync_send_event(PID, get, [{source, {test, test}}])),
+    erlang:put('eproc_fsm$msg_regs', {msg_regs, 200, 15, 20, []}),
+    ?assertEqual(res, eproc_fsm:sync_send_event(PID, get, [{source, {inst, 200}}])),
+    ?assertEqual(ok,  eproc_fsm:send_event(PID, set, [{source, {inst, 200}}])),
+    %%  Proceed with assertions.
+    ?assertEqual(true, eproc_fsm:is_online(PID)),
+    {msg_regs, 200, 15, 22, Regs} = erlang:erase('eproc_fsm$msg_regs'),
+    ?assertEqual(2, length(Regs)),
+    ?assertEqual(1, length([ ok || {msg_reg, {inst, 100},       {200, 15, 20, sent}, get, {_, _, _}, {100, 3, 1, recv}, res, {_, _, _}} <- Regs])),
+    ?assertEqual(1, length([ ok || {msg_reg, {inst, undefined}, {200, 15, 21, sent}, set, {_, _, _}, undefined, undefined, undefined}   <- Regs])),
+    ?assertEqual(3, meck:num_calls(eproc_store, add_transition, '_')),
+    ?assert(meck:validate([eproc_store, eproc_fsm__mock])),
+    ok = meck:unload([eproc_store, eproc_fsm__mock]),
+    ok = unlink_kill(PID).
 
 
 %%
