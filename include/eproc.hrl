@@ -51,7 +51,8 @@
 -type store_ref()       :: eproc_store:ref().
 -type registry_ref()    :: eproc_registry:ref().
 -type trn_nr()          :: integer().
--type msg_id()          :: {inst_id(), trn_nr(), integer(), (sent | recv)}.
+-type msg_id()          :: {inst_id(), trn_nr(), integer()}.                %%  Message Id.
+-type msg_cid()         :: {inst_id(), trn_nr(), integer(), (sent | recv)}. %%  Message Copy Id.
 -type party()           :: {inst, inst_id()} | {ext, term()}.
 -type scope()           :: list().
 -type script()          :: [(Call :: mfargs() | {Response :: term(), Call :: mfargs()})].
@@ -91,7 +92,7 @@
 %%  transition.
 %%
 -record(msg_ref, {
-    id          :: msg_id(),                    %% Unique identifier.
+    cid         :: msg_cid(),                   %% ID of the message copy.
     peer        :: event_src()                  %% Sender or receiver of the message.
 }).
 
@@ -101,10 +102,10 @@
 %%  At least one of them will be an FSM instance.
 %%
 -record(message, {
-    id          :: msg_id(),                    %% Unique identifier.
+    id          :: msg_cid() | msg_id(),        %% Unique identifier.
     sender      :: event_src(),                 %% Source.
     receiver    :: event_src(),                 %% Destination.
-    resp_to     :: msg_id() | undefined,        %% Indicates a request message, if thats a response to it.
+    resp_to     :: msg_cid() | undefined,       %% Indicates a request message, if thats a response to it.
     date        :: timestamp(),                 %% Time, when message was sent.
     body        :: term()                       %% Actual message.
 }).
@@ -144,7 +145,7 @@
     type            :: trigger_type(),          %% Type of the trigger.
     source          :: event_src(),             %% Party, initiated the trigger, event source, admin name.
     message         :: term(),                  %% Event message / body.
-    msg_id          :: undefined | msg_id(),    %% Event message id, optional.
+    msg_cid         :: undefined | msg_cid(),    %% Event message id, optional.
     sync = false    :: boolean(),               %% True, if the trigger expects an immediate response.
     reply_fun       :: undefined | function(),  %% Function used to sent response if the trigger is sync.
     src_arg         :: boolean()                %% If set to true, event source will be passed to an FSM implementation.

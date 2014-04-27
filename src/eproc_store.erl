@@ -22,7 +22,13 @@
 %%
 -module(eproc_store).
 -compile([{parse_transform, lager_transform}]).
--export([ref/0, ref/2, supervisor_child_specs/1, get_instance/3]).
+-export([
+    ref/0, ref/2,
+    supervisor_child_specs/1,
+    get_instance/3,
+    get_transition/4,
+    get_message/3
+]).
 -export([
     add_instance/2,
     add_transition/3,
@@ -78,6 +84,12 @@
 %%    * suspend FSM, if `inst_state = suspended` and `interrupt = #interrupt{reason = R}`.
 %%    * resume FSM, if instance state was `resuming` and new `inst_state = running`.
 %%    * Handle attribute actions.
+%%
+%%  NOTE: For some of messages, a destination instance id will be unknown.
+%%  These partially resolved destinations are in form of `{inst, undefined}`
+%%  and are stored in messages and transition message references.
+%%  A store implementation needs to resolve these message destinations
+%%  after the message is stored, for example on first read (or each read).
 %%
 -callback add_transition(
         StoreArgs   :: term(),
@@ -172,7 +184,14 @@
 
 
 %%
-%%  Get instance data.
+%%  Get instance data by FSM reference (id or name).
+%%
+%%  The parameter Query can have several values:
+%%
+%%  `header`
+%%  :   Only main instance data is returned.
+%%  `current`
+%%  :   Returns FSM header information with the current state attached.
 %%
 -callback get_instance(
         StoreArgs   :: term(),
@@ -180,6 +199,34 @@
         Query       :: header | current
     ) ->
         {ok, #instance{}} |
+        {error, Reason :: term()}.
+
+
+%%
+%%  Get particular FSM transition.
+%%  Any partial message destinations should be resolved when returing message references.
+%%
+-callback get_transition(
+        StoreArgs   :: term(),
+        FsmRef      :: fsm_ref(),
+        TrnNr       :: trn_nr(),
+        Query       :: all
+    ) ->
+        {ok, #transition{}} |
+        {error, Reason :: term()}.
+
+
+%%
+%%  Get particular message by message id or message copy id.
+%%  The returned message should contain message id instead of message copy id.
+%%  Partial message destination should be resolved when returing the message.
+%%
+-callback get_message(
+        StoreArgs   :: term(),
+        MsgId       :: msg_id() | msg_cid(),
+        Query       :: all
+    ) ->
+        {ok, #message{}} |
         {error, Reason :: term()}.
 
 
@@ -220,12 +267,28 @@ ref(Module, Args) ->
 
 
 %%
-%%  This function returns an instance with single (or zero) transitions.
+%%  This function returns an instance, possibly at some state.
 %%  If instance not found or other error returns {error, Reason}.
 %%
-get_instance(Store, InstId, Query) ->
+get_instance(Store, FsmRef, Query) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:get_instance(StoreArgs, InstId, Query).
+    StoreMod:get_instance(StoreArgs, FsmRef, Query).
+
+
+%%
+%%  This function returns a transition of the specified FSM.
+%%
+get_transition(Store, FsmRef, TrnNr, Query) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
+    StoreMod:get_transition(StoreArgs, FsmRef, TrnNr, Query).
+
+
+%%
+%%  This function returns a message by message id or message copy id.
+%%
+get_message(Store, MsgId, Query) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
+    StoreMod:get_message(StoreArgs, MsgId, Query).
 
 
 

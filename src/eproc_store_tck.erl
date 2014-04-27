@@ -30,12 +30,14 @@
     eproc_store_core_test_named_instance/1,
     eproc_store_core_test_suspend_resume/1,
     eproc_store_core_test_add_transition/1,
+    eproc_store_core_test_resolve_msg_dst/1,
     eproc_store_core_test_load_running/1,
     eproc_store_core_test_attrs/1,
     eproc_store_router_test_attrs/1,
     eproc_store_meta_test_attrs/1
 ]).
 -include_lib("common_test/include/ct.hrl").
+-include_lib("hamcrest/include/hamcrest.hrl").
 -include("eproc.hrl").
 
 
@@ -47,6 +49,7 @@ testcases(core) -> [
     eproc_store_core_test_named_instance,
     eproc_store_core_test_suspend_resume,
     eproc_store_core_test_add_transition,
+    eproc_store_core_test_resolve_msg_dst,
     eproc_store_core_test_load_running,
     eproc_store_core_test_attrs
     ];
@@ -281,9 +284,9 @@ eproc_store_core_test_add_transition(Config) ->
         timestamp = os:timestamp(),
         duration = 13,
         trigger_type = event,
-        trigger_msg = #msg_ref{id = 1011, peer = {connector, some}},
-        trigger_resp = #msg_ref{id = 1012, peer = {connector, some}},
-        trn_messages = [#msg_ref{id = 1013, peer = {connector, some}}],
+        trigger_msg = #msg_ref{cid = 1011, peer = {connector, some}},
+        trigger_resp = #msg_ref{cid = 1012, peer = {connector, some}},
+        trn_messages = [#msg_ref{cid = 1013, peer = {connector, some}}],
         attr_last_id = 1,
         attr_actions = [#attr_action{module = m, attr_id = 1, action = {create, undefined, [], some}}],
         inst_status = running,
@@ -305,7 +308,7 @@ eproc_store_core_test_add_transition(Config) ->
         number = 2,
         sname = [s2],
         sdata = d2,
-        trigger_msg = #msg_ref{id = 1021, peer = {connector, some}},
+        trigger_msg = #msg_ref{cid = 1021, peer = {connector, some}},
         trigger_resp = undefined,
         trn_messages = [],
         attr_actions = []
@@ -324,7 +327,7 @@ eproc_store_core_test_add_transition(Config) ->
         number = 3,
         sname = [s3],
         sdata = d3,
-        trigger_msg = #msg_ref{id = 1031, peer = {connector, some}},
+        trigger_msg = #msg_ref{cid = 1031, peer = {connector, some}},
         trigger_resp = undefined,
         trn_messages = [],
         attr_actions = [],
@@ -355,7 +358,7 @@ eproc_store_core_test_add_transition(Config) ->
         number = 4,
         sname = [s4],
         sdata = d4,
-        trigger_msg = #msg_ref{id = 1041, peer = {connector, some}},
+        trigger_msg = #msg_ref{cid = 1041, peer = {connector, some}},
         trigger_resp = undefined,
         trn_messages = [],
         attr_actions = [],
@@ -376,7 +379,7 @@ eproc_store_core_test_add_transition(Config) ->
         number = 5,
         sname = [s5],
         sdata = d5,
-        trigger_msg = #msg_ref{id = 1051, peer = {connector, some}},
+        trigger_msg = #msg_ref{cid = 1051, peer = {connector, some}},
         trigger_resp = undefined,
         trn_messages = [],
         attr_actions = [],
@@ -397,7 +400,7 @@ eproc_store_core_test_add_transition(Config) ->
         number = 6,
         sname = [s6],
         sdata = d6,
-        trigger_msg = #msg_ref{id = 1061, peer = {connector, some}},
+        trigger_msg = #msg_ref{cid = 1061, peer = {connector, some}},
         trigger_resp = undefined,
         trn_messages = [],
         attr_actions = [],
@@ -412,6 +415,66 @@ eproc_store_core_test_add_transition(Config) ->
         attr_last_id = 1, attrs_active = [_],
         interrupt = undefined
     }}} = eproc_store:get_instance(Store, {inst, IID1}, current),
+    ok.
+
+
+%%
+%%  Check if message destination is resolved in the cases, when it was
+%%  left partially resolved at runtime. This test checks the following
+%%  store functions:
+%%
+%%    * `get_transition/4`,
+%%    * `get_message/3`.
+%%
+eproc_store_core_test_resolve_msg_dst(Config) ->
+    Store = store(Config),
+    %%  Add instances.
+    Inst = inst_value(),
+    {ok, IID1} = eproc_store:add_instance(Store, Inst),
+    {ok, IID2} = eproc_store:add_instance(Store, Inst),
+    %%  Add transitions.
+    Msg1r = #message{id = {IID1, 1, 0, recv}, sender = {ext, some},  receiver = {inst, IID1},      resp_to = undefined, date = os:timestamp(), body = m1},
+    Msg2s = #message{id = {IID1, 1, 2, sent}, sender = {inst, IID1}, receiver = {inst, undefined}, resp_to = undefined, date = os:timestamp(), body = m2},
+    Msg2r = #message{id = {IID1, 1, 2, recv}, sender = {inst, IID1}, receiver = {inst, IID2},      resp_to = undefined, date = os:timestamp(), body = m2},
+    Trn1 = #transition{
+        inst_id = IID1,
+        number = 1,
+        sname = [s1],
+        sdata = d1,
+        timestamp = os:timestamp(),
+        duration = 13,
+        trigger_type = event,
+        trigger_msg = #msg_ref{cid = {IID1, 1, 0, recv}, peer = {ext, some}},
+        trigger_resp = undefined,
+        trn_messages = [#msg_ref{cid = {IID1, 1, 2, sent}, peer = {inst, undefined}}],
+        attr_last_id = 1,
+        attr_actions = [],
+        inst_status = running,
+        interrupts = undefined
+    },
+    Trn1Fix = Trn1#transition{
+        trn_messages = [#msg_ref{cid = {IID1, 1, 2, sent}, peer = {inst, IID2}}]
+    },
+    Trn2 = Trn1#transition{
+        inst_id = IID2,
+        trigger_msg = #msg_ref{cid = {IID1, 1, 2, recv}, peer = {inst, IID1}},
+        trn_messages = []
+    },
+    {ok, IID1, 1} = eproc_store:add_transition(Store, Trn1, [Msg1r, Msg2s]),
+    {ok, IID2, 1} = eproc_store:add_transition(Store, Trn2, [Msg2r]),
+    %%  Get the stored data.
+    Msg1 = Msg1r#message{id = {IID1, 1, 0}},
+    Msg2 = Msg2r#message{id = {IID1, 1, 2}}, %% Receiver = {inst, IID2}
+    ?assertThat(eproc_store:get_message(Store, {IID1, 1, 0      }, all), is({ok, Msg1})),
+    ?assertThat(eproc_store:get_message(Store, {IID1, 1, 0, sent}, all), is({ok, Msg1})),
+    ?assertThat(eproc_store:get_message(Store, {IID1, 1, 0, recv}, all), is({ok, Msg1})),
+    ?assertThat(eproc_store:get_message(Store, {IID1, 1, 2      }, all), is({ok, Msg2})),
+    ?assertThat(eproc_store:get_message(Store, {IID1, 1, 2, sent}, all), is({ok, Msg2})),
+    ?assertThat(eproc_store:get_message(Store, {IID1, 1, 2, recv}, all), is({ok, Msg2})),
+    ?assertThat(eproc_store:get_message(Store, {IID1, 1, 1      }, all), is({error, not_found})),
+    ?assertThat(eproc_store:get_transition(Store, {inst, IID1}, 1, all), is({ok, Trn1Fix})),
+    ?assertThat(eproc_store:get_transition(Store, {inst, IID2}, 1, all), is({ok, Trn2})),
+    ?assertThat(eproc_store:get_transition(Store, {inst, IID2}, 2, all), is({error, not_found})),
     ok.
 
 
@@ -459,7 +522,7 @@ eproc_store_core_test_attrs(Config) ->
     Trn1 = #transition{
         inst_id = IID1, number = 1, sname = [s1], sdata = d1,
         timestamp = os:timestamp(), duration = 13, trigger_type = event,
-        trigger_msg = #msg_ref{id = 1011, peer = {connector, some}},
+        trigger_msg = #msg_ref{cid = 1011, peer = {connector, some}},
         trigger_resp = undefined,
         trn_messages = [],
         attr_last_id = 1,
@@ -496,7 +559,7 @@ eproc_store_core_test_attrs(Config) ->
         number = 2,
         sname = [s2],
         sdata = d2,
-        trigger_msg = #msg_ref{id = 1021, peer = {connector, some}},
+        trigger_msg = #msg_ref{cid = 1021, peer = {connector, some}},
         trigger_resp = undefined,
         trn_messages = [],
         attr_actions = [

@@ -26,7 +26,9 @@
 -export([start_link/1]).
 -export([
     supervisor_child_specs/1,
-    get_instance/3
+    get_instance/3,
+    get_transition/4,
+    get_message/3
 ]).
 -export([
     add_instance/2,
@@ -319,28 +321,89 @@ get_instance(_StoreArgs, FsmRef, Query) ->
     read_instance(FsmRef, Query).
 
 
+%%
+%%
+%%
+get_transition(_StoreArgs, FsmRef, TrnNr, all) ->
+    ResolveMsgRefs = fun
+        (MsgRef = #msg_ref{cid = {I, T, M, sent}, peer = {inst, undefined}}) ->
+            case ets:lookup(?MSG_TBL, {I, T, M, recv}) of
+                [] ->
+                    MsgRef;
+                [#message{receiver = NewPeer}] ->
+                    MsgRef#msg_ref{peer = NewPeer}
+            end;
+        (MsgRef) ->
+            MsgRef
+    end,
+    case resolve_inst_id(FsmRef) of
+        {ok, InstId} ->
+            case ets:match_object(?TRN_TBL, #transition{inst_id = InstId, number = TrnNr, _ = '_'}) of
+                [] ->
+                    {error, not_found};
+                [Transition = #transition{trn_messages = TrnMessages}] ->
+                    NewTrnMessages = lists:map(ResolveMsgRefs, TrnMessages),
+                    {ok, Transition#transition{trn_messages = NewTrnMessages}}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+
+%%
+%%
+%%
+get_message(_StoreArgs, MsgId, all) ->
+    {InstId, TrnNr, MsgNr} = case MsgId of
+        {I, T, M}    -> {I, T, M};
+        {I, T, M, _} -> {I, T, M}
+    end,
+    case ets:lookup(?MSG_TBL, {InstId, TrnNr, MsgNr, recv}) of
+        [] ->
+            case ets:lookup(?MSG_TBL, {InstId, TrnNr, MsgNr, sent}) of
+                [] ->
+                    {error, not_found};
+                [Message] ->
+                    {ok, Message#message{id = {I, T, M}}}
+            end;
+        [Message] ->
+            {ok, Message#message{id = {I, T, M}}}
+    end.
+
 
 %% =============================================================================
 %%  Internal functions.
 %% =============================================================================
 
 %%
-%%  Reads instance record.
+%%  Resolve Instance Id from FSM Reference.
 %%
-read_instance({inst, InstId}, Query) ->
-    case ets:lookup(?INST_TBL, InstId) of
-        [] ->
-            {error, not_found};
-        [Instance] ->
-            read_instance_data(Instance, Query)
-    end;
+resolve_inst_id({inst, InstId}) ->
+    {ok, InstId};
 
-read_instance({name, Name}, Query) ->
+resolve_inst_id({name, Name}) ->
     case ets:lookup(?NAME_TBL, Name) of
         [] ->
             {error, not_found};
         [#inst_name{inst_id = InstId}] ->
-            read_instance({inst, InstId}, Query)
+            {ok, InstId}
+    end.
+
+
+%%
+%%  Reads instance record.
+%%
+read_instance(FsmRef, Query) ->
+    case resolve_inst_id(FsmRef) of
+        {ok, InstId} ->
+            case ets:lookup(?INST_TBL, InstId) of
+                [] ->
+                    {error, not_found};
+                [Instance] ->
+                    read_instance_data(Instance, Query)
+            end;
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 

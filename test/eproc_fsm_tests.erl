@@ -482,7 +482,7 @@ send_event_final_state_from_init_test() ->
                 timestamp    = {_, _, _},
                 duration     = Duration,
                 trigger_type = event,
-                trigger_msg  = #msg_ref{id = {100, 1, 0, recv}, peer = {test, test}},
+                trigger_msg  = #msg_ref{cid = {100, 1, 0, recv}, peer = {test, test}},
                 trigger_resp = undefined,
                 trn_messages = [],
                 attr_last_id = 0,
@@ -526,7 +526,7 @@ send_event_final_state_from_ordinary_test() ->
         (store, Transition = #transition{inst_id = InstId, number = TrnNr = 2}, [#message{}]) ->
             #transition{
                 trigger_type = event,
-                trigger_msg  = #msg_ref{id = {InstId, TrnNr, 0, recv}, peer = {test, test}},
+                trigger_msg  = #msg_ref{cid = {InstId, TrnNr, 0, recv}, peer = {test, test}},
                 trigger_resp = undefined,
                 inst_status  = completed
             } = Transition,
@@ -567,7 +567,7 @@ send_event_next_state_from_init_test() ->
         (store, Transition = #transition{inst_id = InstId, number = TrnNr = 1}, [#message{}]) ->
             #transition{
                 trigger_type = event,
-                trigger_msg  = #msg_ref{id = {InstId, TrnNr, 0, recv}, peer = {test, test}},
+                trigger_msg  = #msg_ref{cid = {InstId, TrnNr, 0, recv}, peer = {test, test}},
                 trigger_resp = undefined,
                 inst_status  = running
             } = Transition,
@@ -611,7 +611,7 @@ send_event_next_state_from_ordinary_test() ->
         (store, Transition = #transition{inst_id = InstId, number = TrnNr = 2}, [#message{}]) ->
             #transition{
                 trigger_type = event,
-                trigger_msg  = #msg_ref{id = {InstId, TrnNr, 0, recv}, peer = {test, test}},
+                trigger_msg  = #msg_ref{cid = {InstId, TrnNr, 0, recv}, peer = {test, test}},
                 trigger_resp = undefined,
                 inst_status  = running
             } = Transition,
@@ -694,7 +694,7 @@ send_event_same_state_from_ordinary_test() ->
         (store, Transition = #transition{inst_id = InstId, number = TrnNr = 2}, [#message{}]) ->
             #transition{
                 trigger_type = event,
-                trigger_msg  = #msg_ref{id = {InstId, TrnNr, 0, recv}, peer = {test, test}},
+                trigger_msg  = #msg_ref{cid = {InstId, TrnNr, 0, recv}, peer = {test, test}},
                 trigger_resp = undefined,
                 inst_status  = running
             } = Transition,
@@ -820,7 +820,7 @@ send_event_handle_attrs_test() ->
         (store, Transition = #transition{inst_id = InstId, number = TrnNr = 2}, [#message{}]) ->
             #transition{
                 trigger_type = event,
-                trigger_msg  = #msg_ref{id = {InstId, TrnNr, 0, recv}, peer = {test, test}},
+                trigger_msg  = #msg_ref{cid = {InstId, TrnNr, 0, recv}, peer = {test, test}},
                 trigger_resp = undefined,
                 inst_status  = running
             } = Transition,
@@ -1074,8 +1074,8 @@ sync_send_event_final_state_from_ordinary_test() ->
         (store, Transition = #transition{inst_id = InstId, number = TrnNr = 2}, [#message{}, #message{}]) ->
             #transition{
                 trigger_type = sync,
-                trigger_msg  = #msg_ref{id = {InstId, TrnNr, 0, recv}, peer = {test, test}},
-                trigger_resp = #msg_ref{id = {InstId, TrnNr, 1, sent}, peer = {test, test}},
+                trigger_msg  = #msg_ref{cid = {InstId, TrnNr, 0, recv}, peer = {test, test}},
+                trigger_resp = #msg_ref{cid = {InstId, TrnNr, 1, sent}, peer = {test, test}},
                 inst_status  = completed
             } = Transition,
             {ok, InstId, TrnNr}
@@ -1120,8 +1120,8 @@ sync_send_event_next_state_from_ordinary_test() ->
         (store, Transition = #transition{inst_id = InstId, number = TrnNr = 2}, [#message{}, #message{}]) ->
             #transition{
                 trigger_type = sync,
-                trigger_msg  = #msg_ref{id = {InstId, TrnNr, 0, recv}, peer = {test, test}},
-                trigger_resp = #msg_ref{id = {InstId, TrnNr, 1, sent}, peer = {test, test}},
+                trigger_msg  = #msg_ref{cid = {InstId, TrnNr, 0, recv}, peer = {test, test}},
+                trigger_resp = #msg_ref{cid = {InstId, TrnNr, 1, sent}, peer = {test, test}},
                 inst_status  = running
             } = Transition,
             {ok, InstId, TrnNr}
@@ -1165,8 +1165,8 @@ sync_send_event_same_state_from_ordinary_test() ->
         (store, Transition = #transition{inst_id = InstId, number = TrnNr = 2}, [#message{}, #message{}]) ->
             #transition{
                 trigger_type = sync,
-                trigger_msg  = #msg_ref{id = {InstId, TrnNr, 0, recv}, peer = {test, test}},
-                trigger_resp = #msg_ref{id = {InstId, TrnNr, 1, sent}, peer = {test, test}},
+                trigger_msg  = #msg_ref{cid = {InstId, TrnNr, 0, recv}, peer = {test, test}},
+                trigger_resp = #msg_ref{cid = {InstId, TrnNr, 1, sent}, peer = {test, test}},
                 inst_status  = running
             } = Transition,
             {ok, InstId, TrnNr}
@@ -1208,8 +1208,8 @@ sync_send_event_reply_test() ->
         (store, Transition = #transition{inst_id = InstId, number = TrnNr = 2}, [#message{}, #message{}]) ->
             #transition{
                 trigger_type = sync,
-                trigger_msg  = #msg_ref{id = {InstId, TrnNr, 0, recv}, peer = {test, test}},
-                trigger_resp = #msg_ref{id = {InstId, TrnNr, 1, sent}, peer = {test, test}},
+                trigger_msg  = #msg_ref{cid = {InstId, TrnNr, 0, recv}, peer = {test, test}},
+                trigger_resp = #msg_ref{cid = {InstId, TrnNr, 1, sent}, peer = {test, test}},
                 inst_status  = running
             } = Transition,
             {ok, InstId, TrnNr}
@@ -1256,7 +1256,7 @@ unknown_message_test() ->
         (store, Transition = #transition{inst_id = InstId, number = TrnNr = 2}, [#message{}]) ->
             #transition{
                 trigger_type = info,
-                trigger_msg  = #msg_ref{id = {InstId, TrnNr, 0, recv}, peer = undefined},
+                trigger_msg  = #msg_ref{cid = {InstId, TrnNr, 0, recv}, peer = undefined},
                 trigger_resp = undefined,
                 inst_status  = running
             } = Transition,
@@ -1579,7 +1579,7 @@ register_outgoing_message_test() ->
         (store, Transition = #transition{inst_id = InstId, number = TrnNr = 2}, Messages) ->
             #transition{
                 trigger_type = event,
-                trigger_msg  = #msg_ref{id = {InstId, TrnNr, 0, recv}, peer = {test, test}},
+                trigger_msg  = #msg_ref{cid = {InstId, TrnNr, 0, recv}, peer = {test, test}},
                 trigger_resp = undefined,
                 trn_messages = TrnMsgs,
                 inst_status  = running
@@ -1643,8 +1643,8 @@ register_incoming_message_test() ->
         (store, Transition = #transition{inst_id = InstId, number = TrnNr = 2}, Messages) ->
             #transition{
                 trigger_type = sync,
-                trigger_msg  = #msg_ref{id = {InstId, TrnNr, 0, recv}, peer = {test, test}},
-                trigger_resp = #msg_ref{id = {InstId, TrnNr, 1, sent}, peer = {test, test}},
+                trigger_msg  = #msg_ref{cid = {InstId, TrnNr, 0, recv}, peer = {test, test}},
+                trigger_resp = #msg_ref{cid = {InstId, TrnNr, 1, sent}, peer = {test, test}},
                 trn_messages = [],
                 inst_status  = running
             } = Transition,
@@ -1655,8 +1655,8 @@ register_incoming_message_test() ->
         (store, Transition = #transition{inst_id = InstId, number = TrnNr = 3}, Messages) ->
             #transition{
                 trigger_type = sync,
-                trigger_msg  = #msg_ref{id = {200,    15,    20, recv}, peer = {inst, 200}},
-                trigger_resp = #msg_ref{id = {InstId, TrnNr, 1,  sent}, peer = {inst, 200}},
+                trigger_msg  = #msg_ref{cid = {200,    15,    20, recv}, peer = {inst, 200}},
+                trigger_resp = #msg_ref{cid = {InstId, TrnNr, 1,  sent}, peer = {inst, 200}},
                 trn_messages = [],
                 inst_status  = running
             } = Transition,
@@ -1667,7 +1667,7 @@ register_incoming_message_test() ->
         (store, Transition = #transition{inst_id = InstId, number = TrnNr = 4}, Messages) ->
             #transition{
                 trigger_type = event,
-                trigger_msg  = #msg_ref{id = {200, 15, 21, recv}, peer = {inst, 200}},
+                trigger_msg  = #msg_ref{cid = {200, 15, 21, recv}, peer = {inst, 200}},
                 trigger_resp = undefined,
                 trn_messages = [],
                 inst_status  = running

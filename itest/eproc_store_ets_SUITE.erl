@@ -24,6 +24,7 @@
     eproc_store_core_test_named_instance/1,
     eproc_store_core_test_suspend_resume/1,
     eproc_store_core_test_add_transition/1,
+    eproc_store_core_test_resolve_msg_dst/1,
     eproc_store_core_test_load_running/1,
     eproc_store_core_test_attrs/1,
     eproc_store_router_test_attrs/1,
@@ -69,6 +70,7 @@ end_per_suite(Config) ->
 ?MAP_TCK_TEST(eproc_store_core_test_named_instance).
 ?MAP_TCK_TEST(eproc_store_core_test_suspend_resume).
 ?MAP_TCK_TEST(eproc_store_core_test_add_transition).
+?MAP_TCK_TEST(eproc_store_core_test_resolve_msg_dst).
 ?MAP_TCK_TEST(eproc_store_core_test_load_running).
 ?MAP_TCK_TEST(eproc_store_core_test_attrs).
 ?MAP_TCK_TEST(eproc_store_router_test_attrs).

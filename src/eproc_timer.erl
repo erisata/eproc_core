@@ -40,10 +40,10 @@
 %%  Persistent state.
 %%
 -record(data, {
-    start,
-    delay,
-    event_msg,
-    event_mid
+    start       :: timestamp(),
+    delay       :: duration(),
+    event_msg   :: term(),
+    event_cid   :: msg_cid()
 }).
 
 %%
@@ -67,8 +67,8 @@ set(Name, After, Event, Scope) ->
     {ok, InstId} = eproc_fsm:id(),
     Src = {inst, InstId},
     Dst = {timer, Name},
-    {ok, EventMsgId} = eproc_fsm:register_sent_msg(Src, Dst, undefined, Event, Now),
-    ok = eproc_fsm_attr:action(?MODULE, Name, {timer, After, EventMsgId, Event}, Scope).
+    {ok, EventMsgCId} = eproc_fsm:register_sent_msg(Src, Dst, undefined, Event, Now),
+    ok = eproc_fsm_attr:action(?MODULE, Name, {timer, After, EventMsgCId, Event}, Scope).
 
 
 %%
@@ -159,12 +159,12 @@ init(ActiveAttrs) ->
 %%
 %%  Attribute created.
 %%
-handle_created(#attribute{attr_id = AttrId}, {timer, After, EventMsgId, Event}, _Scope) ->
+handle_created(#attribute{attr_id = AttrId}, {timer, After, EventMsgCId, Event}, _Scope) ->
     Data = #data{
         start = os:timestamp(),
         delay = After,
         event_msg = Event,
-        event_mid = EventMsgId
+        event_cid = EventMsgCId
     },
     {ok, State} = start_timer(AttrId, Data),
     {create, Data, State, false};
@@ -176,13 +176,13 @@ handle_created(_Attribute, {timer, remove}, _Scope) ->
 %%
 %%  Attribute updated by user.
 %%
-handle_updated(Attribute, AttrState, {timer, After, EventMsgId, Event}, _Scope) ->
+handle_updated(Attribute, AttrState, {timer, After, EventMsgCId, Event}, _Scope) ->
     #attribute{attr_id = AttrId} = Attribute,
     NewData = #data{
         start = os:timestamp(),
         delay = After,
         event_msg = Event,
-        event_mid = EventMsgId
+        event_cid = EventMsgCId
     },
     ok = stop_timer(AttrState),
     {ok, NewState} = start_timer(AttrId, NewData),
@@ -215,13 +215,13 @@ handle_event(Attribute, _State, long_delay) ->
 handle_event(Attribute, _State, fired) ->
     #attribute{
         name = Name,
-        data = #data{event_msg = Event, event_mid = EventMsgId}
+        data = #data{event_msg = Event, event_cid = EventMsgCId}
     } = Attribute,
     Trigger = #trigger_spec{
         type = timer,
         source = Name,
         message = Event,
-        msg_id = EventMsgId,
+        msg_cid = EventMsgCId,
         sync = false,
         reply_fun = undefined,
         src_arg = true
