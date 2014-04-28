@@ -135,11 +135,11 @@ start_link_new_by_inst_test() ->
             }}
     end),
     ok = meck:expect(eproc_fsm_attr, init, fun
-        ([], 0, []) -> {ok, []}
+        ([], 0, store, []) -> {ok, []}
     end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, []),
     ?assert(eproc_fsm:is_online(PID)),
-    ?assert(meck:called(eproc_fsm_attr, init, [[], 0, []])),
+    ?assert(meck:called(eproc_fsm_attr, init, [[], 0, store, []])),
     ?assert(meck:called(eproc_fsm__void, init, [[], {state, a}])),
     ?assert(meck:called(eproc_fsm__void, code_change, [state, [], {state, a}, undefined])),
     ?assert(meck:validate([eproc_store, eproc_fsm_attr, eproc_fsm__void])),
@@ -200,7 +200,7 @@ start_link_existing_test() ->
             }}
     end),
     ok = meck:expect(eproc_fsm_attr, init, fun
-        ([some], 2, [A = #attribute{attr_id = 1}, B = #attribute{attr_id = 2}]) -> {ok, [{A, undefined}, {B, undefined}]}
+        ([some], 2, store, [A = #attribute{attr_id = 1}, B = #attribute{attr_id = 2}]) -> {ok, [{A, undefined}, {B, undefined}]}
     end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, []),
     ?assert(eproc_fsm:is_online(PID)),

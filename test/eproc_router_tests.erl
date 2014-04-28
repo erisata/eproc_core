@@ -28,14 +28,14 @@ init_test() ->
         inst_id = iid, module = eproc_router, name = {key, a},
         scope = [], data = {data, a}, from = from_trn
     },
-    {ok, _State} = eproc_fsm_attr:init([], 0, [Attr]).
+    {ok, _State} = eproc_fsm_attr:init([], 0, store, [Attr]).
 
 
 %%
 %%  Check if attribute creation works.
 %%
 add_key_test() ->
-    {ok, State1} = eproc_fsm_attr:init([], 0, []),
+    {ok, State1} = eproc_fsm_attr:init([], 0, store, []),
     {ok, State2} = eproc_fsm_attr:transition_start(0, 0, [first], State1),
     ok = eproc_router:add_key(key1, next),
     ok = eproc_router:add_key(key2, []),

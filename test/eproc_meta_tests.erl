@@ -28,14 +28,14 @@ init_test() ->
         inst_id = iid, module = eproc_meta, name = {tag, a, b},
         scope = [], data = {data, a, b}, from = from_trn
     },
-    {ok, _State} = eproc_fsm_attr:init([], 0, [Attr]).
+    {ok, _State} = eproc_fsm_attr:init([], 0, store, [Attr]).
 
 
 %%
 %%  Check if attribute creation and updating works.
 %%
 add_tag_test() ->
-    {ok, State1} = eproc_fsm_attr:init([], 0, []),
+    {ok, State1} = eproc_fsm_attr:init([], 0, store, []),
     {ok, State2} = eproc_fsm_attr:transition_start(0, 0, [], State1),
     ok = eproc_meta:add_tag(tag1, type),
     ok = eproc_meta:add_tag(tag2, type),

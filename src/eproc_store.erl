@@ -37,7 +37,8 @@
     set_instance_resuming/4,
     set_instance_resumed/3,
     load_instance/2,
-    load_running/2
+    load_running/2,
+    attr_task/3
 ]).
 -export([apply_transition/2]).
 -export_type([ref/0]).
@@ -181,6 +182,17 @@
         PartitionPred   :: fun((inst_id(), inst_group()) -> boolean())
     ) ->
         {ok, [{FsmRef :: fsm_ref(), StartSpec :: fsm_start_spec()}]}.
+
+
+%%
+%%  Perform attribute action.
+%%
+-callback attr_task(
+        StoreArgs       :: term(),
+        AttrModule      :: module(),
+        AttrTask        :: term()
+    ) ->
+        Response :: term().
 
 
 %%
@@ -367,6 +379,15 @@ load_instance(Store, FsmRef) ->
 load_running(Store, PartitionPred) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
     StoreMod:load_running(StoreArgs, PartitionPred).
+
+
+%%
+%%  Perform attribute task. User for performing
+%%  data queries and synchronous actions.
+%%
+attr_task(Store, AttrModule, AttrTask) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
+    StoreMod:attr_task(StoreArgs, AttrModule, AttrTask).
 
 
 

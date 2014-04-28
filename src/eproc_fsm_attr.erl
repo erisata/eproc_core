@@ -22,9 +22,9 @@
 %%
 -module(eproc_fsm_attr).
 -compile([{parse_transform, lager_transform}]).
--export([action/4, action/3, make_event/3]).
+-export([action/4, action/3, task/3, make_event/3]).
 -export([apply_actions/4]).
--export([init/3, transition_start/4, transition_end/4, event/2]).
+-export([init/4, transition_start/4, transition_end/4, event/2]).
 -include("eproc.hrl").
 
 
@@ -36,7 +36,15 @@
 
 -record(state, {
     last_id :: integer(),       %%  Last used attribute ID.
-    attrs   :: [#attr_ctx{}]    %%  Contexts for all active attributes of the FSM.
+    attrs   :: [#attr_ctx{}],   %%  Contexts for all active attributes of the FSM.
+    store   :: store_ref()
+}).
+
+-record(trn_ctx, {
+    inst_id :: inst_id(),
+    trn_nr  :: trn_nr(),
+    sname   :: term(),
+    store   :: store_ref()
 }).
 
 
@@ -157,6 +165,20 @@ action(Module, Name, Action) ->
 
 
 %%
+%%  Performs Attribute task in the store.
+%%
+task(Module, Task, Opts) ->
+    Store = case proplists:get_value(store, Opts, undefined) of
+        undefined ->
+            #trn_ctx{store = CtxStore} = erlang:get('eproc_fsm_attr$trn_ctx'),
+            CtxStore;
+        OptsStore ->
+            OptsStore
+    end,
+    eproc_store:attr_task(Store, Module, Task).
+
+
+%%
 %%  Returns a message, that can be sent to the FSM process. It will be recognized
 %%  as a message sent to the particular attribute and its handler.
 %%
@@ -172,10 +194,11 @@ make_event(_Module, AttrId, Event) ->
 %%
 %%  Invoked, when the corresponding FSM is started (become online).
 %%
-init(_SName, LastId, ActiveAttrs) ->
+init(_SName, LastId, Store, ActiveAttrs) ->
     State = #state{
         last_id = LastId,
-        attrs = init_on_start(ActiveAttrs, [])
+        attrs = init_on_start(ActiveAttrs, []),
+        store = Store
     },
     {ok, State}.
 
@@ -183,8 +206,9 @@ init(_SName, LastId, ActiveAttrs) ->
 %%
 %%  Invoked at the start of each transition.
 %%
-transition_start(_InstId, _TrnNr, _SName, State) ->
+transition_start(InstId, TrnNr, SName, State = #state{store = Store}) ->
     erlang:put('eproc_fsm_attr$actions', []),
+    erlang:put('eproc_fsm_attr$trn_ctx', #trn_ctx{inst_id = InstId, trn_nr = TrnNr, sname = SName, store = Store}),
     {ok, State}.
 
 
@@ -192,6 +216,7 @@ transition_start(_InstId, _TrnNr, _SName, State) ->
 %%  Invoked at the end of each transition.
 %%
 transition_end(InstId, TrnNr, NextSName, State = #state{last_id = LastAttrId, attrs = AttrCtxs}) ->
+    erlang:erase('eproc_fsm_attr$trn_ctx'),
     ActionSpecs = erlang:erase('eproc_fsm_attr$actions'),
     {AttrCtxsAfterActions, UserActions, _, NewAttrId} = lists:foldl(
         fun perform_action/2,

@@ -1925,6 +1925,9 @@ start_loaded(Instance, StartOpts, State) ->
 %%  Initializes loaded instance.
 %%
 init_loaded(Instance, SName, SData, State) ->
+    #state{
+        store = Store
+    } = State,
     #instance{
         id = InstId,
         module = Module,
@@ -1937,7 +1940,7 @@ init_loaded(Instance, SName, SData, State) ->
     } = InstState,
     case upgrade_state(Instance, SName, SData) of
         {ok, UpgradedSName, UpgradedSData} ->
-            {ok, AttrState} = eproc_fsm_attr:init(UpgradedSName, LastAttrId, ActiveAttrs),
+            {ok, AttrState} = eproc_fsm_attr:init(UpgradedSName, LastAttrId, Store, ActiveAttrs),
             {ok, UpgradedSDataWithRT, RTField, RTDefault} = call_init_runtime(UpgradedSName, UpgradedSData, Module),
             NewState = State#state{
                 inst_id     = InstId,

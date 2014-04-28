@@ -38,7 +38,8 @@
     set_instance_resuming/4,
     set_instance_resumed/3,
     load_instance/2,
-    load_running/2
+    load_running/2,
+    attr_task/3
 ]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -include("eproc.hrl").
@@ -315,6 +316,16 @@ load_running(_StoreArgs, PartitionPred) ->
 
 
 %%
+%%  Handle attribute tasks.
+%%
+attr_task(_StoreArgs, AttrModule, AttrTask) ->
+    case AttrModule of
+        eproc_router -> handle_attr_custom_router_task(AttrTask);
+        eproc_meta   -> handle_attr_custom_meta_task(AttrTask)
+    end.
+
+
+%%
 %%
 %%
 get_instance(_StoreArgs, FsmRef, Query) ->
@@ -576,36 +587,71 @@ is_instance_terminated(killed)    -> true.
 %%  Handle all attribute actions.
 %%
 handle_attr_actions(Instance, Transition = #transition{attr_actions = AttrActions}, Messages) ->
+    Fun = fun
+        (A = #attr_action{module = eproc_router}, I, _T, _M) -> handle_attr_custom_router_action(A, I);
+        (A = #attr_action{module = eproc_meta},   I, _T, _M) -> handle_attr_custom_meta_action(A, I)
+    end,
     [
-        ok = handle_attr_action(A, Instance, Transition, Messages)
+        ok = Fun(A, Instance, Transition, Messages)
         || A = #attr_action{needs_store = true} <- AttrActions
     ],
     ok.
 
 
-handle_attr_action(AttrAction = #attr_action{module = eproc_router}, Instance, _Transition, _Messages) ->
+
+
+%% =============================================================================
+%%  Specific attribute support: eproc_router
+%% =============================================================================
+
+%%
+%%
+%%
+handle_attr_custom_router_action(AttrAction, Instance) ->
     #attr_action{attr_id = AttrId, action = Action} = AttrAction,
     #instance{id = InstId} = Instance,
     case Action of
-        {create, _Name, _Scope, {data, Key}} ->
+        {create, _Name, _Scope, {data, Key, SyncRef}} ->
+            case SyncRef of
+                undefined -> ok;
+                _ -> true = ets:match_delete(?KEY_TBL, #router_key{key = Key, attr_id = SyncRef, _ = '_'})
+            end,
             true = ets:insert_new(?KEY_TBL, #router_key{key = Key, inst_id = InstId, attr_id = AttrId}),
             ok;
-        {update, _NewScope, {data, NewKey}} ->
-            [#router_key{key = OldKey}] = ets:match_object(?KEY_TBL, #router_key{attr_id = AttrId, _ = '_'}),
-            case NewKey of
-                OldKey ->
-                    ok;
-                _ ->
-                    true = ets:insert(?KEY_TBL, #router_key{key = NewKey, inst_id = InstId, attr_id = AttrId}),
-                    true = ets:delete(?KEY_TBL, OldKey),
-                    ok
-            end;
         {remove, _Reason} ->
             true = ets:match_delete(?KEY_TBL, #router_key{attr_id = AttrId, _ = '_'}),
             ok
+    end.
+
+%%
+%%
+%%
+handle_attr_custom_router_task({key_sync, Key, InstId, Uniq}) ->
+    AddKeyFun = fun () ->
+        SyncRef = {'eproc_router$key_sync', node(), erlang:now()},
+        true = ets:insert_new(?KEY_TBL, #router_key{key = Key, inst_id = InstId, attr_id = SyncRef}),
+        {ok, SyncRef}
+    end,
+    case {ets:lookup(?KEY_TBL, Key), Uniq} of
+        {[], _    } -> AddKeyFun();
+        {_,  false} -> AddKeyFun();
+        {_,  true } -> {error, exists}
     end;
 
-handle_attr_action(AttrAction = #attr_action{module = eproc_meta}, Instance, _Transition, _Messages) ->
+handle_attr_custom_router_task({lookup, Key}) ->
+    InstIds = [ InstId || #router_key{inst_id = InstId} <- ets:lookup(?KEY_TBL, Key) ],
+    {ok, InstIds}.
+
+
+
+%% =============================================================================
+%%  Specific attribute support: eproc_meta
+%% =============================================================================
+
+%%
+%%
+%%
+handle_attr_custom_meta_action(AttrAction, Instance) ->
     #attr_action{attr_id = AttrId, action = Action} = AttrAction,
     #instance{id = InstId} = Instance,
     case Action of
@@ -617,4 +663,12 @@ handle_attr_action(AttrAction = #attr_action{module = eproc_meta}, Instance, _Tr
         {remove, _Reason} ->
             ok
     end.
+
+
+%%
+%%
+%%
+handle_attr_custom_meta_task({}) ->
+    ok. % TODO
+
 
