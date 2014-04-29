@@ -132,7 +132,6 @@
 %%      used for administrative actions: kill, suspend and resume.
 %%
 %%  TODO: Attachment support.
-%%  TODO: Add router integration.
 %%
 -module(eproc_fsm).
 -behaviour(gen_server).
@@ -977,7 +976,7 @@ sync_send_create_event(Module, Args, Event, Options) ->
 %%  TODO: Options for metadata, event redelivery.
 %%
 -spec send_event(
-        FsmRef  :: fsm_ref() | otp_ref(),
+        FsmRef  :: fsm_ref() | fsm_key() | otp_ref(),
         Event   :: term(),
         Options :: proplist()
     ) ->
@@ -998,7 +997,7 @@ send_event(FsmRef, Event, Options) ->
 %%  equivalent to `send_event(FsmRef, Event, [])`.
 %%
 -spec send_event(
-        FsmRef  :: fsm_ref() | otp_ref(),
+        FsmRef  :: fsm_ref() | fsm_key() | otp_ref(),
         Event   :: term()
     ) ->
         ok.
@@ -1031,7 +1030,7 @@ send_event(FsmRef, Event) ->
 %%      5000 (5 seconds) is the default.
 %%
 -spec sync_send_event(
-        FsmRef  :: fsm_ref() | otp_ref(),
+        FsmRef  :: fsm_ref() | fsm_key() | otp_ref(),
         Event   :: term(),
         Options :: proplist()
     ) ->
@@ -1055,7 +1054,7 @@ sync_send_event(FsmRef, Event, Options) ->
 %%  equivalent to `sync_send_event(FsmRef, Event, [])`.
 %%
 -spec sync_send_event(
-        FsmRef  :: fsm_ref() | otp_ref(),
+        FsmRef  :: fsm_ref() | fsm_key() | otp_ref(),
         Event   :: term()
     ) ->
         ok.
@@ -1714,12 +1713,27 @@ resolve_event_dst(_) ->
 %%  Resolves instance reference.
 %%
 resolve_fsm_ref(FsmRef, Options) ->
+    MakeFsmRefFun = fun (Ref) ->
+        Registry = resolve_registry(Options),
+        {ok, _ResolvedFsmRef} = eproc_registry:make_fsm_ref(Registry, Ref)
+    end,
+    LookupFun = fun (LookupKey, LookupOpts) ->
+        case eproc_router:lookup(LookupKey, LookupOpts) of
+            {ok, [InstId]}  -> MakeFsmRefFun({inst, InstId});
+            {ok, []}        -> {error, not_found};
+            {ok, _}         -> {error, multiple};
+            {error, Reason} -> {error, Reason}
+        end
+    end,
     case is_fsm_ref(FsmRef) of
         true ->
-            Registry = resolve_registry(Options),
-            {ok, _ResolvedFsmRef} = eproc_registry:make_fsm_ref(Registry, FsmRef);
+            MakeFsmRefFun(FsmRef);
         false ->
-            {ok, FsmRef}
+            case FsmRef of
+                {key, Key}       -> LookupFun(Key, []);
+                {key, Key, Opts} -> LookupFun(Key, Opts);
+                _                -> {ok, FsmRef}
+            end
     end.
 
 
@@ -2492,6 +2506,34 @@ limits_cleanup(State) ->
 %% =============================================================================
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
+
+%%
+%%  Unit tests for `resolve_fsm_ref/1`.
+%%
+resolve_fsm_ref_test() ->
+    ok = meck:new(eproc_router, []),
+    ok = meck:new(eproc_registry, []),
+    ok = meck:expect(eproc_router, lookup, fun
+        (key3, []              ) -> {ok, [iid3]};
+        (key4, [{store, store}]) -> {ok, [iid4]};
+        (key5, []              ) -> {ok, []};
+        (key6, []              ) -> {ok, [iid6a, iid6b]}
+    end),
+    ok = meck:expect(eproc_registry, make_fsm_ref, fun
+        (registry, {inst, iid1}) -> {ok, ref1};
+        (registry, {name, nme2}) -> {ok, ref2};
+        (registry, {inst, iid3}) -> {ok, ref3};
+        (registry, {inst, iid4}) -> {ok, ref4}
+    end),
+    ?assertEqual({ok,    ref1     }, resolve_fsm_ref({inst, iid1}, [{registry, registry}])),
+    ?assertEqual({ok,    ref2     }, resolve_fsm_ref({name, nme2}, [{registry, registry}])),
+    ?assertEqual({ok,    ref3     }, resolve_fsm_ref({key,  key3}, [{registry, registry}])),
+    ?assertEqual({ok,    ref4     }, resolve_fsm_ref({key,  key4, [{store, store}]}, [{registry, registry}])),
+    ?assertEqual({error, not_found}, resolve_fsm_ref({key,  key5}, [{registry, registry}])),
+    ?assertEqual({error, multiple }, resolve_fsm_ref({key,  key6}, [{registry, registry}])),
+    ?assertEqual({ok,    some     }, resolve_fsm_ref(some, [{registry, registry}])),
+    ?assert(meck:validate([eproc_router, eproc_registry])),
+    meck:unload([eproc_router, eproc_registry]).
 
 %%
 %%  Unit tests for `resolve_event_src/1`.

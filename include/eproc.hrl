@@ -42,7 +42,8 @@
 
 
 -type inst_id()         :: eproc_fsm:id().
--type fsm_ref()         :: {inst, inst_id()} | {name, term()}.
+-type fsm_ref()         :: {inst, InstId :: inst_id()} | {name, Name :: term()}.
+-type fsm_key()         :: {key, Key :: term()} | {key, Key :: term(), Opts :: list()}.
 -type fsm_start_spec()  :: eproc_fsm:start_spec().
 -type inst_name()       :: term().
 -type inst_group()      :: eproc_fsm:group().
