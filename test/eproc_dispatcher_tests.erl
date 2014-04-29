@@ -22,9 +22,29 @@
 
 
 %%
-%%  TODO: Check if dispatching works.
+%%  Check if dispatching works.
 %%
 dispatch_test() ->
-    ?assert(todo).
+    ok = meck:new(dispatch_test_mod_a, [non_strict]),
+    ok = meck:new(dispatch_test_mod_b, [non_strict]),
+    ok = meck:expect(dispatch_test_mod_a, handle_dispatch, fun
+        (a, {x}) -> noreply;
+        (b, {x}) -> {reply, bb};
+        (_, {x}) -> unknown
+    end),
+    ok = meck:expect(dispatch_test_mod_b, handle_dispatch, fun
+        (c, {y}) -> {reply, cc};
+        (_, {y}) -> unknown
+    end),
+    {ok, D} = eproc_dispatcher:new([
+        {dispatch_test_mod_a, {x}},
+        {dispatch_test_mod_b, {y}}
+    ]),
+    ?assertThat(eproc_dispatcher:dispatch(D, a), is(noreply)),
+    ?assertThat(eproc_dispatcher:dispatch(D, b), is({reply, bb})),
+    ?assertThat(eproc_dispatcher:dispatch(D, c), is({reply, cc})),
+    ?assertThat(eproc_dispatcher:dispatch(D, d), is({error, unknown})),
+    ?assert(meck:validate([dispatch_test_mod_a, dispatch_test_mod_b])),
+    ok = meck:unload([dispatch_test_mod_a, dispatch_test_mod_b]).
 
 

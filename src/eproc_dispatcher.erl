@@ -115,7 +115,7 @@ new(DispatcherSpecs) ->
 
 
 %%
-%%  Send an event via the router.
+%%  Send an event via the dispatcher.
 %%
 -spec dispatch(
         Dispatcher  :: term(),
