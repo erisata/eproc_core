@@ -65,7 +65,7 @@
 %%
 -spec add_key(
         Key     :: term(),
-        Scope   :: scope(),
+        Scope   :: scope() | next | undefined,
         Opts    :: [sync | uniq]
     ) ->
         ok |
@@ -96,7 +96,7 @@ add_key(Key, Scope, Opts) ->
 %%
 -spec add_key(
         Key     :: term(),
-        Scope   :: scope()
+        Scope   :: scope() | next | undefined
     ) ->
         ok.
 

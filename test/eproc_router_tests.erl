@@ -35,17 +35,36 @@ init_test() ->
 %%
 %%  Check if attribute creation works.
 %%
-%%  TODO: sync, uniq
-%%
 add_key_test() ->
+    ok = meck:new(eproc_store),
+    ok = meck:expect(eproc_store, attr_task, fun
+        (store, eproc_router, {key_sync, key3, iid, false}) -> {ok, ref3};
+        (store, eproc_router, {key_sync, key5, iid, true }) -> {ok, ref5}
+    end),
+    erlang:put('eproc_fsm$id', iid),
     {ok, State1} = eproc_fsm_attr:init([], 0, store, []),
     {ok, State2} = eproc_fsm_attr:transition_start(0, 0, [first], State1),
     ok = eproc_router:add_key(key1, next),
     ok = eproc_router:add_key(key2, []),
-    {ok, [_, _], _LastAttrId3, State3} = eproc_fsm_attr:transition_end(0, 0, [second], State2),
+    ok = eproc_router:add_key(key3, [], [sync]),
+    ok = eproc_router:add_key(key4, [], [uniq]),
+    ok = eproc_router:add_key(key5, [], [sync, uniq]),
+    {ok, AttrActions3, _LastAttrId3, State3} = eproc_fsm_attr:transition_end(0, 0, [second], State2),
     {ok, State4} = eproc_fsm_attr:transition_start(0, 0, [second], State3),
-    {ok, [_], _LastAttrId5, _State5} = eproc_fsm_attr:transition_end(0, 0, [third], State4),
-    ?assert(todo).
+    {ok, AttrActions5, _LastAttrId5, _State5} = eproc_fsm_attr:transition_end(0, 0, [third], State4),
+    erlang:erase('eproc_fsm$id'),
+    DefAction = #attr_action{module = eproc_router, needs_store = true},
+    ?assertThat(AttrActions3, contains_member(DefAction#attr_action{attr_id = 1, action = {create, undefined, [second], {data, key1, undefined}}})),
+    ?assertThat(AttrActions3, contains_member(DefAction#attr_action{attr_id = 2, action = {create, undefined, [],       {data, key2, undefined}}})),
+    ?assertThat(AttrActions3, contains_member(DefAction#attr_action{attr_id = 3, action = {create, undefined, [],       {data, key3, ref3     }}})),
+    ?assertThat(AttrActions3, contains_member(DefAction#attr_action{attr_id = 4, action = {create, undefined, [],       {data, key4, undefined}}})),
+    ?assertThat(AttrActions3, contains_member(DefAction#attr_action{attr_id = 5, action = {create, undefined, [],       {data, key5, ref5     }}})),
+    ?assertThat(AttrActions3, has_length(5)),
+    ?assertThat(AttrActions5, contains_member(DefAction#attr_action{attr_id = 1, action = {remove, {scope, [third]}}})),
+    ?assertThat(AttrActions5, has_length(1)),
+    ?assertThat(meck:num_calls(eproc_store, attr_task, '_'), is(2)),
+    ?assert(meck:validate(eproc_store)),
+    ok = meck:unload(eproc_store).
 
 
 %%

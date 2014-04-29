@@ -42,6 +42,9 @@ add_tag_test() ->
     {ok, [_, _], LastAttrId3, State3} = eproc_fsm_attr:transition_end(0, 0, [], State2),
     {ok, State4} = eproc_fsm_attr:transition_start(0, 0, [], State3),
     ok = eproc_meta:add_tag(tag1, type),
-    ?assertMatch({ok, [], LastAttrId3, State4}, eproc_fsm_attr:transition_end(0, 0, [], State4)).
+    {ok, [], LastAttrId3, State5} = eproc_fsm_attr:transition_end(0, 0, [], State4),
+    {state, _, Attrs4, store} = State4,
+    {state, _, Attrs5, store} = State5,
+    ?assertEqual(lists:sort(Attrs4), lists:sort(Attrs5)).
 
 

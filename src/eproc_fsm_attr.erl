@@ -217,7 +217,7 @@ transition_start(InstId, TrnNr, SName, State = #state{store = Store}) ->
 %%
 transition_end(InstId, TrnNr, NextSName, State = #state{last_id = LastAttrId, attrs = AttrCtxs}) ->
     erlang:erase('eproc_fsm_attr$trn_ctx'),
-    ActionSpecs = erlang:erase('eproc_fsm_attr$actions'),
+    ActionSpecs = lists:reverse(erlang:erase('eproc_fsm_attr$actions')),
     {AttrCtxsAfterActions, UserActions, _, NewAttrId} = lists:foldl(
         fun perform_action/2,
         {AttrCtxs, [], {InstId, TrnNr, NextSName}, LastAttrId},

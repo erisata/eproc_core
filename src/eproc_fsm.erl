@@ -132,6 +132,7 @@
 %%      used for administrative actions: kill, suspend and resume.
 %%
 %%  TODO: Attachment support.
+%%  TODO: Add router integration.
 %%
 -module(eproc_fsm).
 -behaviour(gen_server).
