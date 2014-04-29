@@ -32,9 +32,7 @@
 -include("eproc.hrl").
 
 -record(state, {
-    mods    :: [module()],
-    store   :: store_ref(),
-    uniq    :: boolean()
+    mods    :: [{Module :: module(), Args :: list()]
 }).
 
 -record(data, {
@@ -56,9 +54,9 @@
 %%    * Call `eproc_router:lookup/1` to get FSM instance id or ids.
 %%    * Call the corresponding FSM implementation.
 %%
-%%  Example:
+%%  TODO: Example:
 %%
-%%      handle_event({order_update, OrderNr, NewPrice}, _Args, Router) ->
+%%      handle_send({order_update, OrderNr, NewPrice}, _Args, Router) ->
 %%          {ok, [InstId]} = eproc_router:lookup(Router, {order, OrderId}),
 %%          ok = my_order:new_price({inst, InstId}, NewPrice),
 %%          noreply.
@@ -72,11 +70,9 @@
 %%  `{reply, Reply}` if the call was synchronous, and `unknown` if the
 %%  message is not recognized by this callback module.
 %%
--callback handle_event(
+-callback handle_send(
         Event       :: term(),
-        EventType   :: sync | async,
-        Args        :: term(),
-        Router      :: term()
+        Args        :: term()
     ) ->
         noreply |
         {reply, Reply :: term()} |
@@ -163,57 +159,32 @@ add_key(Key, Scope) ->
 %%  The Modules parameter takes a list of module/args pairs.
 %%  The specified modules should implement `eproc_router` behaviour.
 %%
-%%  Several options can be provided here:
-%%
-%%  `uniq`
-%%  :   tells, if all lookup functions should expect at most
-%%      one instance id when performing lookup. This is true by default.
-%%      If `uniq=true`, `lookup/2` will return instance id or error.
-%%      If `uniq=false`, this function returns a list of instance ids,
-%%      including empty list.
-%%  `{store, store_ref()}`
-%%  :   if a specific store should be used for key lookups.
-%%      This is mainly intended for testing purposes.
+%%  No options are currently supported.
 %%
 -spec setup(
         Modules :: [{Module :: module(), Args :: list()}],
-        Opts    :: [(uniq | {store, store_ref()})]
+        Opts    :: []
     ) ->
         {ok, Router :: term()}.
 
 setup(Modules, Opts) ->
     lists:foreach(fun ({_M, _A}) -> ok end, Modules),
-    Store = proplists:get_value(store, Opts, eproc_store:ref()),
-    Uniq  = proplists:get_value(uniq, Opts, true),
-    {ok, #state{mods = Modules, store = Store, uniq = Uniq}}.
+    {ok, #state{mods = Modules}}.
 
 
 %%
-%%  Send an asynchonous event via the router.
+%%  Send an event via the router.
 %%
--spec send_event(
+-spec send(
         Router  :: term(),
         Event   :: term()
     ) ->
         noreply |
+        {reply, Reply :: term()}
         {error, unknown}.
 
-send_event(Router = #state{mods = Modules}, Event) ->
-    dispatch(Modules, Router#state{mods = undefined}, Event, async).
-
-
-%%
-%%  Send a synchronous event via the router.
-%%
--spec sync_send_event(
-        Router  :: term(),
-        Event   :: term()
-    ) ->
-        {reply, Reply :: term()} |
-        {error, unknown}.
-
-sync_send_event(Router = #state{mods = Modules}, Event) ->
-    dispatch(Modules, Router#state{mods = undefined}, Event, sync).
+send(#state{mods = Modules}, Event) ->
+    perform_send(Modules, Event).
 
 
 
@@ -225,13 +196,14 @@ sync_send_event(Router = #state{mods = Modules}, Event) ->
 %%  Returns instance instance ids (possibly []) by the specified key.
 %%
 -spec lookup(
-        Router  :: term(),
-        Key     :: term()
+        Key     :: term(),
+        Opts    :: [{store, store_ref()}]
     ) ->
         {ok, [inst_id()]} |
         {error, Reason :: term()}.
 
-lookup(#state{store = Store}, Key) ->
+lookup(Key, Opts) ->
+    {ok, Store} = resolve_store(Opts),
     {ok, _InstIds} = eproc_fsm_attr:task(?MODULE, {lookup, Key}, [{store, Store}]).
 
 
@@ -241,15 +213,16 @@ lookup(#state{store = Store}, Key) ->
 %%  the router, multicast sent is performed.
 %%
 -spec lookup_send(
-        Router  :: term(),
         Key     :: term(),
+        Opts    :: [(uniq | {store, store_ref()})],
         Fun     :: fun((fsm_ref()) -> any())
     ) ->
         noreply |
         {error, (not_found | multiple | term())}.
 
-lookup_send(Router = #state{uniq = Uniq}, Key, Fun) ->
-    case lookup(Router, Key) of
+lookup_send(Key, Opts, Fun) ->
+    {ok, Uniq} = resolve_uniq(Opts),
+    case lookup(Key, Opts) of
         {error, Reason} ->
             {error, Reason};
         {ok, InstIds} ->
@@ -277,15 +250,15 @@ lookup_send(Router = #state{uniq = Uniq}, Key, Fun) ->
 %%  `uniq` option is not respected by this function.
 %%
 -spec lookup_sync_send(
-        Router  :: term(),
         Key     :: term(),
+        Opts    :: [{store, store_ref()}],
         Fun     :: fun((fsm_ref()) -> Reply :: term())
     ) ->
         noreply |
         {error, (not_found | multiple | term())}.
 
-lookup_sync_send(Router, Key, Fun) ->
-    case lookup(Router, Key) of
+lookup_sync_send(Key, Opts, Fun) ->
+    case lookup(Key, Opts) of
         {error, Reason} ->
             {error, Reason};
         {ok, InstIds} ->
@@ -349,17 +322,34 @@ handle_event(_Attribute, _AttrState, Event) ->
 %% =============================================================================
 
 %%
-%%  Dispatch event using registered callback modules.
+%%  Resolve `store` option.
 %%
-dispatch([], _Router, _Event, _Type) ->
+resolve_store(Opts) ->
+    case proplists:get_value(store, Opts) of
+        undefined -> eproc_store:ref();
+        Store     -> Store
+    end.
+
+
+%%
+%%  Resolve `uniq` option.
+%%
+resolve_uniq(Opts) ->
+    {ok, proplists:get_value(uniq, Opts, true)}.
+
+
+%%
+%%  Try to send the event using registered callback modules.
+%%
+perform_send([], _Event) ->
     {error, unknown};
 
-dispatch([{Module, Args} | OtherModules], Router, Event, Type) ->
-    case Module:handle_event(Event, Type, Args, Router) of
+perform_send([{Module, Args} | OtherModules], Event) ->
+    case Module:handle_send(Event, Args) of
         noreply         -> noreply;
         {reply, Reply}  -> {reply, Reply};
         {error, Reason} -> {error, Reason};
-        unknown         -> dispatch(OtherModules, Router, Event, Type)
+        unknown         -> dispatch(OtherModules, Event)
     end.
 
 

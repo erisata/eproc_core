@@ -145,6 +145,13 @@ action_update_unnamed_test() ->
 
 
 %%
+%%  TODO: Check, if attribute tasks are properly delegated to the store.
+%%
+task_test() ->
+    ?assert(todo).
+
+
+%%
 %%  Check event handling.
 %%
 event_test() ->
