@@ -14,7 +14,7 @@
 %| limitations under the License.
 %\--------------------------------------------------------------------
 
-%%
+%%  TODO
 %%  Message router is used to map incoming messages to FSM events and
 %%  to route them to the corresponding FSM instances.
 %%
@@ -31,54 +31,10 @@
 -export([init/1, handle_created/3, handle_updated/4, handle_removed/2, handle_event/3]).
 -include("eproc.hrl").
 
--record(state, {
-    mods    :: [{Module :: module(), Args :: list()]
-}).
-
 -record(data, {
     key     :: term(),              %%  Key value
     ref     :: undefined | term()   %%  Reference of the synchronously created key.
 }).
-
-
-%% =============================================================================
-%%  Callback definitions.
-%% =============================================================================
-
-%%
-%%  This function should process the Event. Typical implementation of this
-%%  callback will:
-%%
-%%    * Recognize the Event by pattern matching,
-%%    * Extract keys from the Event,
-%%    * Call `eproc_router:lookup/1` to get FSM instance id or ids.
-%%    * Call the corresponding FSM implementation.
-%%
-%%  TODO: Example:
-%%
-%%      handle_send({order_update, OrderNr, NewPrice}, _Args, Router) ->
-%%          {ok, [InstId]} = eproc_router:lookup(Router, {order, OrderId}),
-%%          ok = my_order:new_price({inst, InstId}, NewPrice),
-%%          noreply.
-%%
-%%      handle_event({order_update, OrderNr, NewPrice}, _Args, Router) ->
-%%          eproc_router:lookup_send(Router, {order, OrderId}, fun (FsmRef) ->
-%%              ok = my_order:new_price(FsmRef, NewPrice)
-%%          end).
-%%
-%%  This function should return `noreply`, if the call was asynchonous,
-%%  `{reply, Reply}` if the call was synchronous, and `unknown` if the
-%%  message is not recognized by this callback module.
-%%
--callback handle_send(
-        Event       :: term(),
-        Args        :: term()
-    ) ->
-        noreply |
-        {reply, Reply :: term()} |
-        {error, Reason :: term()} |
-        unknown.
-
 
 
 %% =============================================================================
@@ -147,44 +103,6 @@ add_key(Key, Scope, Opts) ->
 
 add_key(Key, Scope) ->
     add_key(Key, Scope, []).
-
-
-
-%% =============================================================================
-%%  API for Router users.
-%% =============================================================================
-
-%%
-%%  Configute new router. This function is used by router clients.
-%%  The Modules parameter takes a list of module/args pairs.
-%%  The specified modules should implement `eproc_router` behaviour.
-%%
-%%  No options are currently supported.
-%%
--spec setup(
-        Modules :: [{Module :: module(), Args :: list()}],
-        Opts    :: []
-    ) ->
-        {ok, Router :: term()}.
-
-setup(Modules, Opts) ->
-    lists:foreach(fun ({_M, _A}) -> ok end, Modules),
-    {ok, #state{mods = Modules}}.
-
-
-%%
-%%  Send an event via the router.
-%%
--spec send(
-        Router  :: term(),
-        Event   :: term()
-    ) ->
-        noreply |
-        {reply, Reply :: term()}
-        {error, unknown}.
-
-send(#state{mods = Modules}, Event) ->
-    perform_send(Modules, Event).
 
 
 
@@ -336,20 +254,5 @@ resolve_store(Opts) ->
 %%
 resolve_uniq(Opts) ->
     {ok, proplists:get_value(uniq, Opts, true)}.
-
-
-%%
-%%  Try to send the event using registered callback modules.
-%%
-perform_send([], _Event) ->
-    {error, unknown};
-
-perform_send([{Module, Args} | OtherModules], Event) ->
-    case Module:handle_send(Event, Args) of
-        noreply         -> noreply;
-        {reply, Reply}  -> {reply, Reply};
-        {error, Reason} -> {error, Reason};
-        unknown         -> dispatch(OtherModules, Event)
-    end.
 
 
