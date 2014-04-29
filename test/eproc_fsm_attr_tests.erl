@@ -18,7 +18,7 @@
 -compile([{parse_transform, lager_transform}]).
 -include("eproc.hrl").
 -include_lib("eunit/include/eunit.hrl").
-
+-include_lib("hamcrest/include/hamcrest.hrl").
 
 %%
 %%  Initialization test with empty state (no attrs).
@@ -145,10 +145,14 @@ action_update_unnamed_test() ->
 
 
 %%
-%%  TODO: Check, if attribute tasks are properly delegated to the store.
+%%  Check, if attribute tasks are properly delegated to the store.
 %%
 task_test() ->
-    ?assert(todo).
+    ok = meck:new(eproc_store, []),
+    ok = meck:expect(eproc_store, attr_task, fun (store, mod, args) -> resp end),
+    ?assertThat(eproc_fsm_attr:task(mod, args, [{store, store}]), is(resp)),
+    ?assert(meck:validate(eproc_store)),
+    meck:unload(eproc_store).
 
 
 %%

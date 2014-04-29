@@ -14,20 +14,20 @@
 %| limitations under the License.
 %\--------------------------------------------------------------------
 
-%%  TODO
-%%  Message router is used to map incoming messages to FSM events and
-%%  to route them to the corresponding FSM instances.
 %%
-%%  An FSM whos messages should be routed using this router, should
-%%  provide keys, that uniquelly identified an FSM instance. Function
-%%  `add_key/2` should be used by FSM implementations to attach keys.
+%%  Message router is used to locate FSMs by business specific keys
+%%  instead of instance ids ir names. The keys can be added to an FSM
+%%  at some transition.
+%%
+%%  An FSM that should be accessed using business specific keys,
+%%  should register them by calling function `add_key/2-3`.
 %%  Keys are maintained as FSM attributes and can be limited to
 %%  particular scope.
 %%
 -module(eproc_router).
 -behaviour(eproc_fsm_attr).
 -export([add_key/3, add_key/2]).
--export([lookup/2, lookup_send/3, lookup_sync_send/3, setup/2, send_event/2, sync_send_event/2]).
+-export([lookup/2, lookup/1, lookup_send/3, lookup_send/2, lookup_sync_send/3, lookup_sync_send/2]).
 -export([init/1, handle_created/3, handle_updated/4, handle_removed/2, handle_event/3]).
 -include("eproc.hrl").
 
@@ -43,9 +43,8 @@
 
 %%
 %%  Attaches the specified key to the current FSM. The key can be later
-%%  used to lookup FSM instance id, primarily - in the router's callback
-%%  `handle_event/?`. This function should be called from the FSM process,
-%%  most likely in the FSM callback's `handle_state/3` function.
+%%  used to lookup FSM instance id. This function should be called from
+%%  the FSM process, most likely in the FSM callback's `handle_state/3` function.
 %%
 %%  The attached key is valid for the specified scope. I.e. the key will
 %%  be automatically deactivated, if the FSM will exit the specified scope.
@@ -93,7 +92,7 @@ add_key(Key, Scope, Opts) ->
 
 
 %%
-%%  Simplified version of the `add_key/3`, assumes Opts = [].
+%%  Convenience function, equivalent to `add_key(Key, Scope, [])`.
 %%
 -spec add_key(
         Key     :: term(),
@@ -126,6 +125,19 @@ lookup(Key, Opts) ->
 
 
 %%
+%%  Convenience function, equivalent to `lookup(Key, [])`.
+%%
+-spec lookup(
+        Key     :: term()
+    ) ->
+        {ok, [inst_id()]} |
+        {error, Reason :: term()}.
+
+lookup(Key) ->
+    lookup(Key, []).
+
+
+%%
 %%  Lookups instance ids by the specified key and calls the specified
 %%  function for each of them. If `uniq=false` was specified when setuping
 %%  the router, multicast sent is performed.
@@ -135,7 +147,7 @@ lookup(Key, Opts) ->
         Opts    :: [(uniq | {store, store_ref()})],
         Fun     :: fun((fsm_ref()) -> any())
     ) ->
-        noreply |
+        ok |
         {error, (not_found | multiple | term())}.
 
 lookup_send(Key, Opts, Fun) ->
@@ -147,19 +159,33 @@ lookup_send(Key, Opts, Fun) ->
             case Uniq of
                 false ->
                     [ Fun({inst, InstId}) || InstId <- InstIds ],
-                    noreply;
+                    ok;
                 true ->
                     case InstIds of
                         [] ->
                             {error, not_found};
                         [InstId] ->
                             Fun({inst, InstId}),
-                            noreply;
+                            ok;
                         _ when is_list(InstIds) ->
                             {error, multiple}
                     end
             end
     end.
+
+
+%%
+%%  Convenience function, equivalent to `lookup_send(Key, [], Fun)`.
+%%
+-spec lookup_send(
+        Key     :: term(),
+        Fun     :: fun((fsm_ref()) -> any())
+    ) ->
+        ok |
+        {error, (not_found | multiple | term())}.
+
+lookup_send(Key, Fun) ->
+    lookup_send(Key, [], Fun).
 
 
 %%
@@ -172,7 +198,7 @@ lookup_send(Key, Opts, Fun) ->
         Opts    :: [{store, store_ref()}],
         Fun     :: fun((fsm_ref()) -> Reply :: term())
     ) ->
-        noreply |
+        Reply :: term() |
         {error, (not_found | multiple | term())}.
 
 lookup_sync_send(Key, Opts, Fun) ->
@@ -181,15 +207,25 @@ lookup_sync_send(Key, Opts, Fun) ->
             {error, Reason};
         {ok, InstIds} ->
             case InstIds of
-                [] ->
-                    {error, not_found};
-                [InstId] ->
-                    Reply = Fun({inst, InstId}),
-                    {reply, Reply};
-                _ when is_list(InstIds) ->
-                    {error, multiple}
+                [InstId]          -> Fun({inst, InstId});
+                []                -> {error, not_found};
+                I when is_list(I) -> {error, multiple}
             end
     end.
+
+
+%%
+%%  Convenience function, equivalent to `lookup_sync_send(Key, [], Fun)`.
+%%
+-spec lookup_sync_send(
+        Key     :: term(),
+        Fun     :: fun((fsm_ref()) -> Reply :: term())
+    ) ->
+        Reply :: term() |
+        {error, (not_found | multiple | term())}.
+
+lookup_sync_send(Key, Fun) ->
+    lookup_sync_send(Key, [], Fun).
 
 
 
@@ -245,7 +281,7 @@ handle_event(_Attribute, _AttrState, Event) ->
 resolve_store(Opts) ->
     case proplists:get_value(store, Opts) of
         undefined -> eproc_store:ref();
-        Store     -> Store
+        Store     -> {ok, Store}
     end.
 
 

@@ -44,7 +44,8 @@ add_key_test() ->
     ok = eproc_router:add_key(key2, []),
     {ok, [_, _], _LastAttrId3, State3} = eproc_fsm_attr:transition_end(0, 0, [second], State2),
     {ok, State4} = eproc_fsm_attr:transition_start(0, 0, [second], State3),
-    {ok, [_], _LastAttrId5, _State5} = eproc_fsm_attr:transition_end(0, 0, [third], State4).
+    {ok, [_], _LastAttrId5, _State5} = eproc_fsm_attr:transition_end(0, 0, [third], State4),
+    ?assert(todo).
 
 
 %%
@@ -55,8 +56,7 @@ lookup_test() ->
     ok = meck:expect(eproc_store, attr_task, fun
         (store, eproc_router, {lookup, my_key}) -> {ok, [a, b, c]}
     end),
-    {ok, Router} = eproc_router:setup([], [{store, store}]),
-    ?assertThat(eproc_router:lookup(Router, my_key), is({ok, [a, b, c]})),
+    ?assertThat(eproc_router:lookup(my_key, [{store, store}]), is({ok, [a, b, c]})),
     ?assert(meck:validate([eproc_store])),
     ok = meck:unload([eproc_store]).
 
@@ -75,14 +75,14 @@ lookup_send_test() ->
     ok = meck:expect(lookup_send_test_mod, test_fun, fun
         (_FsmRef) -> ok
     end),
-    {ok, R1} = eproc_router:setup([], [{store, store}]),
-    {ok, R2} = eproc_router:setup([], [{store, store}, {uniq, false}]),
-    ?assertThat(eproc_router:lookup_send(R1, key1, fun lookup_send_test_mod:test_fun/1), is({error, multiple})),
-    ?assertThat(eproc_router:lookup_send(R1, key2, fun lookup_send_test_mod:test_fun/1), is(noreply)),
-    ?assertThat(eproc_router:lookup_send(R1, key3, fun lookup_send_test_mod:test_fun/1), is({error, not_found})),
-    ?assertThat(eproc_router:lookup_send(R2, key1, fun lookup_send_test_mod:test_fun/1), is(noreply)),
-    ?assertThat(eproc_router:lookup_send(R2, key2, fun lookup_send_test_mod:test_fun/1), is(noreply)),
-    ?assertThat(eproc_router:lookup_send(R2, key3, fun lookup_send_test_mod:test_fun/1), is(noreply)),
+    Opts1 = [{store, store}],
+    Opts2 = [{store, store}, {uniq, false}],
+    ?assertThat(eproc_router:lookup_send(key1, Opts1, fun lookup_send_test_mod:test_fun/1), is({error, multiple})),
+    ?assertThat(eproc_router:lookup_send(key2, Opts1, fun lookup_send_test_mod:test_fun/1), is(ok)),
+    ?assertThat(eproc_router:lookup_send(key3, Opts1, fun lookup_send_test_mod:test_fun/1), is({error, not_found})),
+    ?assertThat(eproc_router:lookup_send(key1, Opts2, fun lookup_send_test_mod:test_fun/1), is(ok)),
+    ?assertThat(eproc_router:lookup_send(key2, Opts2, fun lookup_send_test_mod:test_fun/1), is(ok)),
+    ?assertThat(eproc_router:lookup_send(key3, Opts2, fun lookup_send_test_mod:test_fun/1), is(ok)),
     ?assertThat(meck:num_calls(lookup_send_test_mod, test_fun, '_'), is(5)),
     ?assertThat(meck:num_calls(lookup_send_test_mod, test_fun, [{inst, a}]), is(1)),
     ?assertThat(meck:num_calls(lookup_send_test_mod, test_fun, [{inst, b}]), is(1)),
@@ -106,31 +106,12 @@ lookup_sync_send_test() ->
     ok = meck:expect(lookup_send_test_mod, test_fun, fun
         ({inst, d}) -> res_d
     end),
-    {ok, R1} = eproc_router:setup([], [{store, store}]),
-    {ok, R2} = eproc_router:setup([], [{store, store}, {uniq, false}]),
-    ?assertThat(eproc_router:lookup_sync_send(R1, key1, fun lookup_send_test_mod:test_fun/1), is({error, multiple})),
-    ?assertThat(eproc_router:lookup_sync_send(R1, key2, fun lookup_send_test_mod:test_fun/1), is({reply, res_d})),
-    ?assertThat(eproc_router:lookup_sync_send(R1, key3, fun lookup_send_test_mod:test_fun/1), is({error, not_found})),
-    ?assertThat(eproc_router:lookup_sync_send(R2, key1, fun lookup_send_test_mod:test_fun/1), is({error, multiple})),
-    ?assertThat(eproc_router:lookup_sync_send(R2, key2, fun lookup_send_test_mod:test_fun/1), is({reply, res_d})),
-    ?assertThat(eproc_router:lookup_sync_send(R2, key3, fun lookup_send_test_mod:test_fun/1), is({error, not_found})),
-    ?assertThat(meck:num_calls(lookup_send_test_mod, test_fun, '_'), is(2)),
-    ?assertThat(meck:num_calls(lookup_send_test_mod, test_fun, [{inst, d}]), is(2)),
+    Opts = [{store, store}],
+    ?assertThat(eproc_router:lookup_sync_send(key1, Opts, fun lookup_send_test_mod:test_fun/1), is({error, multiple})),
+    ?assertThat(eproc_router:lookup_sync_send(key2, Opts, fun lookup_send_test_mod:test_fun/1), is(res_d)),
+    ?assertThat(eproc_router:lookup_sync_send(key3, Opts, fun lookup_send_test_mod:test_fun/1), is({error, not_found})),
+    ?assertThat(meck:num_calls(lookup_send_test_mod, test_fun, [{inst, d}]), is(1)),
     ?assert(meck:validate([eproc_store, lookup_send_test_mod])),
     ok = meck:unload([eproc_store, lookup_send_test_mod]).
-
-
-%%
-%%  TODO
-%%
-send_event_test() ->
-    ?assert(todo).
-
-
-%%
-%%  TODO
-%%
-sync_send_event_test() ->
-    ?assert(todo).
 
 
