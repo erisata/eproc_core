@@ -18,6 +18,7 @@
 -compile([{parse_transform, lager_transform}]).
 -include("eproc.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("hamcrest/include/hamcrest.hrl").
 
 
 %%
@@ -46,5 +47,18 @@ add_tag_test() ->
     {state, _, Attrs4, store} = State4,
     {state, _, Attrs5, store} = State5,
     ?assertEqual(lists:sort(Attrs4), lists:sort(Attrs5)).
+
+
+%%
+%%  Check, if `get_instances/1` works.
+%%
+get_instances_test() ->
+    ok = meck:new(eproc_store, []),
+    ok = meck:expect(eproc_store, attr_task, fun
+        (store, eproc_meta, {get_instances, {tags, [{tag1, type1}]}}) -> ok
+    end),
+    ?assertThat(eproc_meta:get_instances({tags, [{tag1, type1}]}, [{store, store}]), is(ok)),
+    ?assert(meck:validate([eproc_store])),
+    ok = meck:unload([eproc_store]).
 
 

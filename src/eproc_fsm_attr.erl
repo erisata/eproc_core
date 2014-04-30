@@ -170,8 +170,12 @@ action(Module, Name, Action) ->
 task(Module, Task, Opts) ->
     Store = case proplists:get_value(store, Opts, undefined) of
         undefined ->
-            #trn_ctx{store = CtxStore} = erlang:get('eproc_fsm_attr$trn_ctx'),
-            CtxStore;
+            case erlang:get('eproc_fsm_attr$trn_ctx') of
+                undefined ->
+                    undefined;
+                #trn_ctx{store = CtxStore} ->
+                    CtxStore
+            end;
         OptsStore ->
             OptsStore
     end,

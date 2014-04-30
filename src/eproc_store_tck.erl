@@ -655,6 +655,61 @@ eproc_store_router_test_attrs(Config) ->
 %%
 %%
 eproc_store_meta_test_attrs(Config) ->
-    ok = todo.  % TODO
+    Store = store(Config),
+    Tag1 = <<"eproc_store_meta_test_attrs_a">>, Type1 = <<"eproc_store_meta_test_attrs_x">>,
+    Tag2 = <<"eproc_store_meta_test_attrs_a">>, Type2 = <<"eproc_store_meta_test_attrs_y">>,
+    Tag3 = <<"eproc_store_meta_test_attrs_b">>, Type3 = <<"eproc_store_meta_test_attrs_y">>,
+    LookupOpts = [{store, Store}],
+    %%
+    %%  Add instances.
+    %%
+    {ok, IID1} = eproc_store:add_instance(Store, inst_value()),
+    {ok, IID2} = eproc_store:add_instance(Store, inst_value()),
+    {ok, IID3} = eproc_store:add_instance(Store, inst_value()),
+%     %%
+%     %%  Add a key synchronously.
+%     %%
+%     {ok, SyncRef} = eproc_store:attr_task(Store, eproc_router, {key_sync, Key2, IID, false}),
+%     ?assertThat(eproc_router:lookup(Key1, RouterOpts), is({ok, []})),
+%     ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, [IID]})),
+%     %%
+%     %%  Add the key attributes.
+%     %%
+%     Trn1 = #transition{
+%         inst_id = IID, number = 1, sname = [s1], sdata = d1,
+%         timestamp = os:timestamp(), duration = 13, trigger_type = event,
+%         trigger_msg = #msg_ref{cid = 1011, peer = {connector, some}},
+%         trigger_resp = undefined,
+%         trn_messages = [],
+%         attr_last_id = 1,
+%         attr_actions = [
+%             #attr_action{module = eproc_router, attr_id = 1, needs_store = true, action = {create, undefined, [s1], {data, Key1, undefined}}},
+%             #attr_action{module = eproc_router, attr_id = 2, needs_store = true, action = {create, undefined, [],   {data, Key2, SyncRef}}}
+%         ],
+%         inst_status = running, interrupts = undefined
+%     },
+%     Msg11 = #message{id = 1011, sender = {connector, some}, receiver = {inst, IID}, resp_to = undefined, date = os:timestamp(), body = m11},
+%     {ok, IID, 1} = eproc_store:add_transition(Store, Trn1, [Msg11]),
+%     ?assertThat(eproc_router:lookup(Key1, RouterOpts), is({ok, [IID]})),
+%     ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, [IID]})),
+%     %%
+%     %%  Remove one attr by scope.
+%     %%
+%     Trn2 = Trn1#transition{
+%         number = 2, sname = [s2], sdata = d2,
+%         trigger_msg = #msg_ref{cid = 1021, peer = {connector, some}},
+%         trigger_resp = undefined,
+%         trn_messages = [],
+%         attr_last_id = 2,
+%         attr_actions = [
+%             #attr_action{module = eproc_router, attr_id = 1, needs_store = true, action = {remove, {scope, [s2]}}}
+%         ],
+%         inst_status = running, interrupts = undefined
+%     },
+%     Msg21 = #message{id = 1021, sender = {connector, some}, receiver = {inst, IID}, resp_to = undefined, date = os:timestamp(), body = m11},
+%     {ok, IID, 2} = eproc_store:add_transition(Store, Trn2, [Msg21]),
+%     ?assertThat(eproc_router:lookup(Key1, RouterOpts), is({ok, []})),
+%     ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, [IID]})),
+    ok.
 
 

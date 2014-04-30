@@ -25,7 +25,7 @@
 %%
 -module(eproc_meta).
 -behaviour(eproc_fsm_attr).
--export([add_tag/2]).
+-export([add_tag/2, get_instances/2]).
 -export([init/1, handle_created/3, handle_updated/4, handle_removed/2, handle_event/3]).
 -include("eproc.hrl").
 
@@ -41,11 +41,38 @@
 %% =============================================================================
 
 %%
+%%  Associate a tag with the current FSM instance.
+%%  This function should be called from the FSM process, usually in
+%%  the `handle_state/3` callback.
 %%
-%%
+-spec add_tag(
+        Tag     :: binary(),
+        Type    :: binary()
+    ) ->
+        ok.
+
 add_tag(Tag, Type) ->
     Name = Action = {tag, Tag, Type},
     eproc_fsm_attr:action(?MODULE, Name, Action, []).
+
+
+%%
+%%  Get FSM instances by specified query.
+%%
+%%  Currently the following options are supported:
+%%
+%%  `{store, Store}`
+%%  :   Store to be used for the query. This option is mainly
+%%      used for testing. The default store will be used by default.
+%%
+-spec get_instances(
+        Query   :: {tags, [{Tag :: binary(), Type :: binary() | undefined}]},
+        Opts    :: [{store, store_ref()}]
+    ) ->
+        {ok, [inst_id()]}.
+
+get_instances(Query, Opts) ->
+    eproc_fsm_attr:task(?MODULE, {get_instances, Query}, Opts).
 
 
 
