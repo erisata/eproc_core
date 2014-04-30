@@ -34,7 +34,7 @@ test: compile
 	env ERL_AFLAGS='-config test/sys' $(REBAR) eunit skip_deps=true verbose=1
 
 itest: compile
-	$(REBAR) ct skip_deps=true
+	$(REBAR) ct skip_deps=true || grep Testing logs/raw.log
 
 clean: clean-itest
 	$(REBAR) clean skip_deps=true

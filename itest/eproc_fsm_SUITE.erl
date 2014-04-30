@@ -25,7 +25,8 @@
     test_suspend_resume/1,
     test_kill/1,
     test_rtdata/1,
-    test_timers/1
+    test_timers/1,
+    test_router_integration/1
 ]).
 -include_lib("common_test/include/ct.hrl").
 -include("eproc.hrl").
@@ -40,7 +41,8 @@ all() -> [
     test_suspend_resume,
     test_kill,
     test_rtdata,
-    test_timers
+    test_timers,
+    test_router_integration
     ].
 
 
@@ -193,9 +195,18 @@ test_timers(_Config) ->
     ok.
 
 
+%%
+%%  Check if router works with FSM.
+%%
+test_router_integration(_Config) ->
+    OrderId = {order, erlang:node(), erlang:now()},
+    ok               = eproc_fsm__order:create(OrderId),
+    {ok, DeliveryId} = eproc_fsm__order:process(OrderId),
+    {ok, completed}  = eproc_fsm__order:delivered(DeliveryId),
+    ok.
+
 
 %%
-%%  TODO: Router keys.
 %%  TODO: Meta.
 %%  TODO: Send msg.
 %%

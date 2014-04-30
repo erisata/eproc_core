@@ -605,18 +605,17 @@ handle_attr_actions(Instance, Transition = #transition{attr_actions = AttrAction
 %% =============================================================================
 
 %%
+%%  Creates or removes router keys.
 %%
+%%  The sync record will be replaced, if created previously, alrough
+%%  the SyncRef is not checked to keep this action atomic.
 %%
 handle_attr_custom_router_action(AttrAction, Instance) ->
     #attr_action{attr_id = AttrId, action = Action} = AttrAction,
     #instance{id = InstId} = Instance,
     case Action of
-        {create, _Name, _Scope, {data, Key, SyncRef}} ->
-            case SyncRef of
-                undefined -> ok;
-                _ -> true = ets:match_delete(?KEY_TBL, #router_key{key = Key, attr_id = SyncRef, _ = '_'})
-            end,
-            true = ets:insert_new(?KEY_TBL, #router_key{key = Key, inst_id = InstId, attr_id = AttrId}),
+        {create, _Name, _Scope, {data, Key, _SyncRef}} ->
+            true = ets:insert(?KEY_TBL, #router_key{key = Key, inst_id = InstId, attr_id = AttrId}),
             ok;
         {remove, _Reason} ->
             true = ets:match_delete(?KEY_TBL, #router_key{attr_id = AttrId, _ = '_'}),

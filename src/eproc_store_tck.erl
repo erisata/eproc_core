@@ -592,19 +592,19 @@ eproc_store_router_test_attrs(Config) ->
     Store = store(Config),
     Key1 = {eproc_store_router_test_attrs, now()},
     Key2 = {eproc_store_router_test_attrs, now()},
-    {ok, Router} = eproc_router:setup([], [{store, Store}]),
+    RouterOpts = [{store, Store}],
     %%
     %%  Add instances.
     %%
     {ok, IID} = eproc_store:add_instance(Store, inst_value()),
-    ?assertThat(eproc_router:lookup(Router, Key1), is({ok, []})),
-    ?assertThat(eproc_router:lookup(Router, Key2), is({ok, []})),
+    ?assertThat(eproc_router:lookup(Key1, RouterOpts), is({ok, []})),
+    ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, []})),
     %%
     %%  Add a key synchronously.
     %%
     {ok, SyncRef} = eproc_store:attr_task(Store, eproc_router, {key_sync, Key2, IID, false}),
-    ?assertThat(eproc_router:lookup(Router, Key1), is({ok, []})),
-    ?assertThat(eproc_router:lookup(Router, Key2), is({ok, [IID]})),
+    ?assertThat(eproc_router:lookup(Key1, RouterOpts), is({ok, []})),
+    ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, [IID]})),
     %%
     %%  Add the key attributes.
     %%
@@ -623,8 +623,8 @@ eproc_store_router_test_attrs(Config) ->
     },
     Msg11 = #message{id = 1011, sender = {connector, some}, receiver = {inst, IID}, resp_to = undefined, date = os:timestamp(), body = m11},
     {ok, IID, 1} = eproc_store:add_transition(Store, Trn1, [Msg11]),
-    ?assertThat(eproc_router:lookup(Router, Key1), is({ok, [IID]})),
-    ?assertThat(eproc_router:lookup(Router, Key2), is({ok, [IID]})),
+    ?assertThat(eproc_router:lookup(Key1, RouterOpts), is({ok, [IID]})),
+    ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, [IID]})),
     %%
     %%  Remove one attr by scope.
     %%
@@ -641,8 +641,8 @@ eproc_store_router_test_attrs(Config) ->
     },
     Msg21 = #message{id = 1021, sender = {connector, some}, receiver = {inst, IID}, resp_to = undefined, date = os:timestamp(), body = m11},
     {ok, IID, 2} = eproc_store:add_transition(Store, Trn2, [Msg21]),
-    ?assertThat(eproc_router:lookup(Router, Key1), is({ok, []})),
-    ?assertThat(eproc_router:lookup(Router, Key2), is({ok, [IID]})),
+    ?assertThat(eproc_router:lookup(Key1, RouterOpts), is({ok, []})),
+    ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, [IID]})),
     ok.
 
 
