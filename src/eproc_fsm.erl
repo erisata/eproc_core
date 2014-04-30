@@ -2045,7 +2045,8 @@ perform_transition(Trigger, TransitionFun, State) ->
         type = TriggerType,
         source = TriggerSrc,
         message = TriggerMsg,
-        msg_cid = TriggerMsgCId
+        msg_cid = TriggerMsgCId,
+        reply_fun = ReplyFun
     } = Trigger,
 
     TrnNr = LastTrnNr + 1,
@@ -2076,7 +2077,7 @@ perform_transition(Trigger, TransitionFun, State) ->
     {ResponseMsgRef, TransitionMsgs} = case Reply of
         noreply ->
             {undefined, [RequestMsg | RegisteredMsgs]};
-        {reply, ReplyMsgCId, ReplyMsg} ->
+        {reply, ReplyMsgCId, ReplyMsg, _ReplySent} ->
             ResponseRef = #msg_ref{cid = ReplyMsgCId, peer = TriggerSrc},
             ResponseMsg = #message{
                 id       = ReplyMsgCId,
@@ -2127,6 +2128,14 @@ perform_transition(Trigger, TransitionFun, State) ->
         interrupts   = Interrupts
     },
     {ok, InstId, TrnNr} = eproc_store:add_transition(Store, Transition, TransitionMsgs),
+
+    %% Send a reply, if not sent already
+    case Reply of
+        noreply -> ok;
+        {reply, _SentReplyMsgCId, _SentReplyMsg, true} ->  ok;
+        {reply, ReplyMsgCIdToSend, ReplyMsgToSend, false} ->
+            ReplyFun(InstId, ReplyMsgCIdToSend, ReplyMsgToSend)
+    end,
 
     %% Wait a bit, if needed.
     case Delay of
@@ -2213,10 +2222,9 @@ perform_event_transition(Trigger, TrnNr, InitAttrActions, State) ->
     Reply = case {TriggerSync, TransitionReply, ExplicitReply} of
         {true, {reply, ReplyMsg}, noreply} ->
             ReplyMsgCId = ?MSGCID_REPLY(InstId, TrnNr),
-            ReplyFun(InstId, ReplyMsgCId, ReplyMsg),
-            {reply, ReplyMsgCId, ReplyMsg};
+            {reply, ReplyMsgCId, ReplyMsg, false};
         {true, noreply, {reply, ReplyMsgCId, ReplyMsg}} ->
-            {reply, ReplyMsgCId, ReplyMsg};
+            {reply, ReplyMsgCId, ReplyMsg, true};
         {false, noreply, noreply} ->
             noreply
     end,

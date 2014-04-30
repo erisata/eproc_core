@@ -94,7 +94,6 @@ init(_StateName, _StateData) ->
 
 %%
 %%  The initial state.
-%%  TODO: Race condition exists here, when resolving the key.
 %%
 handle_state([], {sync, _From, {create, OrderId}}, StateData) ->
     ok = eproc_router:add_key(?ORDER_KEY(OrderId), []),
