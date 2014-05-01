@@ -586,7 +586,7 @@ eproc_store_core_test_attrs(Config) ->
 %% =============================================================================
 
 %%
-%%  Check of store operations for handling `eproc_router` module works.
+%%  Check if store operations for handling `eproc_router` attributes (keys) works.
 %%
 eproc_store_router_test_attrs(Config) ->
     Store = store(Config),
@@ -652,64 +652,58 @@ eproc_store_router_test_attrs(Config) ->
 %% =============================================================================
 
 %%
-%%
+%%  Check if store operations for handling `eproc_module` attributes (tags) works.
 %%
 eproc_store_meta_test_attrs(Config) ->
     Store = store(Config),
-    Tag1 = <<"eproc_store_meta_test_attrs_a">>, Type1 = <<"eproc_store_meta_test_attrs_x">>,
-    Tag2 = <<"eproc_store_meta_test_attrs_a">>, Type2 = <<"eproc_store_meta_test_attrs_y">>,
-    Tag3 = <<"eproc_store_meta_test_attrs_b">>, Type3 = <<"eproc_store_meta_test_attrs_y">>,
-    LookupOpts = [{store, Store}],
+    Tag1 = erlang:term_to_binary(erlang:now()),
+    Tag2 = erlang:term_to_binary(erlang:now()),
+    Tag3 = erlang:term_to_binary(erlang:now()),
+    Type1 = <<"eproc_store_meta_test_attrs_x">>,
+    Type2 = <<"eproc_store_meta_test_attrs_y">>,
+    Opts = [{store, Store}],
     %%
     %%  Add instances.
     %%
     {ok, IID1} = eproc_store:add_instance(Store, inst_value()),
     {ok, IID2} = eproc_store:add_instance(Store, inst_value()),
     {ok, IID3} = eproc_store:add_instance(Store, inst_value()),
-%     %%
-%     %%  Add a key synchronously.
-%     %%
-%     {ok, SyncRef} = eproc_store:attr_task(Store, eproc_router, {key_sync, Key2, IID, false}),
-%     ?assertThat(eproc_router:lookup(Key1, RouterOpts), is({ok, []})),
-%     ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, [IID]})),
-%     %%
-%     %%  Add the key attributes.
-%     %%
-%     Trn1 = #transition{
-%         inst_id = IID, number = 1, sname = [s1], sdata = d1,
-%         timestamp = os:timestamp(), duration = 13, trigger_type = event,
-%         trigger_msg = #msg_ref{cid = 1011, peer = {connector, some}},
-%         trigger_resp = undefined,
-%         trn_messages = [],
-%         attr_last_id = 1,
-%         attr_actions = [
-%             #attr_action{module = eproc_router, attr_id = 1, needs_store = true, action = {create, undefined, [s1], {data, Key1, undefined}}},
-%             #attr_action{module = eproc_router, attr_id = 2, needs_store = true, action = {create, undefined, [],   {data, Key2, SyncRef}}}
-%         ],
-%         inst_status = running, interrupts = undefined
-%     },
-%     Msg11 = #message{id = 1011, sender = {connector, some}, receiver = {inst, IID}, resp_to = undefined, date = os:timestamp(), body = m11},
-%     {ok, IID, 1} = eproc_store:add_transition(Store, Trn1, [Msg11]),
-%     ?assertThat(eproc_router:lookup(Key1, RouterOpts), is({ok, [IID]})),
-%     ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, [IID]})),
-%     %%
-%     %%  Remove one attr by scope.
-%     %%
-%     Trn2 = Trn1#transition{
-%         number = 2, sname = [s2], sdata = d2,
-%         trigger_msg = #msg_ref{cid = 1021, peer = {connector, some}},
-%         trigger_resp = undefined,
-%         trn_messages = [],
-%         attr_last_id = 2,
-%         attr_actions = [
-%             #attr_action{module = eproc_router, attr_id = 1, needs_store = true, action = {remove, {scope, [s2]}}}
-%         ],
-%         inst_status = running, interrupts = undefined
-%     },
-%     Msg21 = #message{id = 1021, sender = {connector, some}, receiver = {inst, IID}, resp_to = undefined, date = os:timestamp(), body = m11},
-%     {ok, IID, 2} = eproc_store:add_transition(Store, Trn2, [Msg21]),
-%     ?assertThat(eproc_router:lookup(Key1, RouterOpts), is({ok, []})),
-%     ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, [IID]})),
+    ?assertThat(eproc_meta:get_instances({tags, [{Tag1, undefined}]}, Opts), is({ok, []})),
+    ?assertThat(eproc_meta:get_instances({tags, [{Tag2, undefined}]}, Opts), is({ok, []})),
+    %%
+    %%  Add the key attributes.
+    %%
+    AddTrnFun = fun (IID, AttrActions) ->
+        Trn = #transition{
+            inst_id = IID, number = 1, sname = [s1], sdata = d1, timestamp = os:timestamp(), duration = 13, trigger_type = event,
+            trigger_msg = #msg_ref{cid = {IID, 1, 0, recv}, peer = {connector, some}}, trigger_resp = undefined, trn_messages = [],
+            attr_last_id = 1, attr_actions = AttrActions, inst_status = running, interrupts = undefined
+        },
+        Msg = #message{id = {IID, 1, 0, recv}, sender = {connector, some}, receiver = {inst, IID}, resp_to = undefined, date = os:timestamp(), body = m11},
+        {ok, IID, 1} = eproc_store:add_transition(Store, Trn, [Msg])
+    end,
+    AddTrnFun(IID1, [
+        #attr_action{module = eproc_meta, attr_id = 1, needs_store = true, action = {create, undefined, [], {data, Tag1, Type1}}},
+        #attr_action{module = eproc_meta, attr_id = 2, needs_store = true, action = {create, undefined, [], {data, Tag3, Type1}}}
+    ]),
+    AddTrnFun(IID2, [
+        #attr_action{module = eproc_meta, attr_id = 1, needs_store = true, action = {create, undefined, [], {data, Tag1, Type2}}}
+    ]),
+    AddTrnFun(IID3, [
+        #attr_action{module = eproc_meta, attr_id = 1, needs_store = true, action = {create, undefined, [], {data, Tag2, Type2}}}
+    ]),
+    {ok, Res1} = eproc_meta:get_instances({tags, [{Tag1, undefined}]}, Opts),
+    {ok, Res2} = eproc_meta:get_instances({tags, [{Tag2, undefined}]}, Opts),
+    {ok, Res3} = eproc_meta:get_instances({tags, [{Tag1, Type1}]}, Opts),
+    {ok, Res4} = eproc_meta:get_instances({tags, [{Tag2, Type1}]}, Opts),
+    {ok, Res5} = eproc_meta:get_instances({tags, [{Tag1, undefined}, {Tag3, undefined}]}, Opts),
+    ?assertThat(Res1, contains_member(IID1)),
+    ?assertThat(Res1, contains_member(IID2)),
+    ?assertThat(Res1, has_length(2)),
+    ?assertThat(Res2, is([IID3])),
+    ?assertThat(Res3, is([IID1])),
+    ?assertThat(Res4, is([])),
+    ?assertThat(Res5, is([IID1])),
     ok.
 
 

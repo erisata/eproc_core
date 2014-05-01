@@ -23,6 +23,13 @@
 %%  Tags don't need to be unique, but required to be binaries.
 %%  They are maintained as FSM attributes.
 %%
+%%  TODO: Process versioning: api module provides metadata with versions and corresponding callback modules.
+%%  TODO: Process descriptions, diagrams.
+%%  TODO: State annotation.
+%%  TODO: Event annotation.
+%%  TODO: Transition annotation.
+%%  TODO: Application / process group description?
+%%
 -module(eproc_meta).
 -behaviour(eproc_fsm_attr).
 -export([add_tag/2, get_instances/2]).
@@ -34,6 +41,20 @@
     tag     :: binary(),
     type    :: binary()
 }).
+
+
+%% =============================================================================
+%%  Callback function definitions.
+%% =============================================================================
+
+%%
+%%  TODO: ...
+%%
+-callback metadata(
+        MetadataType    :: application | process | fsm
+    ) ->
+        {ok, todo}.
+
 
 
 %% =============================================================================

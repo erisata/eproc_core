@@ -655,7 +655,7 @@ handle_attr_custom_meta_action(AttrAction, Instance) ->
     #instance{id = InstId} = Instance,
     case Action of
         {create, _Name, _Scope, {data, Tag, Type}} ->
-            true = ets:insert_new(?KEY_TBL, #meta_tag{tag = Tag, type = Type, inst_id = InstId, attr_id = AttrId}),
+            true = ets:insert(?TAG_TBL, #meta_tag{tag = Tag, type = Type, inst_id = InstId, attr_id = AttrId}),
             ok;
         {update, _NewScope, {data, _Tag, _Type}} ->
             ok;
@@ -667,7 +667,40 @@ handle_attr_custom_meta_action(AttrAction, Instance) ->
 %%
 %%
 %%
-handle_attr_custom_meta_task({}) ->
-    ok. % TODO
+handle_attr_custom_meta_task({get_instances, {tags, []}}) ->
+    {ok, []};
+
+handle_attr_custom_meta_task({get_instances, {tags, Tags}}) ->
+    QueryByTagFun = fun
+        ({Tag, undefined}) ->
+            [IID || #meta_tag{inst_id = IID} <- ets:lookup(?TAG_TBL, Tag)];
+        ({Tag, Type}) ->
+            Pattern = #meta_tag{tag = Tag, type = Type, _ = '_'},
+            [IID || #meta_tag{inst_id = IID} <- ets:match_object(?TAG_TBL, Pattern)]
+    end,
+    [FirstSet | OtherSets] = lists:map(QueryByTagFun, Tags),
+    IntersectionFun = fun (IID) ->
+        all_lists_contain(IID, OtherSets)
+    end,
+    Intersection = lists:filter(IntersectionFun, FirstSet),
+    {ok, Intersection}.
+
+
+
+%% =============================================================================
+%%  Helper functions.
+%% =============================================================================
+
+%%
+%%  Checks, if all lists contain the specified element.
+%%
+all_lists_contain(_Element, []) ->
+    true;
+
+all_lists_contain(Element, [List | Other]) ->
+    case lists:member(Element, List) of
+        false -> false;
+        true -> all_lists_contain(Element, Other)
+    end.
 
 
