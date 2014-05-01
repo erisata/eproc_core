@@ -67,13 +67,13 @@
 %%  the `handle_state/3` callback.
 %%
 -spec add_tag(
-        Tag     :: binary(),
-        Type    :: binary()
+        Tag     :: binary() | integer() | atom() | list(),
+        Type    :: binary() | integer() | atom() | list()
     ) ->
         ok.
 
 add_tag(Tag, Type) ->
-    Name = Action = {tag, Tag, Type},
+    Name = Action = {tag, to_binary(Tag), to_binary(Type)},
     eproc_fsm_attr:action(?MODULE, Name, Action, []).
 
 
@@ -144,4 +144,20 @@ handle_event(_Attribute, _AttrState, Event) ->
 %% =============================================================================
 %%  Internal functions.
 %% =============================================================================
+
+%%
+%%  Converts tags or tag types to binaries.
+%%
+to_binary(Value) when is_binary(Value) ->
+    Value;
+
+to_binary(Value) when is_atom(Value) ->
+    erlang:atom_to_binary(Value, utf8);
+
+to_binary(Value) when is_integer(Value) ->
+    erlang:integer_to_binary(Value);
+
+to_binary(Value) when is_list(Value) ->
+    unicode:characters_to_binary(Value).
+
 

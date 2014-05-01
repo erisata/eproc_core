@@ -85,7 +85,7 @@ init(_StateName, _StateData) ->
 %%  The initial state.
 %%
 handle_state([], {event, {create, CustNr, Inquiry}}, StateData) ->
-    ok = eproc_meta:add_tag(erlang:integer_to_binary(CustNr), <<"cust_nr">>),
+    ok = eproc_meta:add_tag(CustNr, cust_nr),
     {next_state, [open], StateData#state{cust_nr = CustNr, inquiry = Inquiry}};
 
 
@@ -96,7 +96,7 @@ handle_state([open], {entry, _PrevState}, StateData) ->
     {ok, StateData};
 
 handle_state([open], {sync, _From, {close, Resolution}}, StateData) ->
-    ok = eproc_meta:add_tag(erlang:atom_to_binary(Resolution, utf8), <<"resolution">>),
+    ok = eproc_meta:add_tag(Resolution, resolution),
     {reply_final, ok, [closed], StateData};
 
 handle_state([open], {exit, _NextState}, StateData) ->
