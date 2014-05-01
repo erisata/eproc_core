@@ -26,7 +26,8 @@
     test_kill/1,
     test_rtdata/1,
     test_timers/1,
-    test_router_integration/1
+    test_router_integration/1,
+    test_metadata_integration/1
 ]).
 -include_lib("common_test/include/ct.hrl").
 -include("eproc.hrl").
@@ -42,7 +43,8 @@ all() -> [
     test_kill,
     test_rtdata,
     test_timers,
-    test_router_integration
+    test_router_integration,
+    test_metadata_integration
     ].
 
 
@@ -207,7 +209,19 @@ test_router_integration(_Config) ->
 
 
 %%
-%%  TODO: Meta.
+%%  Check if metadata tags works with FSM.
+%%
+test_metadata_integration(_Config) ->
+    {ok, []} = eproc_meta:get_instances({tags, [{<<"123">>, <<"cust_nr">>}]}, []),
+    {ok, Ref} = eproc_fsm__inquiry:create(123, <<"Unclear invoice lines.">>),
+    ok        = eproc_fsm__inquiry:close(Ref, rejected),
+    {inst, IID} = Ref,
+    {ok, [IID]} = eproc_meta:get_instances({tags, [{<<"123">>,      <<"cust_nr">>   }]}, []),
+    {ok, [IID]} = eproc_meta:get_instances({tags, [{<<"rejected">>, <<"resolution">>}]}, []),
+    ok.
+
+
+%%
 %%  TODO: Send msg.
 %%
 

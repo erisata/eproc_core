@@ -682,7 +682,7 @@ handle_attr_custom_meta_task({get_instances, {tags, Tags}}) ->
     IntersectionFun = fun (IID) ->
         all_lists_contain(IID, OtherSets)
     end,
-    Intersection = lists:filter(IntersectionFun, FirstSet),
+    Intersection = lists:filter(IntersectionFun, lists:usort(FirstSet)),
     {ok, Intersection}.
 
 
