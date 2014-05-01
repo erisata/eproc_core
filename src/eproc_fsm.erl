@@ -132,6 +132,7 @@
 %%      used for administrative actions: kill, suspend and resume.
 %%
 %%  TODO: Attachment support.
+%%  TODO: Implement FSM crash listener (`eproc_fsm_mgr`?).
 %%
 -module(eproc_fsm).
 -behaviour(gen_server).
