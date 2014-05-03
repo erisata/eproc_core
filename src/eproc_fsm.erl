@@ -477,6 +477,8 @@
 %%  or the state name as returned by the `init/2` callback.
 %%  Similarly, the entry action is not invoked for the final state.
 %%
+%%  TODO: Add `ignore` response to be able to ignore unknown messages, for example.
+%%
 -callback handle_state(
         StateName   :: state_name(),
         Trigger     :: {event, Message} |
