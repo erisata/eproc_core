@@ -149,7 +149,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% =============================================================================
 
 %%
-%%  Returns supervisor child specifications for starting the registry.
+%%  Returns supervisor child specifications for starting the store.
 %%
 supervisor_child_specs(_StoreArgs) ->
     Mod = ?MODULE,
