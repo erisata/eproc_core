@@ -193,7 +193,7 @@ add_transition(_StoreArgs, Transition, Messages) ->
     } = Transition,
     true = is_list(AttrActions),
     [Instance = #instance{status = OldStatus}] = ets:lookup(?INST_TBL, InstId),
-    Action = case {is_instance_terminated(OldStatus), is_instance_terminated(Status), OldStatus, Transition} of
+    Action = case {eproc_store:is_instance_terminated(OldStatus), eproc_store:is_instance_terminated(Status), OldStatus, Transition} of
         {false, false, suspended, #transition{inst_status = running, interrupts = undefined}} ->
             ok;
         {false, false, running, #transition{inst_status = running, interrupts = undefined}} ->
@@ -227,7 +227,7 @@ set_instance_killed(_StoreArgs, FsmRef, UserAction) ->
         {error, Reason} ->
             {error, Reason};
         {ok, Instance = #instance{id = InstId, status = Status}} ->
-            case is_instance_terminated(Status) of
+            case eproc_store:is_instance_terminated(Status) of
                 false ->
                     ok = write_instance_terminated(Instance, killed, UserAction),
                     {ok, InstId};
@@ -245,7 +245,7 @@ set_instance_suspended(_StoreArgs, FsmRef, Reason) ->
         {error, FailReason} ->
             {error, FailReason};
         {ok, #instance{id = InstId, status = Status}} ->
-            case {is_instance_terminated(Status), Status} of
+            case {eproc_store:is_instance_terminated(Status), Status} of
                 {true, _} ->
                     {error, terminated};
                 {false, suspended} ->
@@ -265,7 +265,7 @@ set_instance_resuming(_StoreArgs, FsmRef, StateAction, UserAction) ->
         {error, FailReason} ->
             {error, FailReason};
         {ok, Instance = #instance{id = InstId, status = Status, start_spec = StartSpec}} ->
-            case {is_instance_terminated(Status), Status} of
+            case {eproc_store:is_instance_terminated(Status), Status} of
                 {true, _} ->
                     {error, terminated};
                 {false, running} ->
@@ -570,17 +570,6 @@ write_instance_resumed(InstId, TrnNr) ->
     end,
     true = ets:update_element(?INST_TBL, InstId, {#instance.status, running}),
     ok.
-
-
-%%
-%%  Checks if instance is terminated by status.
-%%
-is_instance_terminated(running)   -> false;
-is_instance_terminated(suspended) -> false;
-is_instance_terminated(resuming)  -> false;
-is_instance_terminated(completed) -> true;
-is_instance_terminated(failed)    -> true;
-is_instance_terminated(killed)    -> true.
 
 
 %%

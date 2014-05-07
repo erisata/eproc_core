@@ -40,7 +40,7 @@
     load_running/2,
     attr_task/3
 ]).
--export([apply_transition/2]).
+-export([is_instance_terminated/1, apply_transition/2]).
 -export_type([ref/0]).
 -include("eproc.hrl").
 
@@ -394,6 +394,17 @@ attr_task(Store, AttrModule, AttrTask) ->
 %% =============================================================================
 %%  Functions for `eproc_store` implementations.
 %% =============================================================================
+
+%%
+%%  Checks if instance is terminated by status.
+%%
+is_instance_terminated(running)   -> false;
+is_instance_terminated(suspended) -> false;
+is_instance_terminated(resuming)  -> false;
+is_instance_terminated(completed) -> true;
+is_instance_terminated(failed)    -> true;
+is_instance_terminated(killed)    -> true.
+
 
 %%
 %%  Replay transition on a specified state.
