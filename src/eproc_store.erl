@@ -20,6 +20,8 @@
 %%  are provided. The `eproc_core` provides ETS and Mnesia based implementations.
 %%  Riak based implementation is provided by the `eproc_riak` component.
 %%
+%%  TODO: A lot of functionality is duplicated between store implementations. This behaviour should be reviewed.
+%%
 -module(eproc_store).
 -compile([{parse_transform, lager_transform}]).
 -export([

@@ -246,8 +246,8 @@ eproc_store_core_test_suspend_resume(Config) ->
     #instance{status = resuming, state = #inst_state{interrupt = #interrupt{}}} = Inst1Resuming,
     #instance{status = resuming, state = #inst_state{interrupt = #interrupt{}}} = Inst2Resuming,
     %%  Mark them resumed
-    ok = eproc_store:set_instance_resumed(Store, IID1, 2),
-    ok = eproc_store:set_instance_resumed(Store, IID1, 2),
+    ok = eproc_store:set_instance_resumed(Store, IID1, 0),
+    ok = eproc_store:set_instance_resumed(Store, IID1, 0),
     {error, running}  = eproc_store:set_instance_resuming(Store, {inst, IID1}, unchanged, #user_action{}),   %% Try resume running FSM
     {ok, Inst1Resumed} = eproc_store:get_instance(Store, {inst, IID1}, current),
     #instance{status = running, state = #inst_state{interrupt = undefined}} = Inst1Resumed,
