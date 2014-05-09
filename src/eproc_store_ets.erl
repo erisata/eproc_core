@@ -193,7 +193,9 @@ add_transition(_StoreArgs, Transition, Messages) ->
     } = Transition,
     true = is_list(AttrActions),
     [Instance = #instance{status = OldStatus}] = ets:lookup(?INST_TBL, InstId),
-    Action = case {eproc_store:is_instance_terminated(OldStatus), eproc_store:is_instance_terminated(Status), OldStatus, Transition} of
+    OldTerminated = eproc_store:is_instance_terminated(OldStatus),
+    NewTerminated = eproc_store:is_instance_terminated(Status),
+    Action = case {OldTerminated, NewTerminated, OldStatus, Transition} of
         {false, false, suspended, #transition{inst_status = running, interrupts = undefined}} ->
             ok;
         {false, false, running, #transition{inst_status = running, interrupts = undefined}} ->
