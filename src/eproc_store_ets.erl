@@ -328,8 +328,23 @@ attr_task(_StoreArgs, AttrModule, AttrTask) ->
 
 
 %%
+%%  Get instance data.
 %%
-%%
+get_instance(_StoreArgs, FsmRefs, Query) when is_list(FsmRefs) ->
+    ReadFun = fun
+        (FsmRef, {ok, Insts}) ->
+            case read_instance(FsmRef, Query) of
+                {ok, Inst}      -> {ok, [Inst | Insts]};
+                {error, Reason} -> {error, Reason}
+            end;
+        (_FsmRef, {error, Reason}) ->
+            {error, Reason}
+    end,
+    case lists:foldl(ReadFun, {ok, []}, FsmRefs) of
+        {ok, Instances} -> {ok, lists:reverse(Instances)};
+        {error, Reason} -> {error, Reason}
+    end;
+
 get_instance(_StoreArgs, FsmRef, Query) ->
     read_instance(FsmRef, Query).
 
@@ -425,6 +440,9 @@ read_instance(FsmRef, Query) ->
 %%
 read_instance_data(Instance, header) ->
     {ok, Instance#instance{state = undefined, transitions = undefined}};
+
+read_instance_data(Instance, recent) ->
+    read_instance_data(Instance, current);
 
 read_instance_data(Instance, current) ->
     {ok, CurrentState} = read_state(Instance, current),

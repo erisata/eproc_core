@@ -127,6 +127,16 @@ eproc_store_core_test_unnamed_instance(Config) ->
     Inst2 = Inst#instance{id = IID2, group = GRP2, state = undefined},
     false = is_atom(GRP1),
     897 = GRP2,
+    %%  Try to get instance state
+    {ok, #instance{state = undefined    }} = eproc_store:get_instance(Store, {inst, IID1}, header),
+    {ok, #instance{state = #inst_state{}}} = eproc_store:get_instance(Store, {inst, IID1}, recent),
+    {ok, [
+        #instance{id = IID1, state = #inst_state{}},
+        #instance{id = IID2, state = #inst_state{}}
+    ]} = eproc_store:get_instance(Store, [{inst, IID1}, {inst, IID2}], recent),
+    {error, _} = eproc_store:get_instance(Store, [{inst, IID1}, {inst, IID2}, {inst, some}], recent),
+    {ok, #instance{state = State1}} = eproc_store:get_instance(Store, {inst, IID1}, current),
+    #inst_state{trn_nr = 0, sname = [], sdata = {state, a, b}} = State1,
     %%  Try to load instance data.
     {ok, LoadedInst = #instance{id = IID1, group = GRP1}} = eproc_store:load_instance(Store, {inst, IID1}),
     LoadedInst = Inst#instance{id = IID1, group = GRP1, state = State#inst_state{inst_id = IID1}},

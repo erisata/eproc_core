@@ -199,6 +199,7 @@
 
 %%
 %%  Get instance data by FSM reference (id or name).
+%%  Several instances can be retrieved by providing a list of FsmRefs.
 %%
 %%  The parameter Query can have several values:
 %%
@@ -206,13 +207,17 @@
 %%  :   Only main instance data is returned.
 %%  `current`
 %%  :   Returns FSM header information with the current state attached.
+%%  `recent`
+%%  :   Returns FSM header information with some recent state attached.
+%%      The recent state can be retrieved easied, altrough can be suitable
+%%      in some cases, like showing a list of instances with current state names.
 %%
 -callback get_instance(
         StoreArgs   :: term(),
-        FsmRef      :: fsm_ref(),
+        FsmRef      :: fsm_ref() | [fsm_ref()],
         Query       :: header | current
     ) ->
-        {ok, #instance{}} |
+        {ok, #instance{} | [#instance{}]} |
         {error, Reason :: term()}.
 
 
