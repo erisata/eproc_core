@@ -15,39 +15,34 @@
 %\--------------------------------------------------------------------
 
 %%
-%%  Behaviour for EProc Store archive.
-%%  This behaviour is not required, altrough recommended to be used
-%%  by store implementations and archive implementations. This will
-%%  allow to combine them as needed.
-%%
-%%  TODO: Define and implement.
+%%  Void EProc archive. Just prints all data to log and discards it.
+%%  This implementation can be used if no archiving is needed.
 %%
 -module(eproc_archive).
 -compile([{parse_transform, lager_transform}]).
--include("eproc.hrl").
 
 
 %% =============================================================================
-%%  Callback definitions.
+%%  Callbacks for `eproc_codec`.
 %% =============================================================================
+
 
 %%
 %%  Archive entire FSM instance.
 %%
--callback archive_instance(
-        ArchArgs    :: term(),
-        Instance    :: #instance{}
-    ) -> ok.
+archive_instance(_ArchArgs, Instance) ->
+    lager:debug("Discarding instance: ~p", [Instance]),
+    ok.
 
 
 %%
 %%  Archive part of FSM instance transitions.
 %%
--callback archive_transitions(
-        ArchArgs    :: term(),
-        Instance    :: #instance{},
-        Transitions :: [#transition{}],
-        Messages    :: [#message{}]
-    ) -> ok.
+archive_transitions(_ArchArgs, Instance, Transitions, Messages) ->
+    lager:debug(
+        "Discarding instance transitions: instance=~p, transitions=~p, messages=~p",
+        [Instance, Transitions, Messages]
+    ),
+    ok.
 
 
