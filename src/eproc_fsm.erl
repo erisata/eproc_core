@@ -133,6 +133,8 @@
 %%
 %%  TODO: Attachment support.
 %%  TODO: Implement FSM crash listener (`eproc_fsm_mgr`?).
+%%  TODO: Check if InstId can be non-integer.
+%%  TODO: Make interrupt ID in form of `{InstId, TrnNr, integer()}`.
 %%
 -module(eproc_fsm).
 -behaviour(gen_server).
