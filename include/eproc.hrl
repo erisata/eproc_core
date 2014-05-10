@@ -50,6 +50,7 @@
 -type inst_status()     :: running | suspended | resuming | completed | killed | failed.
 -type codec_ref()       :: eproc_codec:ref().
 -type store_ref()       :: eproc_store:ref().
+-type archive_ref()     :: eproc_archive:ref().
 -type registry_ref()    :: eproc_registry:ref().
 -type trn_nr()          :: integer().
 -type msg_id()          :: {inst_id(), trn_nr(), integer()}.                %%  Message Id.

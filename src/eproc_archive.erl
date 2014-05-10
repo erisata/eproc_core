@@ -24,7 +24,11 @@
 %%
 -module(eproc_archive).
 -compile([{parse_transform, lager_transform}]).
+-export([ref/2, archive_instance/2, archive_transitions/4]).
+-export_type([ref/0]).
 -include("eproc.hrl").
+
+-opaque ref() :: {Callback :: module(), Args :: term()}.
 
 
 %% =============================================================================
@@ -49,5 +53,47 @@
         Transitions :: [#transition{}],
         Messages    :: [#message{}]
     ) -> ok.
+
+
+
+%% =============================================================================
+%%  Public API.
+%% =============================================================================
+
+%%
+%%  Create an archive reference.
+%%
+-spec ref(module(), term()) -> {ok, archive_ref()}.
+
+ref(Module, Args) ->
+    {ok, {Module, Args}}.
+
+
+%%
+%%  Archive entire FSM instance.
+%%
+-spec archive_instance(
+        ArchiveRef  :: archive_ref(),
+        Instance    :: #instance{}
+    ) -> ok.
+
+archive_instance(ArchiveRef, Instance) ->
+    {ArchMod, ArchArgs} = ArchiveRef,
+    ArchMod:archive_instance(ArchArgs, Instance).
+
+
+%%
+%%  Archive part of FSM instance transitions.
+%%
+-spec archive_transitions(
+        ArchiveRef  :: archive_ref(),
+        Instance    :: #instance{},
+        Transitions :: [#transition{}],
+        Messages    :: [#message{}]
+    ) -> ok.
+
+archive_transitions(ArchiveRef, Instance, Transitions, Messages) ->
+    {ArchMod, ArchArgs} = ArchiveRef,
+    ArchMod:archive_instance(ArchArgs, Instance, Transitions, Messages).
 
 
