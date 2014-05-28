@@ -220,7 +220,7 @@
 %%
 -callback get_instance(
         StoreArgs   :: term(),
-        FsmRef      :: fsm_ref() | [fsm_ref()],
+        FsmRef      :: fsm_ref() | {list, [fsm_ref()]},
         Query       :: header | current
     ) ->
         {ok, #instance{} | [#instance{}]} |
@@ -234,7 +234,7 @@
 -callback get_transition(
         StoreArgs   :: term(),
         FsmRef      :: fsm_ref(),
-        TrnNr       :: trn_nr(),
+        TrnNr       :: trn_nr() | {list, From :: (trn_nr() | current), Count :: integer()},
         Query       :: all
     ) ->
         {ok, #transition{}} |

@@ -134,8 +134,8 @@ eproc_store_core_test_unnamed_instance(Config) ->
     {ok, [
         #instance{inst_id = IID1, curr_state = #inst_state{}},
         #instance{inst_id = IID2, curr_state = #inst_state{}}
-    ]} = eproc_store:get_instance(Store, [{inst, IID1}, {inst, IID2}], recent),
-    {error, _} = eproc_store:get_instance(Store, [{inst, IID1}, {inst, IID2}, {inst, some}], recent),
+    ]} = eproc_store:get_instance(Store, {list, [{inst, IID1}, {inst, IID2}]}, recent),
+    {error, _} = eproc_store:get_instance(Store, {list, [{inst, IID1}, {inst, IID2}, {inst, some}]}, recent),
     {ok, #instance{curr_state = State1}} = eproc_store:get_instance(Store, {inst, IID1}, current),
     #inst_state{stt_id = 0, sname = [], sdata = {state, a, b}} = State1,
     %%  Try to load instance data.
@@ -434,6 +434,7 @@ eproc_store_core_test_resolve_msg_dst(Config) ->
     Msg1r = #message{msg_id = {IID1, 1, 0, recv}, sender = {ext, some},  receiver = {inst, IID1},      resp_to = undefined, date = os:timestamp(), body = m1},
     Msg2s = #message{msg_id = {IID1, 1, 2, sent}, sender = {inst, IID1}, receiver = {inst, undefined}, resp_to = undefined, date = os:timestamp(), body = m2},
     Msg2r = #message{msg_id = {IID1, 1, 2, recv}, sender = {inst, IID1}, receiver = {inst, IID2},      resp_to = undefined, date = os:timestamp(), body = m2},
+    Msg3r = #message{msg_id = {IID1, 1, 3, recv}, sender = {inst, IID1}, receiver = {inst, IID2},      resp_to = undefined, date = os:timestamp(), body = m3},
     Trn1 = #transition{
         trn_id = 1,
         sname = [s1],
@@ -450,7 +451,13 @@ eproc_store_core_test_resolve_msg_dst(Config) ->
         interrupts = undefined
     },
     Trn2 = Trn1#transition{
+        trn_id = 1,
         trigger_msg = #msg_ref{cid = {IID1, 1, 2, recv}, peer = {inst, IID1}},
+        trn_messages = []
+    },
+    Trn3 = Trn1#transition{
+        trn_id = 2,
+        trigger_msg = #msg_ref{cid = {IID1, 1, 3, recv}, peer = {inst, IID1}},
         trn_messages = []
     },
     Trn1Fix = Trn1#transition{
@@ -462,6 +469,7 @@ eproc_store_core_test_resolve_msg_dst(Config) ->
     },
     {ok, IID1, 1} = eproc_store:add_transition(Store, IID1, Trn1, [Msg1r, Msg2s]),
     {ok, IID2, 1} = eproc_store:add_transition(Store, IID2, Trn2, [Msg2r]),
+    {ok, IID2, 2} = eproc_store:add_transition(Store, IID2, Trn3, [Msg3r]),
     %%  Get the stored data.
     Msg1 = Msg1r#message{msg_id = {IID1, 1, 0}},
     Msg2 = Msg2r#message{msg_id = {IID1, 1, 2}}, %% Receiver = {inst, IID2}
@@ -474,7 +482,15 @@ eproc_store_core_test_resolve_msg_dst(Config) ->
     ?assertThat(eproc_store:get_message(Store, {IID1, 1, 1      }, all), is({error, not_found})),
     ?assertThat(eproc_store:get_transition(Store, {inst, IID1}, 1, all), is({ok, Trn1Fix})),
     ?assertThat(eproc_store:get_transition(Store, {inst, IID2}, 1, all), is({ok, Trn2Fix})),
-    ?assertThat(eproc_store:get_transition(Store, {inst, IID2}, 2, all), is({error, not_found})),
+    ?assertThat(eproc_store:get_transition(Store, {inst, IID2}, 3, all), is({error, not_found})),
+    {ok, Trns1a} = eproc_store:get_transition(Store, {inst, IID1}, {list, 1,       100}, all),
+    {ok, Trns1b} = eproc_store:get_transition(Store, {inst, IID1}, {list, 1,       0  }, all),
+    {ok, Trns2a} = eproc_store:get_transition(Store, {inst, IID2}, {list, current, 100}, all),
+    {ok, Trns2b} = eproc_store:get_transition(Store, {inst, IID2}, {list, current, 1  }, all),
+    ?assertThat(Trns1a, has_length(1)),
+    ?assertThat(Trns1b, has_length(0)),
+    ?assertThat(Trns2a, has_length(2)),
+    ?assertThat(Trns2b, has_length(1)),
     ok.
 
 

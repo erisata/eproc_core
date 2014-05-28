@@ -338,7 +338,7 @@ attr_task(_StoreArgs, AttrModule, AttrTask) ->
 %%
 %%  Get instance data.
 %%
-get_instance(_StoreArgs, FsmRefs, Query) when is_list(FsmRefs) ->
+get_instance(_StoreArgs, {list, FsmRefs}, Query) when is_list(FsmRefs) ->
     ReadFun = fun
         (FsmRef, {ok, Insts}) ->
             case read_instance(FsmRef, Query) of
@@ -360,29 +360,30 @@ get_instance(_StoreArgs, FsmRef, Query) ->
 %%
 %%
 %%
-get_transition(_StoreArgs, FsmRef, TrnNr, all) ->
-    ResolveMsgRefs = fun
-        (MsgRef = #msg_ref{cid = {I, T, M, sent}, peer = {inst, undefined}}) ->
-            case ets:lookup(?MSG_TBL, {I, T, M, recv}) of
-                [] ->
-                    MsgRef;
-                [#message{receiver = NewPeer}] ->
-                    MsgRef#msg_ref{peer = NewPeer}
-            end;
-        (MsgRef) ->
-            MsgRef
-    end,
+get_transition(_StoreArgs, FsmRef, TrnNr, all) when is_integer(TrnNr) ->
     case resolve_inst_id(FsmRef) of
-        {ok, InstId} ->
-            case ets:match_object(?TRN_TBL, #transition{trn_id = {InstId, TrnNr}, _ = '_'}) of
-                [] ->
-                    {error, not_found};
-                [Transition = #transition{trn_messages = TrnMessages}] ->
-                    NewTrnMessages = lists:map(ResolveMsgRefs, TrnMessages),
-                    {ok, Transition#transition{trn_id = TrnNr, trn_messages = NewTrnMessages}}
+        {ok, InstId}    -> read_transition(InstId, TrnNr, true);
+        {error, Reason} -> {error, Reason}
+    end;
+
+get_transition(_StoreArgs, FsmRef, {list, From, Count}, all) ->
+    ResolvedFrom = case From of
+        current ->
+            case read_instance(FsmRef, current) of
+                {ok, #instance{inst_id = IID, curr_state = #inst_state{stt_id = CurrTrnNr}}} ->
+                    {ok, IID, CurrTrnNr};
+                {error, ReadErr} ->
+                    {error, ReadErr}
             end;
-        {error, Reason} ->
-            {error, Reason}
+        _ when is_integer(From) ->
+            case resolve_inst_id(FsmRef) of
+                {ok, IID}           -> {ok, IID, From};
+                {error, ResolveErr} -> {error, ResolveErr}
+            end
+    end,
+    case ResolvedFrom of
+        {ok, InstId, FromTrnNr} -> read_transitions(InstId, FromTrnNr, Count, true);
+        {error, Reason}         -> {error, Reason}
     end.
 
 
@@ -394,15 +395,15 @@ get_message(_StoreArgs, MsgId, all) ->
         {I, T, M}    -> {I, T, M};
         {I, T, M, _} -> {I, T, M}
     end,
-    case ets:lookup(?MSG_TBL, {InstId, TrnNr, MsgNr, recv}) of
-        [] ->
-            case ets:lookup(?MSG_TBL, {InstId, TrnNr, MsgNr, sent}) of
-                [] ->
+    case read_message({InstId, TrnNr, MsgNr, recv}) of
+        {error, not_found} ->
+            case read_message({InstId, TrnNr, MsgNr, sent}) of
+                {error, not_found} ->
                     {error, not_found};
-                [Message] ->
+                {ok, Message} ->
                     {ok, Message#message{msg_id = {I, T, M}}}
             end;
-        [Message] ->
+        {ok, Message} ->
             {ok, Message#message{msg_id = {I, T, M}}}
     end.
 
@@ -424,6 +425,21 @@ resolve_inst_id({name, Name}) ->
         [#inst_name{inst_id = InstId}] ->
             {ok, InstId}
     end.
+
+
+%%
+%%  Resolve partially filled msg reference, if possible.
+%%
+resolve_msg_ref(MsgRef = #msg_ref{cid = {I, T, M, sent}, peer = {inst, undefined}}) ->
+    case read_message({I, T, M, recv}) of
+        {ok, #message{receiver = NewPeer}} ->
+            MsgRef#msg_ref{peer = NewPeer};
+        {error, not_found} ->
+            MsgRef
+    end;
+
+resolve_msg_ref(MsgRef) ->
+    MsgRef.
 
 
 %%
@@ -457,6 +473,54 @@ read_instance_data(Instance, current) ->
 
 read_instance_data(Instance, full) ->
     {ok, Instance}.
+
+
+%%
+%%  Read single transition.
+%%
+read_transition(InstId, TrnNr, ResolveMsgRefs) ->
+    case ets:lookup(?TRN_TBL, {InstId, TrnNr}) of
+        [] ->
+            {error, not_found};
+        [Transition = #transition{trn_messages = TrnMessages}] ->
+            case ResolveMsgRefs of
+                true ->
+                    NewTrnMessages = lists:map(fun resolve_msg_ref/1, TrnMessages),
+                    {ok, Transition#transition{trn_id = TrnNr, trn_messages = NewTrnMessages}};
+                false ->
+                    {ok, Transition}
+            end
+    end.
+
+
+%%
+%%  Read a list of transitions.
+%%
+read_transitions(_InstId, From, Count, _ResolveMsgRefs) when Count =< 0; From =< 0->
+    {ok, []};
+
+read_transitions(InstId, From, Count, ResolveMsgRefs) ->
+    case read_transition(InstId, From, ResolveMsgRefs) of
+        {ok, Transition} ->
+            case read_transitions(InstId, From - 1, Count - 1, ResolveMsgRefs) of
+                {ok, Transitions} -> {ok, [Transition | Transitions]};
+                {error, Reason}   -> {error, Reason}
+            end;
+        {error, not_found} ->
+            {ok, []};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+
+%%
+%%  Read single message by message copy id.
+%%
+read_message(MsgCid) ->
+    case ets:lookup(?MSG_TBL, MsgCid) of
+        []        -> {error, not_found};
+        [Message] -> {ok, Message}
+    end.
 
 
 %%
