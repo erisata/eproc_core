@@ -62,14 +62,14 @@
 -record(router_key, {
     key     :: term(),
     inst_id :: inst_id(),
-    attr_nr :: integer()
+    attr_nr :: attr_nr()
 }).
 
 -record(meta_tag, {
     tag     :: binary(),
     type    :: binary(),
     inst_id :: inst_id(),
-    attr_nr :: integer()
+    attr_nr :: attr_nr()
 }).
 
 
@@ -536,7 +536,6 @@ write_instance_resumed(Instance, TrnNr) ->
         stt_id = ArchStateNr,
         interrupts = ArchInterrupts
     } = ArchState,
-    CurrStateNr = TrnNr,
     IntrNr = case CurrInterrupts of
         [                                    ] -> 1;
         [#interrupt{intr_id = LastIntrNr} | _] -> LastIntrNr + 1
