@@ -24,7 +24,7 @@
 %%
 -module(eproc_archive).
 -compile([{parse_transform, lager_transform}]).
--export([ref/2, archive_instance/2, archive_transitions/4]).
+-export([ref/2, archive_instance/4, archive_transitions/4]).
 -export_type([ref/0]).
 -include("eproc.hrl").
 
@@ -40,7 +40,9 @@
 %%
 -callback archive_instance(
         ArchArgs    :: term(),
-        Instance    :: #instance{}
+        Instance    :: #instance{},
+        Transitions :: [#transition{}],
+        Messages    :: [#message{}]
     ) -> ok.
 
 
@@ -74,12 +76,14 @@ ref(Module, Args) ->
 %%
 -spec archive_instance(
         ArchiveRef  :: archive_ref(),
-        Instance    :: #instance{}
+        Instance    :: #instance{},
+        Transitions :: [#transition{}],
+        Messages    :: [#message{}]
     ) -> ok.
 
-archive_instance(ArchiveRef, Instance) ->
+archive_instance(ArchiveRef, Instance, Transitions, Messages) ->
     {ArchMod, ArchArgs} = ArchiveRef,
-    ArchMod:archive_instance(ArchArgs, Instance).
+    ArchMod:archive_instance(ArchArgs, Instance, Transitions, Messages).
 
 
 %%

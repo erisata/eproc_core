@@ -18,20 +18,40 @@
 %%  Void EProc archive. Just prints all data to log and discards it.
 %%  This implementation can be used if no archiving is needed.
 %%
--module(eproc_archive).
+-module(eproc_archive_void).
+-behaviour(eproc_archive).
 -compile([{parse_transform, lager_transform}]).
+-export([ref/0]).
+-export([archive_instance/4, archive_transitions/4]).
+-include("eproc.hrl").
+
+
+%% =============================================================================
+%%  Public API.
+%% =============================================================================
+
+%%
+%%  Returns a reference to this archive.
+%%
+-spec ref() -> {ok, archive_ref()}.
+
+ref() ->
+    eproc_archive:ref(?MODULE, {}).
+
 
 
 %% =============================================================================
 %%  Callbacks for `eproc_codec`.
 %% =============================================================================
 
-
 %%
 %%  Archive entire FSM instance.
 %%
-archive_instance(_ArchArgs, Instance) ->
-    lager:debug("Discarding instance: ~p", [Instance]),
+archive_instance(_ArchArgs, Instance, Transitions, Messages) ->
+    lager:debug(
+        "Discarding instance: ~p, transitions=~p, messages=~p",
+        [Instance, Transitions, Messages]
+    ),
     ok.
 
 
