@@ -28,7 +28,7 @@
 -behaviour(eproc_fsm_attr).
 -export([add_key/3, add_key/2]).
 -export([lookup/2, lookup/1, lookup_send/3, lookup_send/2, lookup_sync_send/3, lookup_sync_send/2]).
--export([init/1, handle_created/3, handle_updated/4, handle_removed/2, handle_event/3]).
+-export([init/2, handle_created/4, handle_updated/5, handle_removed/3, handle_event/4]).
 -include("eproc.hrl").
 
 -record(data, {
@@ -236,14 +236,14 @@ lookup_sync_send(Key, Fun) ->
 %%
 %%  FSM started.
 %%
-init(ActiveAttrs) ->
+init(_InstId, ActiveAttrs) ->
     {ok, [ {A, undefined} || A <- ActiveAttrs ]}.
 
 
 %%
 %%  Attribute created.
 %%
-handle_created(_Attribute, {key, Key, SyncRef}, _Scope) ->
+handle_created(_InstId, _Attribute, {key, Key, SyncRef}, _Scope) ->
     AttrData = #data{key = Key, ref = SyncRef},
     AttrState = undefined,
     {create, AttrData, AttrState, true}.
@@ -252,21 +252,21 @@ handle_created(_Attribute, {key, Key, SyncRef}, _Scope) ->
 %%
 %%  Keys cannot be updated.
 %%
-handle_updated(_Attribute, _AttrState, {key, _Key}, _Scope) ->
+handle_updated(_InstId, _Attribute, _AttrState, {key, _Key}, _Scope) ->
     {error, keys_non_updateable}.
 
 
 %%
 %%  Attributes should never be removed.
 %%
-handle_removed(_Attribute, _AttrState) ->
+handle_removed(_InstId, _Attribute, _AttrState) ->
     {ok, true}.
 
 
 %%
 %%  Events are not used for keywords.
 %%
-handle_event(_Attribute, _AttrState, Event) ->
+handle_event(_InstId, _Attribute, _AttrState, Event) ->
     throw({unknown_event, Event}).
 
 

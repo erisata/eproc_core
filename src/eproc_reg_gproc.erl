@@ -22,7 +22,7 @@
 -behaviour(eproc_registry).
 -behaviour(gen_server).
 -compile([{parse_transform, lager_transform}]).
--export([start_link/1]).
+-export([start_link/1, ref/0]).
 -export([supervisor_child_specs/1, register_fsm/3]).
 -export([register_name/2, unregister_name/1, whereis_name/1, send/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -45,6 +45,13 @@
 %%
 start_link(Name) ->
     gen_server:start_link(Name, ?MODULE, {}, []).
+
+
+%%
+%%  Create reference to this registry.
+%%
+ref() ->
+    eproc_store:ref(?MODULE, {}).
 
 
 

@@ -33,7 +33,7 @@
 ]).
 -export([
     add_instance/2,
-    add_transition/3,
+    add_transition/4,
     set_instance_killed/3,
     set_instance_suspended/3,
     set_instance_resuming/4,
@@ -42,7 +42,12 @@
     load_running/2,
     attr_task/3
 ]).
--export([is_instance_terminated/1, apply_transition/2]).
+-export([
+    is_instance_terminated/1,
+    apply_transition/3,
+    make_resume_attempt/3,
+    determine_transition_action/2
+]).
 -export_type([ref/0]).
 -include("eproc.hrl").
 
@@ -96,6 +101,7 @@
 %%
 -callback add_transition(
         StoreArgs   :: term(),
+        InstId      :: inst_id(),
         Transition  :: #transition{},
         Messages    :: [#message{}]
     ) ->
@@ -271,8 +277,8 @@ supervisor_child_specs(Store) ->
 -spec ref() -> {ok, store_ref()}.
 
 ref() ->
-    {ok, {StoreMod, StoreArgs}} = eproc_core_app:store_cfg(),
-    ref(StoreMod, StoreArgs).
+    {ok, {Module, Function, Args}} = eproc_core_app:store_cfg(),
+    erlang:apply(Module, Function, Args).
 
 
 
@@ -320,7 +326,7 @@ get_message(Store, MsgId, Query) ->
 %%  assigns a group and a name if not provided.
 %%  Initial state should be provided in the `#instance.state` field.
 %%
-add_instance(Store, Instance = #instance{state = #inst_state{}}) ->
+add_instance(Store, Instance = #instance{curr_state = #inst_state{}}) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
     StoreMod:add_instance(StoreArgs, Instance).
 
@@ -330,9 +336,9 @@ add_instance(Store, Instance = #instance{state = #inst_state{}}) ->
 %%  Messages received or sent during the transition are also saved.
 %%  Instance state is updated according to data in the transition.
 %%
-add_transition(Store, Transition, Messages) ->
+add_transition(Store, InstId, Transition, Messages) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:add_transition(StoreArgs, Transition, Messages).
+    StoreMod:add_transition(StoreArgs, InstId, Transition, Messages).
 
 
 %%
@@ -415,31 +421,99 @@ is_instance_terminated(killed)    -> true.
 
 %%
 %%  Replay transition on a specified state.
-%%  Designed to be used with `lists:foldl`.
+%%  State and transition should have unqualified identifiers (`trn_nr()` and `stt_nr()`).
 %%
-apply_transition(Transition, InstState) ->
+apply_transition(Transition, InstState, InstId) ->
     #inst_state{
-        inst_id = InstId,
-        trn_nr = OldTrnNr,
+        stt_id = SttNr,
         attrs_active = Attrs
     } = InstState,
     #transition{
-        inst_id = InstId,
-        number = TrnNr,
+        trn_id = TrnNr,
         sname = SName,
         sdata = SData,
-        attr_last_id = AttrLastId,
+        attr_last_nr = AttrLastNr,
         attr_actions = AttrActions
     } = Transition,
-    TrnNr = OldTrnNr + 1,
+    TrnNr = SttNr + 1,
     {ok, NewAttrs} = eproc_fsm_attr:apply_actions(AttrActions, Attrs, InstId, TrnNr),
     InstState#inst_state{
-        trn_nr = TrnNr,
+        stt_id = TrnNr,
         sname = SName,
         sdata = SData,
-        attr_last_id = AttrLastId,
+        attr_last_nr = AttrLastNr,
         attrs_active = NewAttrs
     }.
+
+
+%%
+%%  Creates resume attempt based on user input.
+%%
+make_resume_attempt(StateAction, UserAction, Resumes) ->
+    LastResNumber = case Resumes of
+        [] -> 0;
+        [#resume_attempt{res_nr = N} | _] -> N
+    end,
+    case StateAction of
+        unchanged ->
+            #resume_attempt{
+                res_nr = LastResNumber + 1,
+                upd_sname = undefined,
+                upd_sdata = undefined,
+                upd_script = undefined,
+                resumed = UserAction
+            };
+        retry_last ->
+            case Resumes of
+                [] ->
+                    #resume_attempt{
+                        res_nr = LastResNumber + 1,
+                        upd_sname = undefined,
+                        upd_sdata = undefined,
+                        upd_script = undefined,
+                        resumed = UserAction
+                    };
+                [#resume_attempt{upd_sname = LastSName, upd_sdata = LastSData, upd_script = LastScript} | _] ->
+                    #resume_attempt{
+                        res_nr = LastResNumber + 1,
+                        upd_sname = LastSName,
+                        upd_sdata = LastSData,
+                        upd_script = LastScript,
+                        resumed = UserAction
+                    }
+            end;
+        {set, NewStateName, NewStateData, ResumeScript} ->
+            #resume_attempt{
+                res_nr = LastResNumber + 1,
+                upd_sname = NewStateName,
+                upd_sdata = NewStateData,
+                upd_script = ResumeScript,
+                resumed = UserAction
+            }
+    end.
+
+
+%%
+%%  Determines transition action.
+%%
+determine_transition_action(Transition = #transition{inst_status = Status}, OldStatus) ->
+    OldTerminated = is_instance_terminated(OldStatus),
+    NewTerminated = is_instance_terminated(Status),
+    case {OldTerminated, NewTerminated, OldStatus, Transition} of
+        {false, false, suspended, #transition{inst_status = running, interrupts = undefined}} ->
+            none;
+        {false, false, running, #transition{inst_status = running, interrupts = undefined}} ->
+            none;
+        {false, false, running, #transition{inst_status = suspended, interrupts = [Interrupt]}} ->
+            #interrupt{reason = Reason} = Interrupt,
+            {suspend, Reason};
+        {false, false, resuming, #transition{inst_status = running, interrupts = undefined}} ->
+            resume;
+        {false, true, _, #transition{interrupts = undefined}} ->
+            terminate;
+        {true, _, _, _} ->
+            {error, terminated}
+    end.
 
 
 

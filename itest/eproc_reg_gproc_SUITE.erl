@@ -38,7 +38,7 @@ all() ->
 %%
 init_per_suite(Config) ->
     {ok, _} = application:ensure_all_started(gproc),
-    {ok, Registry} = eproc_registry:ref(eproc_reg_gproc, []),
+    {ok, Registry} = eproc_reg_gproc:ref(),
     [{registry, Registry} | Config].
 
 %%

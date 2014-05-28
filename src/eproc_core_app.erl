@@ -22,8 +22,12 @@
 %%
 %%  `store`
 %%  :   [mandatory] specifies store implementation to be used.
+%%      Value for this option is MFA, used to get store reference.
+%%      Example value: `{eproc_store_ets, ref, []}`.
 %%  `registry`
 %%  :   [optional] specifies registry implementation to be used.
+%%      Value for this option is MFA, used to get registry reference.
+%%      Example value: `{eproc_reg_gproc, ref, []}`.
 %%
 -module(eproc_core_app).
 -behaviour(application).

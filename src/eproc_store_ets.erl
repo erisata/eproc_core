@@ -19,11 +19,13 @@
 %%  Mainly created to simplify management of unit and integration tests.
 %%  Its also a Reference implementation for the store.
 %%
+%%  TODO: Add support for "no_history" mode.
+%%
 -module(eproc_store_ets).
 -behaviour(eproc_store).
 -behaviour(gen_server).
 -compile([{parse_transform, lager_transform}]).
--export([start_link/1]).
+-export([start_link/1, ref/0]).
 -export([
     supervisor_child_specs/1,
     get_instance/3,
@@ -32,7 +34,7 @@
 ]).
 -export([
     add_instance/2,
-    add_transition/3,
+    add_transition/4,
     set_instance_killed/3,
     set_instance_suspended/3,
     set_instance_resuming/4,
@@ -46,7 +48,6 @@
 
 -define(INST_TBL, 'eproc_store_ets$instance').
 -define(NAME_TBL, 'eproc_store_ets$inst_name').
--define(INTR_TBL, 'eproc_store_ets$interrupt').
 -define(TRN_TBL,  'eproc_store_ets$transition').
 -define(MSG_TBL,  'eproc_store_ets$message').
 -define(KEY_TBL,  'eproc_store_ets$router_key').
@@ -61,14 +62,14 @@
 -record(router_key, {
     key     :: term(),
     inst_id :: inst_id(),
-    attr_id :: integer()
+    attr_nr :: integer()
 }).
 
 -record(meta_tag, {
     tag     :: binary(),
     type    :: binary(),
     inst_id :: inst_id(),
-    attr_id :: integer()
+    attr_nr :: integer()
 }).
 
 
@@ -78,10 +79,17 @@
 %% =============================================================================
 
 %%
-%%
+%%  Starts this store implementation.
 %%
 start_link(Name) ->
     gen_server:start_link(Name, ?MODULE, {}, []).
+
+
+%%
+%%  Create reference to this store.
+%%
+ref() ->
+    eproc_store:ref(?MODULE, {}).
 
 
 
@@ -94,16 +102,14 @@ start_link(Name) ->
 %%
 init({}) ->
     WC = {write_concurrency, true},
-    ets:new(?INST_TBL, [set, public, named_table, {keypos, #instance.id},        WC]),
+    ets:new(?INST_TBL, [set, public, named_table, {keypos, #instance.inst_id},   WC]),
     ets:new(?NAME_TBL, [set, public, named_table, {keypos, #inst_name.name},     WC]),
-    ets:new(?INTR_TBL, [bag, public, named_table, {keypos, #interrupt.inst_id},  WC]),
-    ets:new(?TRN_TBL,  [bag, public, named_table, {keypos, #transition.inst_id}, WC]),
-    ets:new(?MSG_TBL,  [set, public, named_table, {keypos, #message.id},         WC]),
+    ets:new(?TRN_TBL,  [set, public, named_table, {keypos, #transition.trn_id},  WC]),
+    ets:new(?MSG_TBL,  [set, public, named_table, {keypos, #message.msg_id},     WC]),
     ets:new(?KEY_TBL,  [set, public, named_table, {keypos, #router_key.key},     WC]),
     ets:new(?TAG_TBL,  [bag, public, named_table, {keypos, #meta_tag.tag},       WC]),
     ets:new(?CNT_TBL,  [set, public, named_table, {keypos, 1}]),
     ets:insert(?CNT_TBL, {inst, 0}),
-    ets:insert(?CNT_TBL, {intr, 0}),
     State = undefined,
     {ok, State}.
 
@@ -160,7 +166,7 @@ supervisor_child_specs(_StoreArgs) ->
 %%
 %%  Add new instance to the store.
 %%
-add_instance(_StoreArgs, Instance = #instance{name = Name, group = Group, state = State = #inst_state{}})->
+add_instance(_StoreArgs, Instance = #instance{name = Name, group = Group, curr_state = InitState})->
     InstId = ets:update_counter(?CNT_TBL, inst, 1),
     ResolvedGroup = if
         Group =:= new     -> InstId;
@@ -169,11 +175,12 @@ add_instance(_StoreArgs, Instance = #instance{name = Name, group = Group, state 
     case Name =:= undefined orelse ets:insert_new(?NAME_TBL, #inst_name{name = Name, inst_id = InstId}) of
         true ->
             true = ets:insert(?INST_TBL, Instance#instance{
-                id = InstId,
+                inst_id = InstId,
                 name = Name,
                 group = ResolvedGroup,
                 transitions = undefined,
-                state = State#inst_state{inst_id = InstId}
+                curr_state = InitState,
+                arch_state = InitState
             }),
             {ok, InstId};
         false ->
@@ -184,37 +191,33 @@ add_instance(_StoreArgs, Instance = #instance{name = Name, group = Group, state 
 %%
 %%  Add a transition for an existing instance.
 %%
-add_transition(_StoreArgs, Transition, Messages) ->
+add_transition(_StoreArgs, InstId, Transition, Messages) ->
     #transition{
-        inst_id      = InstId,
-        number       = TrnNr,
+        trn_id       = TrnNr,
         attr_actions = AttrActions,
         inst_status  = Status
     } = Transition,
     true = is_list(AttrActions),
-    [Instance = #instance{status = OldStatus}] = ets:lookup(?INST_TBL, InstId),
-    OldTerminated = eproc_store:is_instance_terminated(OldStatus),
-    NewTerminated = eproc_store:is_instance_terminated(Status),
-    Action = case {OldTerminated, NewTerminated, OldStatus, Transition} of
-        {false, false, suspended, #transition{inst_status = running, interrupts = undefined}} ->
-            ok;
-        {false, false, running, #transition{inst_status = running, interrupts = undefined}} ->
-            ok;
-        {false, false, running, #transition{inst_status = suspended, interrupts = [Interrupt]}} ->
-            #interrupt{reason = Reason} = Interrupt,
-            ok = write_instance_suspended(InstId, Reason);
-        {false, false, resuming, #transition{inst_status = running, interrupts = undefined}} ->
-            ok = write_instance_resumed(InstId, TrnNr);
-        {false, true, _, #transition{interrupts = undefined}} ->
-            ok = write_instance_terminated(Instance, Status, normal);
-        {true, _, _, _} ->
-            {error, terminated}
+    [Instance = #instance{
+        status = OldStatus,
+        curr_state = OldCurrState
+    }] = ets:lookup(?INST_TBL, InstId),
+    InstWithNewState = Instance#instance{
+        curr_state = eproc_store:apply_transition(Transition, OldCurrState, InstId)
+    },
+    Action = case eproc_store:determine_transition_action(Transition, OldStatus) of
+        none              -> {ok, fun () -> true = ets:insert(?INST_TBL, InstWithNewState), ok end};
+        {suspend, Reason} -> {ok, fun () -> write_instance_suspended(InstWithNewState, Reason) end};
+        resume            -> {ok, fun () -> write_instance_resumed(InstWithNewState, TrnNr) end};
+        terminate         -> {ok, fun () -> write_instance_terminated(InstWithNewState, Status, normal) end};
+        {error, Reason}   -> {error, Reason}
     end,
     case Action of
-        ok ->
-            ok = handle_attr_actions(Instance, Transition, Messages),
-            true = ets:insert(?TRN_TBL, Transition#transition{interrupts = undefined}),
+        {ok, InstFun} ->
+            ok = handle_attr_actions(InstWithNewState, Transition, Messages),
             [ true = ets:insert(?MSG_TBL, Message) || Message <- Messages],
+            true = ets:insert(?TRN_TBL, Transition#transition{trn_id = {InstId, TrnNr}, interrupts = undefined}),
+            ok = InstFun(),
             {ok, InstId, TrnNr};
         {error, ErrReason} ->
             {error, ErrReason}
@@ -225,10 +228,10 @@ add_transition(_StoreArgs, Transition, Messages) ->
 %%  Mark instance as killed.
 %%
 set_instance_killed(_StoreArgs, FsmRef, UserAction) ->
-    case read_instance(FsmRef, header) of
+    case read_instance(FsmRef, full) of
         {error, Reason} ->
             {error, Reason};
-        {ok, Instance = #instance{id = InstId, status = Status}} ->
+        {ok, Instance = #instance{inst_id = InstId, status = Status}} ->
             case eproc_store:is_instance_terminated(Status) of
                 false ->
                     ok = write_instance_terminated(Instance, killed, UserAction),
@@ -243,17 +246,17 @@ set_instance_killed(_StoreArgs, FsmRef, UserAction) ->
 %%  Mark instance as suspended.
 %%
 set_instance_suspended(_StoreArgs, FsmRef, Reason) ->
-    case read_instance(FsmRef, current) of
+    case read_instance(FsmRef, full) of
         {error, FailReason} ->
             {error, FailReason};
-        {ok, #instance{id = InstId, status = Status}} ->
+        {ok, Instance = #instance{inst_id = InstId, status = Status}} ->
             case {eproc_store:is_instance_terminated(Status), Status} of
                 {true, _} ->
                     {error, terminated};
                 {false, suspended} ->
                     {ok, InstId};
                 {false, running} ->
-                    ok = write_instance_suspended(InstId, Reason),
+                    ok = write_instance_suspended(Instance, Reason),
                     {ok, InstId}
             end
     end.
@@ -263,10 +266,10 @@ set_instance_suspended(_StoreArgs, FsmRef, Reason) ->
 %%  Mark instance as resuming after it was suspended.
 %%
 set_instance_resuming(_StoreArgs, FsmRef, StateAction, UserAction) ->
-    case read_instance(FsmRef, current) of
+    case read_instance(FsmRef, full) of
         {error, FailReason} ->
             {error, FailReason};
-        {ok, Instance = #instance{id = InstId, status = Status, start_spec = StartSpec}} ->
+        {ok, Instance = #instance{inst_id = InstId, status = Status, start_spec = StartSpec}} ->
             case {eproc_store:is_instance_terminated(Status), Status} of
                 {true, _} ->
                     {error, terminated};
@@ -285,9 +288,14 @@ set_instance_resuming(_StoreArgs, FsmRef, StateAction, UserAction) ->
 %%  Mark instance as successfully resumed.
 %%
 set_instance_resumed(_StoreArgs, InstId, TrnNr) ->
-    case write_instance_resumed(InstId, TrnNr) of
-        ok -> ok;
-        {error, Reason} -> {error, Reason}
+    case read_instance({inst, InstId}, full) of
+        {error, FailReason} ->
+            {error, FailReason};
+        {ok, Instance} ->
+            case write_instance_resumed(Instance, TrnNr) of
+                ok -> ok;
+                {error, Reason} -> {error, Reason}
+            end
     end.
 
 
@@ -303,7 +311,7 @@ load_instance(_StoreArgs, FsmRef) ->
 %%
 load_running(_StoreArgs, PartitionPred) ->
     FilterFun = fun
-        (#instance{id = InstId, group = Group, start_spec = StartSpec, status = running}, Filtered) ->
+        (#instance{inst_id = InstId, group = Group, start_spec = StartSpec, status = running}, Filtered) ->
             case PartitionPred(InstId, Group) of
                 true  ->
                     [{{inst, InstId}, StartSpec} | Filtered];
@@ -366,12 +374,12 @@ get_transition(_StoreArgs, FsmRef, TrnNr, all) ->
     end,
     case resolve_inst_id(FsmRef) of
         {ok, InstId} ->
-            case ets:match_object(?TRN_TBL, #transition{inst_id = InstId, number = TrnNr, _ = '_'}) of
+            case ets:match_object(?TRN_TBL, #transition{trn_id = {InstId, TrnNr}, _ = '_'}) of
                 [] ->
                     {error, not_found};
                 [Transition = #transition{trn_messages = TrnMessages}] ->
                     NewTrnMessages = lists:map(ResolveMsgRefs, TrnMessages),
-                    {ok, Transition#transition{trn_messages = NewTrnMessages}}
+                    {ok, Transition#transition{trn_id = TrnNr, trn_messages = NewTrnMessages}}
             end;
         {error, Reason} ->
             {error, Reason}
@@ -392,10 +400,10 @@ get_message(_StoreArgs, MsgId, all) ->
                 [] ->
                     {error, not_found};
                 [Message] ->
-                    {ok, Message#message{id = {I, T, M}}}
+                    {ok, Message#message{msg_id = {I, T, M}}}
             end;
         [Message] ->
-            {ok, Message#message{id = {I, T, M}}}
+            {ok, Message#message{msg_id = {I, T, M}}}
     end.
 
 
@@ -439,55 +447,28 @@ read_instance(FsmRef, Query) ->
 %%  Reads instance related data according to query.
 %%
 read_instance_data(Instance, header) ->
-    {ok, Instance#instance{state = undefined, transitions = undefined}};
+    {ok, Instance#instance{curr_state = undefined, arch_state = undefined, transitions = undefined}};
 
 read_instance_data(Instance, recent) ->
     read_instance_data(Instance, current);
 
 read_instance_data(Instance, current) ->
-    {ok, CurrentState} = read_state(Instance, current),
-    {ok, Instance#instance{state = CurrentState, transitions = undefined}}.
+    {ok, Instance#instance{arch_state = undefined, transitions = undefined}};
 
-
-%%
-%%  Read instance state according to the query.
-%%
-read_state(#instance{id = InstId, state = InstState}, current) ->
-    Transitions = ets:lookup(?TRN_TBL, InstId),
-    SortedTrns = lists:keysort(#transition.number, Transitions),
-    CurrentState = lists:foldl(fun eproc_store:apply_transition/2, InstState, SortedTrns),
-    case read_active_interrupt(InstId) of
-        {ok, Interrupt} ->
-            {ok, CurrentState#inst_state{interrupt = Interrupt}};
-        {error, not_found} ->
-            {ok, CurrentState#inst_state{interrupt = undefined}}
-    end.
-
-
-%%
-%%  Reads currently active instance interrupt record.
-%%
-read_active_interrupt(InstId) ->
-    Pattern = #interrupt{
-        inst_id = InstId,
-        status = active,
-        _ = '_'
-    },
-    case ets:match_object(?INTR_TBL, Pattern) of
-        [Interrupt] -> {ok, Interrupt};
-        [] -> {error, not_found}
-    end.
+read_instance_data(Instance, full) ->
+    {ok, Instance}.
 
 
 %%
 %%  Mark instance as terminated.
 %%
-write_instance_terminated(#instance{id = InstId, name = Name}, Status, Reason) ->
-    true = ets:update_element(?INST_TBL, InstId, [
-        {#instance.status,      Status},
-        {#instance.terminated,  os:timestamp()},
-        {#instance.term_reason, Reason}
-    ]),
+write_instance_terminated(Instance = #instance{inst_id = InstId, name = Name}, Status, Reason) ->
+    NewInstance = Instance#instance{
+        status      = Status,
+        terminated  = os:timestamp(),
+        term_reason = Reason
+    },
+    true = ets:insert(?INST_TBL, NewInstance),
     case Name of
         undefined ->
             ok;
@@ -501,94 +482,90 @@ write_instance_terminated(#instance{id = InstId, name = Name}, Status, Reason) -
 %%
 %%  Mark instance as suspended.
 %%
-write_instance_suspended(InstId, Reason) ->
-    {error, not_found} = read_active_interrupt(InstId),
-    true = ets:update_element(?INST_TBL, InstId, {#instance.status, suspended}),
-    SuspId = ets:update_counter(?CNT_TBL, intr, 1),
+write_instance_suspended(Instance = #instance{interrupt = undefined}, Reason) ->
     Interrupt = #interrupt{
-        id          = SuspId,
-        inst_id     = InstId,
-        trn_nr      = undefined,
+        intr_id     = undefined,
         status      = active,
         suspended   = os:timestamp(),
         reason      = Reason,
         resumes     = []
     },
-    true = ets:insert(?INTR_TBL, Interrupt),
+    NewInstance = Instance#instance{
+        status    = suspended,
+        interrupt = Interrupt
+    },
+    true = ets:insert(?INST_TBL, NewInstance),
     ok.
 
 
 %%
 %%  Mark instance as resuming.
 %%
-write_instance_resuming(#instance{id = InstId}, StateAction, UserAction) ->
-    {ok, Interrupt = #interrupt{resumes = Resumes}} = read_active_interrupt(InstId),
-    LastResNumber = case Resumes of
-        [] -> 0;
-        [#resume_attempt{number = N} | _] -> N
-    end,
-    ResumeAttempt = case StateAction of
-        unchanged ->
-            #resume_attempt{
-                number = LastResNumber + 1,
-                upd_sname = undefined,
-                upd_sdata = undefined,
-                upd_script = undefined,
-                resumed = UserAction
-            };
-        retry_last ->
-            case Resumes of
-                [] ->
-                    #resume_attempt{
-                        number = LastResNumber + 1,
-                        upd_sname = undefined,
-                        upd_sdata = undefined,
-                        upd_script = undefined,
-                        resumed = UserAction
-                    };
-                [#resume_attempt{upd_sname = LastSName, upd_sdata = LastSData, upd_script = LastScript} | _] ->
-                    #resume_attempt{
-                        number = LastResNumber + 1,
-                        upd_sname = LastSName,
-                        upd_sdata = LastSData,
-                        upd_script = LastScript,
-                        resumed = UserAction
-                    }
-            end;
-        {set, NewStateName, NewStateData, ResumeScript} ->
-            #resume_attempt{
-                number = LastResNumber + 1,
-                upd_sname = NewStateName,
-                upd_sdata = NewStateData,
-                upd_script = ResumeScript,
-                resumed = UserAction
-            }
-    end,
+write_instance_resuming(#instance{inst_id = InstId, interrupt = Interrupt}, StateAction, UserAction) ->
+    #interrupt{resumes = Resumes} = Interrupt,
+    ResumeAttempt = eproc_store:make_resume_attempt(StateAction, UserAction, Resumes),
     NewInterrupt = Interrupt#interrupt{
         resumes = [ResumeAttempt | Resumes]
     },
-    true = ets:update_element(?INST_TBL, InstId, {#instance.status, resuming}),
-    true = ets:delete_object(?INTR_TBL, Interrupt),
-    true = ets:insert(?INTR_TBL, NewInterrupt),
+    true = ets:update_element(?INST_TBL, InstId, [
+        {#instance.status, resuming},
+        {#instance.interrupt, NewInterrupt}
+    ]),
     ok.
 
 
 %%
 %%  Mark instance as running (resumed).
 %%
-write_instance_resumed(InstId, TrnNr) ->
-    case read_active_interrupt(InstId) of
-        {ok, Interrupt} ->
-            NewInterrupt = Interrupt#interrupt{
-                trn_nr = TrnNr,
-                status = closed
-            },
-            true = ets:delete_object(?INTR_TBL, Interrupt),
-            true = ets:insert(?INTR_TBL, NewInterrupt);
-        {error, not_found} ->
-            ok
+write_instance_resumed(Instance = #instance{interrupt = undefined}, _TrnNr) ->
+    true = ets:insert(?INST_TBL, Instance),
+    ok;
+
+write_instance_resumed(Instance, TrnNr) ->
+    #instance{
+        inst_id = InstId,
+        interrupt = Interrupt,
+        curr_state = CurrState,
+        arch_state = ArchState
+    } = Instance,
+    #inst_state{
+        stt_id = CurrStateNr,
+        interrupts = CurrInterrupts
+    } = CurrState,
+    #inst_state{
+        stt_id = ArchStateNr,
+        interrupts = ArchInterrupts
+    } = ArchState,
+    CurrStateNr = TrnNr,
+    IntrNr = case CurrInterrupts of
+        [                                    ] -> 1;
+        [#interrupt{intr_id = LastIntrNr} | _] -> LastIntrNr + 1
     end,
-    true = ets:update_element(?INST_TBL, InstId, {#instance.status, running}),
+    NewInterrupt = Interrupt#interrupt{
+        intr_id = IntrNr,
+        status = closed
+    },
+    NewInstance = case TrnNr of
+        ArchStateNr ->
+            NewArchState = ArchState#inst_state{
+                interrupts = [NewInterrupt | ArchInterrupts]
+            },
+            Instance#instance{
+                status     = running,
+                interrupt  = undefined,
+                arch_state = NewArchState
+            };
+        CurrStateNr ->
+            TrnId = {InstId, TrnNr},
+            true = ets:update_element(?TRN_TBL, TrnId,
+                {#transition.interrupts, [NewInterrupt | CurrInterrupts]}
+            ),
+            Instance#instance{
+                status     = running,
+                interrupt  = undefined
+            }
+    end,
+    true = ets:insert(?INST_TBL, NewInstance),
     ok.
 
 
@@ -620,14 +597,14 @@ handle_attr_actions(Instance, Transition = #transition{attr_actions = AttrAction
 %%  the SyncRef is not checked to keep this action atomic.
 %%
 handle_attr_custom_router_action(AttrAction, Instance) ->
-    #attr_action{attr_id = AttrId, action = Action} = AttrAction,
-    #instance{id = InstId} = Instance,
+    #attr_action{attr_nr = AttrNr, action = Action} = AttrAction,
+    #instance{inst_id = InstId} = Instance,
     case Action of
         {create, _Name, _Scope, {data, Key, _SyncRef}} ->
-            true = ets:insert(?KEY_TBL, #router_key{key = Key, inst_id = InstId, attr_id = AttrId}),
+            true = ets:insert(?KEY_TBL, #router_key{key = Key, inst_id = InstId, attr_nr = AttrNr}),
             ok;
         {remove, _Reason} ->
-            true = ets:match_delete(?KEY_TBL, #router_key{attr_id = AttrId, _ = '_'}),
+            true = ets:match_delete(?KEY_TBL, #router_key{inst_id = InstId, attr_nr = AttrNr, _ = '_'}),
             ok
     end.
 
@@ -637,7 +614,7 @@ handle_attr_custom_router_action(AttrAction, Instance) ->
 handle_attr_custom_router_task({key_sync, Key, InstId, Uniq}) ->
     AddKeyFun = fun () ->
         SyncRef = {'eproc_router$key_sync', node(), erlang:now()},
-        true = ets:insert_new(?KEY_TBL, #router_key{key = Key, inst_id = InstId, attr_id = SyncRef}),
+        true = ets:insert_new(?KEY_TBL, #router_key{key = Key, inst_id = InstId, attr_nr = SyncRef}),
         {ok, SyncRef}
     end,
     case {ets:lookup(?KEY_TBL, Key), Uniq} of
@@ -660,11 +637,11 @@ handle_attr_custom_router_task({lookup, Key}) ->
 %%
 %%
 handle_attr_custom_meta_action(AttrAction, Instance) ->
-    #attr_action{attr_id = AttrId, action = Action} = AttrAction,
-    #instance{id = InstId} = Instance,
+    #attr_action{attr_nr = AttrNr, action = Action} = AttrAction,
+    #instance{inst_id = InstId} = Instance,
     case Action of
         {create, _Name, _Scope, {data, Tag, Type}} ->
-            true = ets:insert(?TAG_TBL, #meta_tag{tag = Tag, type = Type, inst_id = InstId, attr_id = AttrId}),
+            true = ets:insert(?TAG_TBL, #meta_tag{tag = Tag, type = Type, inst_id = InstId, attr_nr = AttrNr}),
             ok;
         {update, _NewScope, {data, _Tag, _Type}} ->
             ok;

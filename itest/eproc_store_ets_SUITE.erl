@@ -48,7 +48,7 @@ all() ->
 %%
 init_per_suite(Config) ->
     {ok, PID} = eproc_store_ets:start_link({local, eproc_store_ets_SUITE}),
-    {ok, Store} = eproc_store:ref(eproc_store_ets, undefined),
+    {ok, Store} = eproc_store_ets:ref(),
     unlink(PID),
     [{store, Store}, {store_pid, PID} | Config].
 

@@ -52,9 +52,17 @@
 -type store_ref()       :: eproc_store:ref().
 -type archive_ref()     :: eproc_archive:ref().
 -type registry_ref()    :: eproc_registry:ref().
--type trn_nr()          :: integer().
--type msg_id()          :: {inst_id(), trn_nr(), integer()}.                %%  Message Id.
--type msg_cid()         :: {inst_id(), trn_nr(), integer(), (sent | recv)}. %%  Message Copy Id.
+-type trn_nr()          :: integer().                           %% Starts from 1.
+-type trn_id()          :: {inst_id(), trn_nr()}.               %% Unique transition reference.
+-type stt_nr()          :: 0 | trn_nr().                        %% Starts from 0 (initial state).
+-type stt_id()          :: {inst_id(), stt_nr()}.               %% Unique instance state reference.
+-type intr_nr()         :: integer().                           %% Local to particular transition.
+-type intr_id()         :: {inst_id(), trn_nr(), intr_nr()}.    %% Unique interrupt id.
+-type attr_nr()         :: integer().                           %% Starts from 1, unique in instance.
+-type attr_id()         :: {inst_id(), attr_nr()}.              %% Unique attribute id.
+-type msg_nr()          :: 0 | 1 | integer().                               %% Message number in transition.
+-type msg_id()          :: {inst_id(), trn_nr(), msg_nr()}.                 %% Message Id.
+-type msg_cid()         :: {inst_id(), trn_nr(), msg_nr(), (sent | recv)}.  %% Message Copy Id.
 -type party()           :: {inst, inst_id()} | {ext, term()}.
 -type scope()           :: list().
 -type script()          :: [(Call :: mfargs() | {Response :: term(), Call :: mfargs()})].
@@ -104,7 +112,7 @@
 %%  At least one of them will be an FSM instance.
 %%
 -record(message, {
-    id          :: msg_cid() | msg_id(),        %% Unique identifier.
+    msg_id      :: msg_cid() | msg_id(),        %% Unique identifier.
     sender      :: event_src(),                 %% Source.
     receiver    :: event_src(),                 %% Destination.
     resp_to     :: msg_cid() | undefined,       %% Indicates a request message, if thats a response to it.
@@ -160,8 +168,7 @@
 %%  some period of its lifecycle.
 %%
 -record(attribute, {
-    inst_id     :: inst_id(),               %% Instane Id of the FSM, to which the attribute is attached.
-    attr_id     :: integer(),               %% Id of an attribute, unique within FSM instance.
+    attr_id     :: attr_nr() | attr_id(),   %% Id of an attribute, unique within FSM instance.
     module      :: module(),                %% Attribute implementation callback module.
     name        :: term() | undefined,      %% Attributes can be named or unnamed.
     scope       :: term(),                  %% Each attribute has its validity scope.
@@ -181,7 +188,7 @@
 %%
 -record(attr_action, {
     module      :: module(),
-    attr_id     :: integer(),
+    attr_nr     :: integer(),
     action      ::
         {create, Name :: term(), Scope :: term(), Data :: term()} |
         {update, NewScope :: term(), NewData :: term()} |
@@ -197,7 +204,7 @@
 %%  Resume attempt of an interrupt.
 %%
 -record(resume_attempt, {
-    number      :: integer(),                   %% Number of the resume attempt.
+    res_nr      :: integer(),                   %% Number of the resume attempt.
     upd_sname   :: term() | undefined,          %% FSM state name set by an administrator.
     upd_sdata   :: term() | undefined,          %% FSM state data set by an administrator.
     upd_script  :: script() | undefined,        %% Update script, can be attribute API functions.
@@ -211,13 +218,11 @@
 %%  when resuming the FSM.
 %%
 -record(interrupt, {
-    id          :: integer(),           %% Suspension ID, must not be used for record sorting.
-    inst_id     :: inst_id(),           %% FSM instance, that was suspended.
-    trn_nr      :: trn_nr(),            %% Transition at which the FSM was suspended or 0, if in the initial state.
-    status      :: active | closed,     %% Interrupt status.
-    suspended   :: timestamp(),         %% When the FSM was suspended.
+    intr_id     :: intr_nr() | intr_id() | undefined,  %% Interrupt reference, undefined if active.
+    status      :: active | closed,                     %% Interrupt status.
+    suspended   :: timestamp(),                         %% When the FSM was suspended.
     reason      :: #user_action{} | {fault, Reason :: term()} | {impl, Reason :: term()},
-    resumes     :: [#resume_attempt{}]  %% Last resume attempt in the head of the list.
+    resumes     :: [#resume_attempt{}]                  %% Last resume attempt in the head of the list.
 }).
 
 
@@ -226,17 +231,16 @@
 %%  This structure describes transition and the target state.
 %%
 -record(transition, {
-    inst_id     :: inst_id(),   %% Id of an instance the transition belongs to.
-    number      :: trn_nr(),    %% Transition number in the FSM (starts at 0).
-    sname       :: term(),      %% FSM state name at the end of this transition.
-    sdata       :: term(),      %% FSM state data at the end of this transition.
-    timestamp   :: timestamp(), %% Start of the transition.
-    duration    :: duration(),  %% Duration of the transition (in microseconds).
+    trn_id          :: trn_nr() | trn_id(),             %% Transition number in the FSM (starts at 1) or reference.
+    sname           :: term(),                          %% FSM state name at the end of this transition.
+    sdata           :: term(),                          %% FSM state data at the end of this transition.
+    timestamp       :: timestamp(),                     %% Start of the transition.
+    duration        :: duration(),                      %% Duration of the transition (in microseconds).
     trigger_type    :: trigger_type(),                  %% Type of the trigger, initiated the transition.
     trigger_msg     :: msg_ref(),                       %% Message initiated the transition.
     trigger_resp    :: msg_ref() | undefined,           %% Response to the trigger if the event was synchronous.
     trn_messages    :: [msg_ref()],                     %% Messages sent and received during transition, not including trigger and its response.
-    attr_last_id    :: integer(),                       %% Last action id.
+    attr_last_nr    :: attr_nr(),                       %% Last action id.
     attr_actions    :: [#attr_action{}],                %% All attribute actions performed in this transition.
     inst_status     :: inst_status(),                   %% Instance status, after the transition.
     interrupts      :: [#interrupt{}] | undefined       %% Filled, if the instance was suspended at this transition.
@@ -250,13 +254,12 @@
 %%  all the transitions by replaying them on the initial FSM state.
 %%
 -record(inst_state, {
-    inst_id         :: inst_id(),                   %% Id of an instance whos state is described here.
-    trn_nr          :: trn_nr(),                    %% Identifies a transition by which the state was reached.
+    stt_id          :: stt_nr() | stt_id(),         %% Identifies a transition by which the state was reached.
     sname           :: term(),                      %% FSM state name.
     sdata           :: term(),                      %% FSM state data.
-    attr_last_id    :: integer(),                   %% Last used FSM attribute ID.
+    attr_last_nr    :: attr_nr(),                   %% Last used FSM attribute ID.
     attrs_active    :: [#attribute{}] | undefined,  %% List of attributes, that are active at this state.
-    interrupt       :: #interrupt{} | undefined     %% Interrupt information, if the FSM is currently interrupted.
+    interrupts      :: [#interrupt{}] | undefined   %% All the interrupts, closed in this state.
 }).
 
 
@@ -264,20 +267,22 @@
 %%  Describes single instance of the `eproc_fsm`.
 %%
 -record(instance, {
-    id          :: inst_id(),           %% Unique auto-generated instance identifier.
-    group       :: inst_group(),        %% Group the instance belongs to.
-    name        :: inst_name(),         %% Initial name - unique user-specified identifier.
-    module      :: module(),            %% Callback module implementing the FSM.
-    args        :: term(),              %% Arguments, passed when creating the FSM.
-    opts        :: proplist(),          %% Options, used by the `eproc_fsm` behaviour (limits, etc).
-    start_spec  :: fsm_start_spec() | undefined,    %% Optional FSM start specification.
-    status      :: inst_status(),                   %% Current status if the FSM instance.
-    created     :: datetime(),                      %% Time, when the instance was created.
-    terminated  :: datetime() | undefined,                  %% Time, when the instance was terminated.
-    term_reason :: #user_action{} | normal | undefined,     %% Reason, why the instance was terminated.
-    archived    :: datetime() | undefined,                  %% Time, when the instance was archived.
-    state       :: #inst_state{} | undefined,               %% Current state of the instance. Filled if requested.
-    transitions :: [#transition{}] | undefined              %% Instance transitions till the state. Filled if requested.
+    inst_id     :: inst_id(),                           %% Unique auto-generated instance identifier.
+    group       :: inst_group(),                        %% Group the instance belongs to.
+    name        :: inst_name(),                         %% Initial name - unique user-specified identifier.
+    module      :: module(),                            %% Callback module implementing the FSM.
+    args        :: term(),                              %% Arguments, passed when creating the FSM.
+    opts        :: proplist(),                          %% Options, used by the `eproc_fsm` behaviour (limits, etc).
+    start_spec  :: fsm_start_spec() | undefined,        %% Optional FSM start specification.
+    status      :: inst_status(),                       %% Current status if the FSM instance.
+    created     :: datetime(),                          %% Time, when the instance was created.
+    terminated  :: datetime() | undefined,              %% Time, when the instance was terminated.
+    term_reason :: #user_action{} | normal | undefined, %% Reason, why the instance was terminated.
+    archived    :: datetime() | undefined,              %% Time, when the instance was archived.
+    interrupt   :: #interrupt{} | undefined,            %% Currently active interrupt.
+    curr_state  :: #inst_state{} | undefined,           %% Current state of the instance.       Filled if requested.
+    arch_state  :: #inst_state{} | undefined,           %% Oldest known state of the instance.  Filled if requested.
+    transitions :: [#transition{}] | undefined          %% Instance transitions till the state. Filled if requested.
 }).
 
 

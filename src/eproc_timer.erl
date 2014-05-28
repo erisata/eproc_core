@@ -21,7 +21,7 @@
 -module(eproc_timer).
 -behaviour(eproc_fsm_attr).
 -export([set/4, set/3, set/2, cancel/1, duration_to_ms/1]).
--export([init/1, handle_created/3, handle_updated/4, handle_removed/2, handle_event/3]).
+-export([init/2, handle_created/4, handle_updated/5, handle_removed/3, handle_event/4]).
 -export_type([duration/0]).
 -include("eproc.hrl").
 
@@ -147,9 +147,9 @@ duration_to_ms(Spec) when is_list(Spec) ->
 %%
 %%  FSM started.
 %%
-init(ActiveAttrs) ->
-    InitTimerFun = fun (Attr = #attribute{attr_id = AttrId, data = Data}) ->
-        {ok, State} = start_timer(AttrId, Data),
+init(InstId, ActiveAttrs) ->
+    InitTimerFun = fun (Attr = #attribute{attr_id = AttrNr, data = Data}) ->
+        {ok, State} = start_timer(InstId, AttrNr, Data),
         {Attr, State}
     end,
     Started = lists:map(InitTimerFun, ActiveAttrs),
@@ -159,25 +159,25 @@ init(ActiveAttrs) ->
 %%
 %%  Attribute created.
 %%
-handle_created(#attribute{attr_id = AttrId}, {timer, After, EventMsgCId, Event}, _Scope) ->
+handle_created(InstId, #attribute{attr_id = AttrNr}, {timer, After, EventMsgCId, Event}, _Scope) ->
     Data = #data{
         start = os:timestamp(),
         delay = After,
         event_msg = Event,
         event_cid = EventMsgCId
     },
-    {ok, State} = start_timer(AttrId, Data),
+    {ok, State} = start_timer(InstId, AttrNr, Data),
     {create, Data, State, false};
 
-handle_created(_Attribute, {timer, remove}, _Scope) ->
+handle_created(_InstId, _Attribute, {timer, remove}, _Scope) ->
     {error, {unknown_timer}}.
 
 
 %%
 %%  Attribute updated by user.
 %%
-handle_updated(Attribute, AttrState, {timer, After, EventMsgCId, Event}, _Scope) ->
-    #attribute{attr_id = AttrId} = Attribute,
+handle_updated(InstId, Attribute, AttrState, {timer, After, EventMsgCId, Event}, _Scope) ->
+    #attribute{attr_id = AttrNr} = Attribute,
     NewData = #data{
         start = os:timestamp(),
         delay = After,
@@ -185,10 +185,10 @@ handle_updated(Attribute, AttrState, {timer, After, EventMsgCId, Event}, _Scope)
         event_cid = EventMsgCId
     },
     ok = stop_timer(AttrState),
-    {ok, NewState} = start_timer(AttrId, NewData),
+    {ok, NewState} = start_timer(InstId, AttrNr, NewData),
     {update, NewData, NewState, false};
 
-handle_updated(_Attribute, AttrState, {timer, remove}, _Scope) ->
+handle_updated(_InstId, _Attribute, AttrState, {timer, remove}, _Scope) ->
     ok = stop_timer(AttrState),
     {remove, explicit, false}.
 
@@ -196,7 +196,7 @@ handle_updated(_Attribute, AttrState, {timer, remove}, _Scope) ->
 %%
 %%  Attribute removed by `eproc_fsm`.
 %%
-handle_removed(_Attribute, State) ->
+handle_removed(_InstId, _Attribute, State) ->
     ok = stop_timer(State),
     {ok, false}.
 
@@ -204,15 +204,15 @@ handle_removed(_Attribute, State) ->
 %%
 %%  Handle timer events.
 %%
-handle_event(Attribute, _State, long_delay) ->
+handle_event(InstId, Attribute, _State, long_delay) ->
     #attribute{
-        attr_id = AttrId,
+        attr_id = AttrNr,
         data = AttrData
     } = Attribute,
-    {ok, NewState} = start_timer(AttrId, AttrData),
+    {ok, NewState} = start_timer(InstId, AttrNr, AttrData),
     {handled, NewState};
 
-handle_event(Attribute, _State, fired) ->
+handle_event(_InstId, Attribute, _State, fired) ->
     #attribute{
         name = Name,
         data = #data{event_msg = Event, event_cid = EventMsgCId}
@@ -239,21 +239,21 @@ handle_event(Attribute, _State, fired) ->
 %%
 %%  Starts a timer.
 %%
-start_timer(AttrId, #data{start = Start, delay = DelaySpec}) ->
+start_timer(InstId, AttrNr, #data{start = Start, delay = DelaySpec}) ->
     Now = os:timestamp(),
     Delay = duration_to_ms(DelaySpec),
     Left = Delay - (timer:now_diff(Start, Now) div 1000),
     if
         Left < 0 ->
-            {ok, EventMsg} = eproc_fsm_attr:make_event(?MODULE, AttrId, fired),
+            {ok, EventMsg} = eproc_fsm_attr:make_event(?MODULE, InstId, AttrNr, fired),
             self() ! EventMsg,
             {ok, #state{ref = undefined}};
         Left > ?MAX_ATOMIC_DELAY ->
-            {ok, EventMsg} = eproc_fsm_attr:make_event(?MODULE, AttrId, long_delay),
+            {ok, EventMsg} = eproc_fsm_attr:make_event(?MODULE, InstId, AttrNr, long_delay),
             TimerRef = erlang:send_after(?MAX_ATOMIC_DELAY, self(), EventMsg),
             {ok, #state{ref = TimerRef}};
         true ->
-            {ok, EventMsg} = eproc_fsm_attr:make_event(?MODULE, AttrId, fired),
+            {ok, EventMsg} = eproc_fsm_attr:make_event(?MODULE, InstId, AttrNr, fired),
             TimerRef = erlang:send_after(Left, self(), EventMsg),
             {ok, #state{ref = TimerRef}}
     end.

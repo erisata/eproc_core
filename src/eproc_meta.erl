@@ -33,7 +33,7 @@
 -module(eproc_meta).
 -behaviour(eproc_fsm_attr).
 -export([add_tag/2, get_instances/2]).
--export([init/1, handle_created/3, handle_updated/4, handle_removed/2, handle_event/3]).
+-export([init/2, handle_created/4, handle_updated/5, handle_removed/3, handle_event/4]).
 -include("eproc.hrl").
 
 
@@ -104,14 +104,14 @@ get_instances(Query, Opts) ->
 %%
 %%  FSM started.
 %%
-init(ActiveAttrs) ->
+init(_InstId, ActiveAttrs) ->
     {ok, [ {A, undefined} || A <- ActiveAttrs ]}.
 
 
 %%
 %%  Attribute created.
 %%
-handle_created(_Attribute, {tag, Tag, Type}, _Scope) ->
+handle_created(_InstId, _Attribute, {tag, Tag, Type}, _Scope) ->
     AttrData = #data{tag = Tag, type = Type},
     AttrState = undefined,
     {create, AttrData, AttrState, true}.
@@ -120,7 +120,7 @@ handle_created(_Attribute, {tag, Tag, Type}, _Scope) ->
 %%
 %%  A tag can only be updated to the same value.
 %%
-handle_updated(Attribute, _AttrState, {tag, Tag, Type}, _Scope) ->
+handle_updated(_InstId, Attribute, _AttrState, {tag, Tag, Type}, _Scope) ->
     #attribute{data = AttrData} = Attribute,
     AttrData = #data{tag = Tag, type = Type},
     handled.
@@ -129,14 +129,14 @@ handle_updated(Attribute, _AttrState, {tag, Tag, Type}, _Scope) ->
 %%
 %%  Attributes should never be removed.
 %%
-handle_removed(_Attribute, _AttrState) ->
+handle_removed(_InstId, _Attribute, _AttrState) ->
     {error, tags_non_removable}.
 
 
 %%
 %%  Events are not used for tags.
 %%
-handle_event(_Attribute, _AttrState, Event) ->
+handle_event(_InstId, _Attribute, _AttrState, Event) ->
     throw({unknown_event, Event}).
 
 

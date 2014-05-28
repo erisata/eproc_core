@@ -146,8 +146,8 @@ supervisor_child_specs(Registry) ->
 
 ref() ->
     case eproc_core_app:registry_cfg() of
-        {ok, {RegistryMod, RegistryArgs}} ->
-            ref(RegistryMod, RegistryArgs);
+        {ok, {Module, Function, Args}} ->
+            erlang:apply(Module, Function, Args);
         undefined ->
             undefined
     end.

@@ -69,16 +69,16 @@ init_restart_test() ->
     OldNow = erlang:now(),
     receive after 200 -> ok end,
     Attr1 = #attribute{ % In the past.
-        inst_id = iid, module = eproc_timer, name = undefined, scope = [],
+        module = eproc_timer, name = undefined, scope = [],
         data = {data, OldNow, 100, {i, t, m1, sent}, msg1},
         from = from_trn, upds = [], till = undefined, reason = undefined
     },
     Attr2 =  #attribute{ % In the future.
-        inst_id = iid, module = eproc_timer, name = undefined, scope = [],
+        module = eproc_timer, name = undefined, scope = [],
         data = {data, erlang:now(), 100, {i, t, m2, sent}, msg2},
         from = from_trn, upds = [], till = undefined, reason = undefined
     },
-    {ok, _State} = eproc_fsm_attr:init([], 0, store, [Attr1, Attr2]),
+    {ok, _State} = eproc_fsm_attr:init(0, [], 0, store, [Attr1, Attr2]),
     ?assert(receive _TimerMsg1 -> true after 200 -> false end),
     ?assert(receive _TimerMsg2 -> true after 400 -> false end).
 
@@ -94,7 +94,7 @@ set_create_test() ->
     ok = meck:expect(eproc_fsm, register_sent_msg, fun
         ({inst, some}, {timer, undefined}, undefined, msg1, {_, _, _}) -> {ok, {i, t, m1, sent}}
     end),
-    {ok, State1} = eproc_fsm_attr:init([], 0, store, []),
+    {ok, State1} = eproc_fsm_attr:init(0, [], 0, store, []),
     {ok, State2} = eproc_fsm_attr:transition_start(0, 0, [], State1),
     ok = eproc_timer:set(100, msg1),
     {ok, _Actions3, _LastAttrId3, _State3} = eproc_fsm_attr:transition_end(0, 0, [], State2),
@@ -115,7 +115,7 @@ set_update_test() ->
     ok = meck:expect(eproc_fsm, register_sent_msg, fun
         ({inst, some}, {timer, some}, undefined, msg1, {_, _, _}) -> {ok, {i, t, m1, sent}}
     end),
-    {ok, State1} = eproc_fsm_attr:init([], 0, store, []),
+    {ok, State1} = eproc_fsm_attr:init(0, [], 0, store, []),
     {ok, State2} = eproc_fsm_attr:transition_start(0, 0, [], State1),
     ok = eproc_timer:set(some, 100, msg1, []),
     {ok, _Actions3, _LastAttrId3, State3} = eproc_fsm_attr:transition_end(0, 0, [], State2),
@@ -140,7 +140,7 @@ cancel_test() ->
     ok = meck:expect(eproc_fsm, register_sent_msg, fun
         ({inst, some}, {timer, some}, undefined, msg1, {_, _, _}) -> {ok, {i, t, m1, sent}}
     end),
-    {ok, State1} = eproc_fsm_attr:init([], 0, store, []),
+    {ok, State1} = eproc_fsm_attr:init(0, [], 0, store, []),
     {ok, State2} = eproc_fsm_attr:transition_start(0, 0, [], State1),
     ok = eproc_timer:set(some, 100, msg1, []),
     {ok, _Actions3, _LastAttrId3, State3} = eproc_fsm_attr:transition_end(0, 0, [], State2),
@@ -165,7 +165,7 @@ remove_test() ->
     ok = meck:expect(eproc_fsm, register_sent_msg, fun
         ({inst, some}, {timer, some}, undefined, msg1, {_, _, _}) -> {ok, {i, t, m1, sent}}
     end),
-    {ok, State1} = eproc_fsm_attr:init([first], 0, store, []),
+    {ok, State1} = eproc_fsm_attr:init(0, [first], 0, store, []),
     {ok, State2} = eproc_fsm_attr:transition_start(0, 0, [first], State1),
     ok = eproc_timer:set(some, 100, msg1, next),
     {ok, _Actions3, _LastAttrId5, State3} = eproc_fsm_attr:transition_end(0, 0, [second], State2),
@@ -188,12 +188,12 @@ event_fired_test() ->
     ok = meck:expect(eproc_fsm, register_sent_msg, fun
         ({inst, some}, {timer, some}, undefined, msg1, {_, _, _}) -> {ok, {i, t, m1, sent}}
     end),
-    {ok, State1} = eproc_fsm_attr:init([first], 0, store, []),
+    {ok, State1} = eproc_fsm_attr:init(0, [first], 0, store, []),
     {ok, State2} = eproc_fsm_attr:transition_start(0, 0, [first], State1),
     ok = eproc_timer:set(some, {100, ms}, msg1, next),
     {ok, _Actions3, _LastAttrId3, State3} = eproc_fsm_attr:transition_end(0, 0, [second], State2),
     ok = receive TimerMsg -> ok after 300 -> TimerMsg = undefined end,
-    ?assertMatch({trigger, _State4, #trigger_spec{}, _Action}, eproc_fsm_attr:event(TimerMsg, State3)),
+    ?assertMatch({trigger, _State4, #trigger_spec{}, _Action}, eproc_fsm_attr:event(0, TimerMsg, State3)),
     ?assertEqual(1, meck:num_calls(eproc_fsm, register_sent_msg, '_')),
     ?assert(meck:validate([eproc_fsm])),
     ok = meck:unload([eproc_fsm]).

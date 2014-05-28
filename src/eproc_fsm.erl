@@ -134,7 +134,6 @@
 %%  TODO: Attachment support.
 %%  TODO: Implement FSM crash listener (`eproc_fsm_mgr`?).
 %%  TODO: Check if InstId can be non-integer.
-%%  TODO: Make interrupt ID in form of `{InstId, TrnNr, integer()}`.
 %%
 -module(eproc_fsm).
 -behaviour(gen_server).
@@ -1586,8 +1585,8 @@ handle_info({'eproc_fsm$start', FsmRef, StartOpts}, State) ->
 %%
 %%  Handles FSM attribute events.
 %%
-handle_info(Event, State = #state{attrs = Attrs}) ->
-    case eproc_fsm_attr:event(Event, Attrs) of
+handle_info(Event, State = #state{inst_id = InstId, attrs = Attrs}) ->
+    case eproc_fsm_attr:event(InstId, Event, Attrs) of
         {handled, NewAttrs} ->
             {noreply, State#state{attrs = NewAttrs}};
         {trigger, NewAttrs, Trigger, AttrAction} ->
@@ -1805,16 +1804,15 @@ handle_create(Module, Args, CreateOpts, CustomOpts) ->
     StartSpec   = proplists:get_value(start_spec, CreateOpts, undefined),
     {ok, InitSData} = call_init_persistent(Module, Args),
     InstState = #inst_state{
-        inst_id         = undefined,
-        trn_nr          = 0,
+        stt_id          = 0,
         sname           = [],
         sdata           = InitSData,
-        attr_last_id    = 0,
+        attr_last_nr    = 0,
         attrs_active    = [],
-        interrupt       = undefined
+        interrupts      = []
     },
     Instance = #instance{
-        id          = undefined,
+        inst_id     = undefined,
         group       = Group,
         name        = Name,
         module      = Module,
@@ -1826,7 +1824,9 @@ handle_create(Module, Args, CreateOpts, CustomOpts) ->
         terminated  = undefined,
         term_reason = undefined,
         archived    = undefined,
-        state       = InstState,
+        interrupt   = undefined,
+        curr_state  = InstState,
+        arch_state  = undefined,
         transitions = undefined
     },
     {ok, _InstId} = eproc_store:add_instance(Store, Instance).
@@ -1837,7 +1837,7 @@ handle_create(Module, Args, CreateOpts, CustomOpts) ->
 %%
 handle_start(FsmRef, StartOpts, State = #state{store = Store}) ->
     case eproc_store:load_instance(Store, FsmRef) of
-        {ok, Instance = #instance{id = InstId, status = Status}} when Status =:= running; Status =:= resuming ->
+        {ok, Instance = #instance{inst_id = InstId, status = Status}} when Status =:= running; Status =:= resuming ->
             StateWithInstId = State#state{inst_id = InstId},
             ok = limits_setup(StateWithInstId),
             LimitsResult = case limits_notify_res(StateWithInstId) of
@@ -1866,7 +1866,7 @@ handle_start(FsmRef, StartOpts, State = #state{store = Store}) ->
                     ),
                     {offline, InstId}
             end;
-        {ok, #instance{id = InstId, status = Status}} ->
+        {ok, #instance{inst_id = InstId, status = Status}} ->
             lager:notice("FSM going to offline during startup, ref=~p, status=~p.", [FsmRef, Status]),
             {offline, InstId}
     end.
@@ -1877,16 +1877,16 @@ handle_start(FsmRef, StartOpts, State = #state{store = Store}) ->
 %%
 start_loaded(Instance, StartOpts, State) ->
     #instance{
-        id = InstId,
+        inst_id = InstId,
         group = Group,
         name = Name,
-        state = InstState
+        curr_state = InstState,
+        interrupt = Interrupt
     } = Instance,
     #inst_state{
+        stt_id = LastTrnNr,
         sname = LastSName,
-        sdata = LastSData,
-        trn_nr = LastTrnNr,
-        interrupt = Interrupt
+        sdata = LastSData
     } = InstState,
     #state{
         store = Store,
@@ -1905,7 +1905,7 @@ start_loaded(Instance, StartOpts, State) ->
                 {ok, NewState} -> {ok, NewState};
                 {error, Reason} -> {error, Reason}
             end;
-        #interrupt{status = active, resumes = [ResumeAttempt | _]} ->
+        #interrupt{resumes = [ResumeAttempt | _]} ->
             case ResumeAttempt of
                 #resume_attempt{upd_sname = undefined, upd_sdata = undefined, upd_script = undefined} ->
                     case init_loaded(Instance, LastSName, LastSData, State) of
@@ -1949,18 +1949,18 @@ init_loaded(Instance, SName, SData, State) ->
         store = Store
     } = State,
     #instance{
-        id = InstId,
+        inst_id = InstId,
         module = Module,
-        state = InstState
+        curr_state = InstState
     } = Instance,
     #inst_state{
-        trn_nr = LastTrnNr,
-        attr_last_id = LastAttrId,
+        stt_id = LastTrnNr,
+        attr_last_nr = LastAttrNr,
         attrs_active = ActiveAttrs
     } = InstState,
     case upgrade_state(Instance, SName, SData) of
         {ok, UpgradedSName, UpgradedSData} ->
-            {ok, AttrState} = eproc_fsm_attr:init(UpgradedSName, LastAttrId, Store, ActiveAttrs),
+            {ok, AttrState} = eproc_fsm_attr:init(InstId, UpgradedSName, LastAttrNr, Store, ActiveAttrs),
             {ok, UpgradedSDataWithRT, RTField, RTDefault} = call_init_runtime(UpgradedSName, UpgradedSData, Module),
             NewState = State#state{
                 inst_id     = InstId,
@@ -2005,7 +2005,7 @@ call_init_runtime(SName, SData, Module) ->
 %%
 %%  Register instance id and name to a registry if needed.
 %%
-register_online(#instance{id = InstId, name = Name}, Registry, StartOpts) ->
+register_online(#instance{inst_id = InstId, name = Name}, Registry, StartOpts) ->
     case proplists:get_value(register, StartOpts) of
         undefined -> ok;
         none -> ok;
@@ -2060,7 +2060,7 @@ perform_transition(Trigger, TransitionFun, State) ->
     erlang:put('eproc_fsm$suspend', false),
     {ok, TrnAttrs} = eproc_fsm_attr:transition_start(InstId, TrnNr, SName, Attrs),
     {ok, ProcAction, NewSName, NewSData, Reply, ExplicitAttrActions} = TransitionFun(Trigger, TrnNr, State),
-    {ok, AttrActions, LastAttrId, NewAttrs} = eproc_fsm_attr:transition_end(InstId, TrnNr, NewSName, TrnAttrs),
+    {ok, AttrActions, LastAttrNr, NewAttrs} = eproc_fsm_attr:transition_end(InstId, TrnNr, NewSName, TrnAttrs),
     TrnEnd = os:timestamp(),
 
     %%  Collect all messages.
@@ -2072,7 +2072,7 @@ perform_transition(Trigger, TransitionFun, State) ->
     end,
     RequestMsgRef = #msg_ref{cid = RequestMsgCId, peer = TriggerSrc},
     RequestMsg = #message{
-        id       = RequestMsgCId,
+        msg_id   = RequestMsgCId,
         sender   = TriggerSrc,
         receiver = {inst, InstId},
         resp_to  = undefined,
@@ -2085,7 +2085,7 @@ perform_transition(Trigger, TransitionFun, State) ->
         {reply, ReplyMsgCId, ReplyMsg, _ReplySent} ->
             ResponseRef = #msg_ref{cid = ReplyMsgCId, peer = TriggerSrc},
             ResponseMsg = #message{
-                id       = ReplyMsgCId,
+                msg_id   = ReplyMsgCId,
                 sender   = {inst, InstId},
                 receiver = TriggerSrc,
                 resp_to  = RequestMsgCId,
@@ -2117,8 +2117,7 @@ perform_transition(Trigger, TransitionFun, State) ->
             {stop, completed, undefined, undefined}
     end,
     Transition = #transition{
-        inst_id = InstId,
-        number = TrnNr,
+        trn_id = TrnNr,
         sname = NewSName,
         sdata = cleanup_runtime_data(NewSData, RuntimeField, RuntimeDefault),
         timestamp = TrnStart,
@@ -2127,12 +2126,12 @@ perform_transition(Trigger, TransitionFun, State) ->
         trigger_msg  = RequestMsgRef,
         trigger_resp = ResponseMsgRef,
         trn_messages = RegisteredMsgRefs,
-        attr_last_id = LastAttrId,
+        attr_last_nr = LastAttrNr,
         attr_actions = ExplicitAttrActions ++ AttrActions,
         inst_status  = InstStatus,
         interrupts   = Interrupts
     },
-    {ok, InstId, TrnNr} = eproc_store:add_transition(Store, Transition, TransitionMsgs),
+    {ok, InstId, TrnNr} = eproc_store:add_transition(Store, InstId, Transition, TransitionMsgs),
 
     %% Send a reply, if not sent already
     case Reply of
@@ -2284,7 +2283,7 @@ registered_messages(MsgReg = #msg_reg{resp_cid = undefined}, {Msgs, Refs, InstId
     } = MsgReg,
     NewRef = #msg_ref{cid = SentMsgCId, peer = Destication},
     NewMsg = #message{
-        id       = SentMsgCId,
+        msg_id   = SentMsgCId,
         sender   = {inst, InstId},
         receiver = Destication,
         resp_to  = undefined,
@@ -2306,7 +2305,7 @@ registered_messages(MsgReg, {Msgs, Refs, InstId}) ->
     NewReqRef = #msg_ref{cid = SentMsgCId, peer = Destication},
     NewResRef = #msg_ref{cid = RespMsgCId, peer = Destication},
     NewReqMsg = #message{
-        id       = SentMsgCId,
+        msg_id   = SentMsgCId,
         sender   = {inst, InstId},
         receiver = Destication,
         resp_to  = undefined,
@@ -2314,7 +2313,7 @@ registered_messages(MsgReg, {Msgs, Refs, InstId}) ->
         body     = SentMsgBody
     },
     NewResMsg = #message{
-        id       = RespMsgCId,
+        msg_id   = RespMsgCId,
         sender   = Destication,
         receiver = {inst, InstId},
         resp_to  = SentMsgCId,
