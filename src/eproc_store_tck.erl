@@ -449,12 +449,16 @@ eproc_store_core_test_resolve_msg_dst(Config) ->
         inst_status = running,
         interrupts = undefined
     },
-    Trn1Fix = Trn1#transition{
-        trn_messages = [#msg_ref{cid = {IID1, 1, 2, sent}, peer = {inst, IID2}}]
-    },
     Trn2 = Trn1#transition{
         trigger_msg = #msg_ref{cid = {IID1, 1, 2, recv}, peer = {inst, IID1}},
         trn_messages = []
+    },
+    Trn1Fix = Trn1#transition{
+        trn_messages = [#msg_ref{cid = {IID1, 1, 2, sent}, peer = {inst, IID2}}],
+        interrupts = []
+    },
+    Trn2Fix = Trn2#transition{
+        interrupts = []
     },
     {ok, IID1, 1} = eproc_store:add_transition(Store, IID1, Trn1, [Msg1r, Msg2s]),
     {ok, IID2, 1} = eproc_store:add_transition(Store, IID2, Trn2, [Msg2r]),
@@ -469,7 +473,7 @@ eproc_store_core_test_resolve_msg_dst(Config) ->
     ?assertThat(eproc_store:get_message(Store, {IID1, 1, 2, recv}, all), is({ok, Msg2})),
     ?assertThat(eproc_store:get_message(Store, {IID1, 1, 1      }, all), is({error, not_found})),
     ?assertThat(eproc_store:get_transition(Store, {inst, IID1}, 1, all), is({ok, Trn1Fix})),
-    ?assertThat(eproc_store:get_transition(Store, {inst, IID2}, 1, all), is({ok, Trn2})),
+    ?assertThat(eproc_store:get_transition(Store, {inst, IID2}, 1, all), is({ok, Trn2Fix})),
     ?assertThat(eproc_store:get_transition(Store, {inst, IID2}, 2, all), is({error, not_found})),
     ok.
 

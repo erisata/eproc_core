@@ -216,7 +216,7 @@ add_transition(_StoreArgs, InstId, Transition, Messages) ->
         {ok, InstFun} ->
             ok = handle_attr_actions(InstWithNewState, Transition, Messages),
             [ true = ets:insert(?MSG_TBL, Message) || Message <- Messages],
-            true = ets:insert(?TRN_TBL, Transition#transition{trn_id = {InstId, TrnNr}, interrupts = undefined}),
+            true = ets:insert(?TRN_TBL, Transition#transition{trn_id = {InstId, TrnNr}, interrupts = []}),
             ok = InstFun(),
             {ok, InstId, TrnNr};
         {error, ErrReason} ->
