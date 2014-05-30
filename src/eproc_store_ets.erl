@@ -541,8 +541,8 @@ write_instance_terminated(Instance = #instance{inst_id = InstId, name = Name}, S
             true = ets:delete_object(?NAME_TBL, InstName),
             ok
     end,
-    ok = handle_attr_custom_meta_terminated(InstId),
     ok = handle_attr_custom_router_terminated(InstId),
+    ok = handle_attr_custom_meta_terminated(InstId),
     ok.
 
 
