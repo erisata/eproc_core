@@ -540,7 +540,10 @@ write_instance_terminated(Instance = #instance{inst_id = InstId, name = Name}, S
             InstName = #inst_name{name = Name, inst_id = InstId},
             true = ets:delete_object(?NAME_TBL, InstName),
             ok
-    end.
+    end,
+    ok = handle_attr_custom_meta_terminated(InstId),
+    ok = handle_attr_custom_router_terminated(InstId),
+    ok.
 
 
 %%
@@ -691,6 +694,14 @@ handle_attr_custom_router_task({lookup, Key}) ->
     {ok, InstIds}.
 
 
+%%
+%%
+%%
+handle_attr_custom_router_terminated(InstId) ->
+    true = ets:match_delete(?KEY_TBL, #router_key{inst_id = InstId, _ = '_'}),
+    ok.
+
+
 
 %% =============================================================================
 %%  Specific attribute support: eproc_meta
@@ -733,6 +744,13 @@ handle_attr_custom_meta_task({get_instances, {tags, Tags}}) ->
     end,
     Intersection = lists:filter(IntersectionFun, lists:usort(FirstSet)),
     {ok, Intersection}.
+
+
+%%
+%%
+%%
+handle_attr_custom_meta_terminated(_InstId) ->
+    ok.
 
 
 

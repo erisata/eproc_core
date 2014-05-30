@@ -656,6 +656,10 @@ eproc_store_router_test_attrs(Config) ->
     {ok, IID, 2} = eproc_store:add_transition(Store, IID, Trn2, [Msg21]),
     ?assertThat(eproc_router:lookup(Key1, RouterOpts), is({ok, []})),
     ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, [IID]})),
+    %%
+    %% Check, if taks are available after instance is terminated.
+    ?assertThat(eproc_store:set_instance_killed(Store, {inst, IID}, #user_action{}), is({ok, IID})),
+    ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, []})),
     ok.
 
 
@@ -717,7 +721,10 @@ eproc_store_meta_test_attrs(Config) ->
     ?assertThat(Res3, is([IID1])),
     ?assertThat(Res4, is([])),
     ?assertThat(Res5, is([IID1])),
-    ?assertThat(todo, is(done)),    %%  TODO: Check, if tags are not deleted, when instance terminated.
+    %%
+    %% Check, if taks are available after instance is terminated.
+    ?assertThat(eproc_store:set_instance_killed(Store, {inst, IID1}, #user_action{}),           is({ok, IID1})),
+    ?assertThat(eproc_meta:get_instances({tags, [{Tag1, undefined}, {Tag3, undefined}]}, Opts), is({ok, [IID1]})),
     ok.
 
 
