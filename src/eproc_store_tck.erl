@@ -717,6 +717,7 @@ eproc_store_meta_test_attrs(Config) ->
     ?assertThat(Res3, is([IID1])),
     ?assertThat(Res4, is([])),
     ?assertThat(Res5, is([IID1])),
+    ?assertThat(todo, is(done)),    %%  TODO: Check, if tags are not deleted, when instance terminated.
     ok.
 
 
