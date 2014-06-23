@@ -61,7 +61,7 @@
 %% =============================================================================
 
 %%
-%%
+%%  TODO: Set timer by exact timestamp.
 %%
 set(Name, After, Event, Scope) ->
     Now = os:timestamp(),
