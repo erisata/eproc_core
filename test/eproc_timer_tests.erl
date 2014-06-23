@@ -216,3 +216,26 @@ duration_to_ms_test_() -> [
     ].
 
 
+%%
+%%  Check if `timestamp_before/2` and `timestamp_after/2` work.
+%%
+timestamp_before_after_test_() ->
+    Now = os:timestamp(),
+    Before1s = eproc_timer:timestamp_before({1, sec},   Now),
+    Before1h = eproc_timer:timestamp_before({1, hour},  Now),
+    Before1d = eproc_timer:timestamp_before({1, day},   Now),
+    Before1m = eproc_timer:timestamp_before({1, month}, Now),
+    Before1y = eproc_timer:timestamp_before({1, year},  Now),
+    After1s = eproc_timer:timestamp_after({1, sec},   Now),
+    After1h = eproc_timer:timestamp_after({1, hour},  Now),
+    After1d = eproc_timer:timestamp_after({1, day},   Now),
+    After1m = eproc_timer:timestamp_after({1, month}, Now),
+    After1y = eproc_timer:timestamp_after({1, year},  Now),
+    [
+        ?_assertEqual(eproc_timer:duration_to_ms({2, sec}  ) * 1000, timer:now_diff(After1s, Before1s)),
+        ?_assertEqual(eproc_timer:duration_to_ms({2, hour} ) * 1000, timer:now_diff(After1h, Before1h)),
+        ?_assertEqual(eproc_timer:duration_to_ms({2, day}  ) * 1000, timer:now_diff(After1d, Before1d)),
+        ?_assertEqual(eproc_timer:duration_to_ms({2, month}) * 1000, timer:now_diff(After1m, Before1m)),
+        ?_assertEqual(eproc_timer:duration_to_ms({2, year} ) * 1000, timer:now_diff(After1y, Before1y))
+    ].
+

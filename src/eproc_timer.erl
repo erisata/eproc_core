@@ -20,7 +20,7 @@
 %%
 -module(eproc_timer).
 -behaviour(eproc_fsm_attr).
--export([set/4, set/3, set/2, cancel/1, duration_to_ms/1]).
+-export([set/4, set/3, set/2, cancel/1, duration_to_ms/1, timestamp_after/2, timestamp_before/2]).
 -export([init/2, handle_created/4, handle_updated/5, handle_removed/3, handle_event/4]).
 -export_type([duration/0]).
 -include("eproc.hrl").
@@ -35,6 +35,7 @@
 
 
 -define(MAX_ATOMIC_DELAY, 4294967295).
+-define(MEGA, 1000000).
 
 %%
 %%  Persistent state.
@@ -137,6 +138,32 @@ duration_to_ms(Spec) when is_integer(Spec) ->
 
 duration_to_ms(Spec) when is_list(Spec) ->
     lists:sum(lists:map(fun duration_to_ms/1, Spec)).
+
+
+%%
+%%  Returns a timestamp that is in Duration after Timestamp.
+%%
+-spec timestamp_after(duration(), timestamp()) -> timestamp().
+
+timestamp_after(Duration, {MSec, Sec, USec}) ->
+    DurationMS = duration_to_ms(Duration),
+    OldTSUSecs = ((MSec * ?MEGA) + Sec) * ?MEGA + USec,
+    NewTSUSecs = OldTSUSecs + (DurationMS * 1000),
+    NewTSSecs  = NewTSUSecs div ?MEGA,
+    NewUSec = NewTSUSecs rem ?MEGA,
+    NewSec  = NewTSSecs rem ?MEGA,
+    NewMSec = NewTSSecs div ?MEGA,
+    {NewMSec, NewSec, NewUSec}.
+
+
+%%
+%%  Returns a timestamp that is in Duration before Timestamp.
+%%
+-spec timestamp_before(duration(), timestamp()) -> timestamp().
+
+timestamp_before(Duration, Timestamp) ->
+    DurationMS = duration_to_ms(Duration),
+    timestamp_after(-DurationMS, Timestamp).
 
 
 
