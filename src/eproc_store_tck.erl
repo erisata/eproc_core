@@ -72,6 +72,7 @@ store(Config) ->
 %%  Provides default values.
 %%
 inst_value() ->
+    Now = os:timestamp(),
     #instance{
         inst_id = undefined,
         group = new,
@@ -81,7 +82,7 @@ inst_value() ->
         opts = [{o, p}],
         start_spec = undefined,
         status = running,
-        created = os:timestamp(),
+        created = Now,
         terminated = undefined,
         archived = undefined,
         interrupt = undefined,
@@ -89,6 +90,7 @@ inst_value() ->
             stt_id = 0,
             sname = [],
             sdata = {state, a, b},
+            timestamp = Now,
             attr_last_nr = 0,
             attrs_active = [],
             interrupts = []
@@ -137,7 +139,7 @@ eproc_store_core_test_unnamed_instance(Config) ->
     ]} = eproc_store:get_instance(Store, {list, [{inst, IID1}, {inst, IID2}]}, recent),
     {error, _} = eproc_store:get_instance(Store, {list, [{inst, IID1}, {inst, IID2}, {inst, some}]}, recent),
     {ok, #instance{curr_state = State1}} = eproc_store:get_instance(Store, {inst, IID1}, current),
-    #inst_state{stt_id = 0, sname = [], sdata = {state, a, b}} = State1,
+    #inst_state{stt_id = 0, sname = [], sdata = {state, a, b}, timestamp = {_, _, _}} = State1,
     %%  Try to load instance data.
     {ok, LoadedInst = #instance{inst_id = IID1, group = GRP1}} = eproc_store:load_instance(Store, {inst, IID1}),
     LoadedInst = Inst#instance{inst_id = IID1, group = GRP1, curr_state = State#inst_state{}},
@@ -305,7 +307,7 @@ eproc_store_core_test_add_transition(Config) ->
     Msg13 = #message{msg_id = 1013, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m13},
     {ok, IID1, 1} = eproc_store:add_transition(Store, IID1, Trn1, [Msg11, Msg12, Msg13]),
     {ok, #instance{status = running, interrupt = undefined, curr_state = #inst_state{
-        stt_id = 1, sname = [s1], sdata = d1,
+        stt_id = 1, sname = [s1], sdata = d1, timestamp = {_, _, _},
         attr_last_nr = 1, attrs_active = [_]
     }}} = eproc_store:get_instance(Store, {inst, IID1}, current),
     %%
@@ -322,7 +324,7 @@ eproc_store_core_test_add_transition(Config) ->
     Msg21 = #message{msg_id = 1021, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m21},
     {ok, IID1, 2} = eproc_store:add_transition(Store, IID1, Trn2, [Msg21]),
     {ok, #instance{status = running, interrupt = undefined, curr_state = #inst_state{
-        stt_id = 2, sname = [s2], sdata = d2,
+        stt_id = 2, sname = [s2], sdata = d2, timestamp = {_, _, _},
         attr_last_nr = 1, attrs_active = [_]
     }}} = eproc_store:get_instance(Store, {inst, IID1}, current),
     %%
@@ -342,7 +344,7 @@ eproc_store_core_test_add_transition(Config) ->
     {ok, IID1, 3} = eproc_store:add_transition(Store, IID1, Trn3, [Msg31]),
     {ok, #instance{status = suspended,
         curr_state = #inst_state{
-            stt_id = 3, sname = [s3], sdata = d3,
+            stt_id = 3, sname = [s3], sdata = d3, timestamp = {_, _, _},
             attr_last_nr = 1, attrs_active = [_]
         },
         interrupt = #interrupt{
@@ -372,7 +374,7 @@ eproc_store_core_test_add_transition(Config) ->
     Msg41 = #message{msg_id = 1041, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m41},
     {ok, IID1, 4} = eproc_store:add_transition(Store, IID1, Trn4, [Msg41]),
     {ok, #instance{status = running, interrupt = undefined, curr_state = #inst_state{
-        stt_id = 4, sname = [s4], sdata = d4,
+        stt_id = 4, sname = [s4], sdata = d4, timestamp = {_, _, _},
         attr_last_nr = 1, attrs_active = [_]
     }}} = eproc_store:get_instance(Store, {inst, IID1}, current),
     %%
@@ -391,7 +393,7 @@ eproc_store_core_test_add_transition(Config) ->
     Msg51 = #message{msg_id = 1051, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m51},
     {ok, IID1, 5} = eproc_store:add_transition(Store, IID1, Trn5, [Msg51]),
     {ok, #instance{status = completed, interrupt = undefined, curr_state = #inst_state{
-        stt_id = 5, sname = [s5], sdata = d5,
+        stt_id = 5, sname = [s5], sdata = d5, timestamp = {_, _, _},
         attr_last_nr = 1, attrs_active = [_]
     }}} = eproc_store:get_instance(Store, {inst, IID1}, current),
     %%
@@ -410,7 +412,7 @@ eproc_store_core_test_add_transition(Config) ->
     Msg61 = #message{msg_id = 1061, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m61},
     {error, terminated} = eproc_store:add_transition(Store, IID1, Trn6, [Msg61]),
     {ok, #instance{status = completed, interrupt = undefined, curr_state = #inst_state{
-        stt_id = 5, sname = [s5], sdata = d5,
+        stt_id = 5, sname = [s5], sdata = d5, timestamp = {_, _, _},
         attr_last_nr = 1, attrs_active = [_]
     }}} = eproc_store:get_instance(Store, {inst, IID1}, current),
     ok.
@@ -550,7 +552,7 @@ eproc_store_core_test_attrs(Config) ->
     Msg11 = #message{msg_id = 1011, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m11},
     {ok, IID1, 1} = eproc_store:add_transition(Store, IID1, Trn1, [Msg11]),
     {ok, #instance{status = running, interrupt = undefined, curr_state = #inst_state{
-        stt_id = 1, sname = [s1], sdata = d1,
+        stt_id = 1, sname = [s1], sdata = d1, timestamp = {_, _, _},
         attr_last_nr = 1, attrs_active = [Attr11]
     }}} = eproc_store:get_instance(Store, {inst, IID1}, current),
     #attribute{
@@ -586,7 +588,7 @@ eproc_store_core_test_attrs(Config) ->
     end,
     {ok, #instance{status = running, interrupt = undefined, curr_state = #inst_state{
         stt_id = 1,
-        sname = [s1], sdata = d1,
+        sname = [s1], sdata = d1, timestamp = {_, _, _},
         attr_last_nr = 1,
         attrs_active = [Attr11]
     }}} = eproc_store:get_instance(Store, {inst, IID1}, current),

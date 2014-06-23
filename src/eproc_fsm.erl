@@ -1798,6 +1798,7 @@ resolve_user_action(CommonOpts) ->
 %%  Creates new instance, initializes its initial state.
 %%
 handle_create(Module, Args, CreateOpts, CustomOpts) ->
+    Now         = eproc:now(),
     Group       = proplists:get_value(group,      CreateOpts, new),
     Name        = proplists:get_value(name,       CreateOpts, undefined),
     Store       = proplists:get_value(store,      CreateOpts, undefined),
@@ -1807,6 +1808,7 @@ handle_create(Module, Args, CreateOpts, CustomOpts) ->
         stt_id          = 0,
         sname           = [],
         sdata           = InitSData,
+        timestamp       = Now,
         attr_last_nr    = 0,
         attrs_active    = [],
         interrupts      = []
@@ -1820,7 +1822,7 @@ handle_create(Module, Args, CreateOpts, CustomOpts) ->
         opts        = CustomOpts,
         start_spec  = StartSpec,
         status      = running,
-        created     = eproc:now(),
+        created     = Now,
         terminated  = undefined,
         term_reason = undefined,
         archived    = undefined,

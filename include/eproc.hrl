@@ -257,6 +257,7 @@
     stt_id          :: stt_nr() | stt_id(),         %% Identifies a transition by which the state was reached.
     sname           :: term(),                      %% FSM state name.
     sdata           :: term(),                      %% FSM state data.
+    timestamp       :: timestamp(),                 %% State entry timestamp.
     attr_last_nr    :: attr_nr(),                   %% Last used FSM attribute ID.
     attrs_active    :: [#attribute{}] | undefined,  %% List of attributes, that are active at this state.
     interrupts      :: [#interrupt{}] | undefined   %% All the interrupts, closed in this state.

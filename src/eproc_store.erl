@@ -432,6 +432,7 @@ apply_transition(Transition, InstState, InstId) ->
         trn_id = TrnNr,
         sname = SName,
         sdata = SData,
+        timestamp = Timestamp,
         attr_last_nr = AttrLastNr,
         attr_actions = AttrActions
     } = Transition,
@@ -441,6 +442,7 @@ apply_transition(Transition, InstState, InstId) ->
         stt_id = TrnNr,
         sname = SName,
         sdata = SData,
+        timestamp = Timestamp,
         attr_last_nr = AttrLastNr,
         attrs_active = NewAttrs
     }.
