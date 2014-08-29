@@ -239,3 +239,14 @@ timestamp_before_after_test_() ->
         ?_assertEqual(eproc_timer:duration_to_ms({2, year} ) * 1000, timer:now_diff(After1y, Before1y))
     ].
 
+%%
+%%  Check if `timestamp/1` works.
+%%
+timestamp_test_() ->
+    [
+        ?_assertEqual(eproc_timer:timestamp(null), undefined),
+        ?_assertEqual(eproc_timer:timestamp(undefined), undefined),
+        ?_assertEqual(eproc_timer:timestamp({{2014,8,29},{11,14,0}}), {1409, 310840, 0})
+    ].
+
+

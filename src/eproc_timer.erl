@@ -20,7 +20,7 @@
 %%
 -module(eproc_timer).
 -behaviour(eproc_fsm_attr).
--export([set/4, set/3, set/2, cancel/1, duration_to_ms/1, timestamp_after/2, timestamp_before/2]).
+-export([set/4, set/3, set/2, cancel/1, duration_to_ms/1, timestamp_after/2, timestamp_before/2, timestamp/1]).
 -export([init/2, handle_created/4, handle_updated/5, handle_removed/3, handle_event/4]).
 -export_type([duration/0]).
 -include("eproc.hrl").
@@ -35,7 +35,9 @@
 
 
 -define(MAX_ATOMIC_DELAY, 4294967295).
+-define(UNIX_BIRTH, 62167219200).
 -define(MEGA, 1000000).
+
 
 %%
 %%  Persistent state.
@@ -164,6 +166,22 @@ timestamp_after(Duration, {MSec, Sec, USec}) ->
 timestamp_before(Duration, Timestamp) ->
     DurationMS = duration_to_ms(Duration),
     timestamp_after(-DurationMS, Timestamp).
+
+
+%%
+%%  Converts datetime to timestamp.
+%%
+-spec timestamp(calendar:datetime() | undefined | null) -> timestamp() | undefined.
+
+timestamp(undefined) ->
+    undefined;
+
+timestamp(null) ->
+    undefined;
+
+timestamp(Date = {{_Y, _M, _D}, {_H, _Mi, _S}}) ->
+    Seconds = calendar:datetime_to_gregorian_seconds(Date) - ?UNIX_BIRTH,
+    {Seconds div ?MEGA, Seconds rem ?MEGA, 0}.
 
 
 
