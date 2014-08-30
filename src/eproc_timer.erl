@@ -20,7 +20,8 @@
 %%
 -module(eproc_timer).
 -behaviour(eproc_fsm_attr).
--export([set/4, set/3, set/2, cancel/1, duration_to_ms/1, timestamp_after/2, timestamp_before/2, timestamp/1]).
+-export([set/4, set/3, set/2, cancel/1]).
+-export([duration_to_ms/1, timestamp_after/2, timestamp_before/2, timestamp/1, timestamp_diff/2]).
 -export([init/2, handle_created/4, handle_updated/5, handle_removed/3, handle_event/4]).
 -export_type([duration/0]).
 -include("eproc.hrl").
@@ -107,6 +108,9 @@ cancel(Name) ->
 %%      [{1, min}, {10, s}]
 %%
 -spec duration_to_ms(duration()) -> integer().
+
+duration_to_ms({N, us}) ->
+    N div 1000;
 
 duration_to_ms({N, ms}) ->
     N;
@@ -196,6 +200,51 @@ timestamp({{Y, M, D}, {H, Mi, S}}) ->
 timestamp({Date = {_Y, _M, _D}, Time = {_H, _Mi, _S}, USec}) ->
     Seconds = calendar:datetime_to_gregorian_seconds({Date, Time}) - ?UNIX_BIRTH,
     {Seconds div ?MEGA, Seconds rem ?MEGA, USec}.
+
+
+%%
+%%  Returns duration between Time1 and Time2 (Time2 - Time1).
+%%  Duration is returned in days, and time is decomposed to
+%%  hours, minutes, seconds, millis and microseconds.
+%%
+-spec timestamp_diff(
+        Timestamp2 :: timestamp(),
+        Timestamp1 :: timestamp()
+    ) ->
+        duration().
+
+timestamp_diff(undefined, _) ->
+    undefined;
+
+timestamp_diff(_, undefined) ->
+    undefined;
+
+timestamp_diff({T2M, T2S, T2U}, {T1M, T1S, T1U}) ->
+    T1 = (T1M * ?MEGA + T1S) * ?MEGA + T1U,
+    T2 = (T2M * ?MEGA + T2S) * ?MEGA + T2U,
+    Diff = T2 - T1,
+    case timestamp_diff(Diff, [{us, 1000}, {ms, 1000}, {sec, 60}, {min, 60}, {hour, 24}], []) of
+        [Single] -> Single;
+        Multiple -> Multiple
+    end.
+
+timestamp_diff(0, _, []) ->
+    {0, ms};
+
+timestamp_diff(0, _, Result) ->
+    Result;
+
+timestamp_diff(Diff, [], Result) ->
+    [{Diff, day} | Result];
+
+timestamp_diff(Diff, [{Unit, Max} | NextUnit], Result) ->
+    This = Diff rem Max,
+    Next = Diff div Max,
+    NewResult = case This of
+        0 -> Result;
+        X -> [{X, Unit} | Result]
+    end,
+    timestamp_diff(Next, NextUnit, NewResult).
 
 
 

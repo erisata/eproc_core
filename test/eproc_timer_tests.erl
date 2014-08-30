@@ -251,4 +251,26 @@ timestamp_test_() ->
         ?_assertEqual(eproc_timer:timestamp( {2014,8,29}                ), {1409, 270400,   0})
     ].
 
+%%
+%%  Check if `timestamp_diff/2` works.
+%%
+timestamp_diff_test_() ->
+    TS1 = eproc_timer:timestamp({{2014,8,29},{11,14,0}}),
+    TS2 = eproc_timer:timestamp({{2014,8,29},{11,14,0}, 3}),
+    TS3 = eproc_timer:timestamp({{2014,8,29},{11,14,0}, 3000}),
+    TS4 = eproc_timer:timestamp({{2014,8,29},{11,14,3}}),
+    TS5 = eproc_timer:timestamp({{2014,8,29},{14,17,3}}),
+    TS6 = eproc_timer:timestamp({{2014,9,30},{14,17,3}, 4004}),
+    [
+        ?_assertEqual(eproc_timer:timestamp_diff(undefined, undefined), undefined),
+        ?_assertEqual(eproc_timer:timestamp_diff(undefined, {0, 0, 0}), undefined),
+        ?_assertEqual(eproc_timer:timestamp_diff({0, 0, 0}, undefined), undefined),
+        ?_assertEqual(eproc_timer:timestamp_diff(TS1, TS1), {0, ms}),
+        ?_assertEqual(eproc_timer:timestamp_diff(TS2, TS1), {3, us}),
+        ?_assertEqual(eproc_timer:timestamp_diff(TS3, TS1), {3, ms}),
+        ?_assertEqual(eproc_timer:timestamp_diff(TS4, TS1), {3, sec}),
+        ?_assertEqual(eproc_timer:timestamp_diff(TS5, TS1), [{3, hour}, {3, min}, {3, sec}]),
+        ?_assertEqual(eproc_timer:timestamp_diff(TS6, TS1), [{32, day}, {3, hour}, {3, min}, {3, sec}, {4, ms}, {4, us}])
+    ].
+
 
