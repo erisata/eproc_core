@@ -134,6 +134,7 @@
 %%  TODO: Attachment support.
 %%  TODO: Implement FSM crash listener (`eproc_fsm_mgr`?).
 %%  TODO: Check if InstId can be non-integer.
+%%  TODO: Add support for transient processes, that are not registered to the store.
 %%
 -module(eproc_fsm).
 -behaviour(gen_server).
