@@ -64,34 +64,67 @@
 %% =============================================================================
 
 %%
-%%  TODO: Set timer by exact timestamp.
+%%  Set new or update existing timer.
 %%
-set(Name, After, Event, Scope) ->
-    Now = os:timestamp(),
-    {ok, InstId} = eproc_fsm:id(),
-    Src = {inst, InstId},
-    Dst = {timer, Name},
-    {ok, EventMsgCId} = eproc_fsm:register_sent_msg(Src, Dst, undefined, Event, Now),
-    ok = eproc_fsm_attr:action(?MODULE, Name, {timer, After, EventMsgCId, Event}, Scope).
+%%  `Name`
+%%  :   is a name of the timer to create or update.
+%%  `Time`
+%%  :   specified, when the timer should be fired.
+%%      It can be absolute timestamp of relative
+%%      duration, to fire at from now.
+%%  `Event`
+%%  :   is an event to be sent to FSM.
+%%  `Scope`
+%%  :   specifies validity scope of the timer.
+%%      Timer will be automatically canceled, if the FSM wil exit
+%%      the specific scope. Use `[]` for timers valid for the entire
+%%      lifecycle of the FSM. A special term can be used for the
+%%      scope: `next`. It represents a state, that will be entered
+%%      after the current transition.
+%%
+-spec set(
+        Name  :: term(),
+        Time  :: timestamp() | duration(),
+        Event :: term(),
+        Scope :: scope()
+    ) ->
+        ok.
+set(Name, Time = {M, S, U}, Event, Scope) when is_integer(M), is_integer(S), is_integer(U) ->
+    Start = os:timestamp(),
+    After = timestamp_diff(Time, Start),
+    set_timer(Name, After, Start, Event, Scope);
+
+set(Name, Time, Event, Scope) ->
+    Start = os:timestamp(),
+    After = Time,
+    set_timer(Name, After, Start, Event, Scope).
 
 
 %%
-%%
+%%  Shorthand for the `set/4` function.
+%%  Assumes name is undefined.
 %%
 set(After, Event, Scope) ->
     set(undefined, After, Event, Scope).
 
 
 %%
-%%
+%%  Shorthand for the `set/4` function.
+%%  Assumes name is undefined and the scope is `next`.
 %%
 set(After, Event) ->
     set(undefined, After, Event, next).
 
 
 %%
+%%  Cancels not-yet-fired timer by its name.
 %%
-%%
+-spec cancel(
+        Name :: term()
+    ) ->
+        ok |
+        {error, Reason :: term()}.
+
 cancel(Name) ->
     eproc_fsm_attr:action(?MODULE, Name, {timer, remove}).
 
@@ -267,9 +300,9 @@ init(InstId, ActiveAttrs) ->
 %%
 %%  Attribute created.
 %%
-handle_created(InstId, #attribute{attr_id = AttrNr}, {timer, After, EventMsgCId, Event}, _Scope) ->
+handle_created(InstId, #attribute{attr_id = AttrNr}, {timer, After, Start, EventMsgCId, Event}, _Scope) ->
     Data = #data{
-        start = os:timestamp(),
+        start = Start,
         delay = After,
         event_msg = Event,
         event_cid = EventMsgCId
@@ -284,10 +317,10 @@ handle_created(_InstId, _Attribute, {timer, remove}, _Scope) ->
 %%
 %%  Attribute updated by user.
 %%
-handle_updated(InstId, Attribute, AttrState, {timer, After, EventMsgCId, Event}, _Scope) ->
+handle_updated(InstId, Attribute, AttrState, {timer, After, Start, EventMsgCId, Event}, _Scope) ->
     #attribute{attr_id = AttrNr} = Attribute,
     NewData = #data{
-        start = os:timestamp(),
+        start = Start,
         delay = After,
         event_msg = Event,
         event_cid = EventMsgCId
@@ -342,6 +375,16 @@ handle_event(_InstId, Attribute, _State, fired) ->
 %% =============================================================================
 %%  Internal functions.
 %% =============================================================================
+
+%%
+%%  Create or update a timer.
+%%
+set_timer(Name, After, Start, Event, Scope) ->
+    {ok, InstId} = eproc_fsm:id(),
+    Src = {inst, InstId},
+    Dst = {timer, Name},
+    {ok, EventMsgCId} = eproc_fsm:register_sent_msg(Src, Dst, undefined, Event, Start),
+    ok = eproc_fsm_attr:action(?MODULE, Name, {timer, After, Start, EventMsgCId, Event}, Scope).
 
 
 %%

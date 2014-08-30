@@ -24,6 +24,7 @@
 %%  Check if attribute action specs are registered correctly for the `set` functions.
 %%
 mocked_set_test() ->
+    Now = os:timestamp(),
     ok = meck:new(eproc_fsm),
     ok = meck:new(eproc_fsm_attr),
     ok = meck:expect(eproc_fsm, id, fun
@@ -32,18 +33,21 @@ mocked_set_test() ->
     ok = meck:expect(eproc_fsm, register_sent_msg, fun
         ({inst, some}, {timer, undefined}, undefined, msg1, {_, _, _}) -> {ok, {i, t, m1, sent}};
         ({inst, some}, {timer, undefined}, undefined, msg2, {_, _, _}) -> {ok, {i, t, m2, sent}};
-        ({inst, some}, {timer, some},      undefined, msg3, {_, _, _}) -> {ok, {i, t, m3, sent}}
+        ({inst, some}, {timer, some},      undefined, msg3, {_, _, _}) -> {ok, {i, t, m3, sent}};
+        ({inst, some}, {timer, other},     undefined, msg4, {_, _, _}) -> {ok, {i, t, m4, sent}}
     end),
     ok = meck:expect(eproc_fsm_attr, action, fun
-        (eproc_timer, undefined, {timer, 1000, {i, t, m1, sent}, msg1}, next) -> ok;
-        (eproc_timer, undefined, {timer, 1000, {i, t, m2, sent}, msg2}, []) -> ok;
-        (eproc_timer, some,      {timer, 1000, {i, t, m3, sent}, msg3}, []) -> ok
+        (eproc_timer, undefined, {timer, 1000, {_, _, _}, {i, t, m1, sent}, msg1}, next) -> ok;
+        (eproc_timer, undefined, {timer, 1000, {_, _, _}, {i, t, m2, sent}, msg2}, []) -> ok;
+        (eproc_timer, some,      {timer, 1000, {_, _, _}, {i, t, m3, sent}, msg3}, []) -> ok;
+        (eproc_timer, other,     {timer, _,    {_, _, _}, {i, t, m4, sent}, msg4}, []) -> ok
     end),
     ok = eproc_timer:set(1000, msg1),
     ok = eproc_timer:set(1000, msg2, []),
     ok = eproc_timer:set(some, 1000, msg3, []),
-    ?assertEqual(3, meck:num_calls(eproc_fsm, register_sent_msg, '_')),
-    ?assertEqual(3, meck:num_calls(eproc_fsm_attr, action, '_')),
+    ok = eproc_timer:set(other, eproc_timer:timestamp_after({1, min}, Now), msg4, []), % Fire at exact timestamp.
+    ?assertEqual(4, meck:num_calls(eproc_fsm, register_sent_msg, '_')),
+    ?assertEqual(4, meck:num_calls(eproc_fsm_attr, action, '_')),
     ?assert(meck:validate([eproc_fsm, eproc_fsm_attr])),
     ok = meck:unload([eproc_fsm, eproc_fsm_attr]).
 
