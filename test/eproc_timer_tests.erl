@@ -244,9 +244,11 @@ timestamp_before_after_test_() ->
 %%
 timestamp_test_() ->
     [
-        ?_assertEqual(eproc_timer:timestamp(null), undefined),
+        ?_assertEqual(eproc_timer:timestamp(null     ), undefined),
         ?_assertEqual(eproc_timer:timestamp(undefined), undefined),
-        ?_assertEqual(eproc_timer:timestamp({{2014,8,29},{11,14,0}}), {1409, 310840, 0})
+        ?_assertEqual(eproc_timer:timestamp({{2014,8,29},{11,14,0}, 125}), {1409, 310840, 125}),
+        ?_assertEqual(eproc_timer:timestamp({{2014,8,29},{11,14,0}     }), {1409, 310840,   0}),
+        ?_assertEqual(eproc_timer:timestamp( {2014,8,29}                ), {1409, 270400,   0})
     ].
 
 

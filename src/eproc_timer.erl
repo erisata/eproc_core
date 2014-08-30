@@ -171,7 +171,15 @@ timestamp_before(Duration, Timestamp) ->
 %%
 %%  Converts datetime to timestamp.
 %%
--spec timestamp(calendar:datetime() | undefined | null) -> timestamp() | undefined.
+-spec timestamp(
+        DateTime ::
+            calendar:datetime() |
+            calendar:date() |
+            {calendar:date(), calendar:time(), USec :: integer()} |
+            undefined | null
+    ) ->
+        timestamp() |
+        undefined.
 
 timestamp(undefined) ->
     undefined;
@@ -179,9 +187,15 @@ timestamp(undefined) ->
 timestamp(null) ->
     undefined;
 
-timestamp(Date = {{_Y, _M, _D}, {_H, _Mi, _S}}) ->
-    Seconds = calendar:datetime_to_gregorian_seconds(Date) - ?UNIX_BIRTH,
-    {Seconds div ?MEGA, Seconds rem ?MEGA, 0}.
+timestamp({Y, M, D}) when is_integer(Y), is_integer(M), is_integer(D) ->
+    timestamp({{Y, M, D}, {0, 0, 0}, 0});
+
+timestamp({{Y, M, D}, {H, Mi, S}}) ->
+    timestamp({{Y, M, D}, {H, Mi, S}, 0});
+
+timestamp({Date = {_Y, _M, _D}, Time = {_H, _Mi, _S}, USec}) ->
+    Seconds = calendar:datetime_to_gregorian_seconds({Date, Time}) - ?UNIX_BIRTH,
+    {Seconds div ?MEGA, Seconds rem ?MEGA, USec}.
 
 
 
