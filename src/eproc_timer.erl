@@ -360,12 +360,12 @@ handle_event(_InstId, Attribute, _State, fired) ->
     } = Attribute,
     Trigger = #trigger_spec{
         type = timer,
-        source = Name,      % TODO: Remove timer name here?
+        source = Name,
         message = Event,
         msg_cid = EventMsgCId,
         sync = false,
         reply_fun = undefined,
-        src_arg = true
+        src_arg = true      % TODO: Remove timer name here?
     },
     Action = {remove, fired},
     {trigger, Trigger, Action, false}.
