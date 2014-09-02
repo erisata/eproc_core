@@ -337,8 +337,8 @@ handle_updated(_InstId, _Attribute, AttrState, {timer, remove}, _Scope) ->
 %%
 %%  Attribute removed by `eproc_fsm`.
 %%
-handle_removed(_InstId, _Attribute, State) ->
-    ok = stop_timer(State),
+handle_removed(_InstId, _Attribute, AttrState) ->
+    ok = stop_timer(AttrState),
     {ok, false}.
 
 
@@ -413,6 +413,9 @@ start_timer(InstId, AttrNr, #data{start = Start, delay = DelaySpec}) ->
 %%
 %%  Stops a timer.
 %%
+stop_timer(#state{ref = undefined}) ->
+    ok; % Timer was fired immediatelly.
+
 stop_timer(#state{ref = TimerRef}) ->
     erlang:cancel_timer(TimerRef),
     ok.
