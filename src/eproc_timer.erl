@@ -365,7 +365,7 @@ handle_event(_InstId, Attribute, _State, fired) ->
         msg_cid = EventMsgCId,
         sync = false,
         reply_fun = undefined,
-        src_arg = true      % TODO: Remove timer name here?
+        src_arg = false
     },
     Action = {remove, fired},
     {trigger, Trigger, Action, false}.

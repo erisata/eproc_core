@@ -106,7 +106,7 @@ handle_state([scheduling], {entry, _PrevState}, StateData = #state{period = Peri
     ok = eproc_timer:set(main, Period, tick, [scheduling]), % Timer created.
     {ok, StateData};
 
-handle_state([scheduling], {timer, main, tick}, StateData = #state{subsc = Subscribers}) ->
+handle_state([scheduling], {timer, tick}, StateData = #state{subsc = Subscribers}) ->
     lists:foreach(fun (S) -> S ! tick end, Subscribers),
     {next_state, [scheduling], StateData};
 
