@@ -18,10 +18,12 @@
 %%  This module can be used in callback modules for the `eproc_fsm`
 %%  to manage timers associated with the FSM.
 %%
+%%  TODO: should we use `https://github.com/choptastic/qdate` instead of `timestamp_*` functions?
+%%
 -module(eproc_timer).
 -behaviour(eproc_fsm_attr).
 -export([set/4, set/3, set/2, cancel/1]).
--export([duration_to_ms/1, timestamp_after/2, timestamp_before/2, timestamp/1, timestamp_diff/2]).
+-export([duration_to_ms/1, timestamp_after/2, timestamp_before/2, timestamp/2, timestamp_diff/2, timestamp_format/2]).
 -export([init/2, handle_created/4, handle_updated/5, handle_removed/3, handle_event/4]).
 -export_type([duration/0]).
 -include("eproc.hrl").
@@ -213,24 +215,29 @@ timestamp_before(Duration, Timestamp) ->
             calendar:datetime() |
             calendar:date() |
             {calendar:date(), calendar:time(), USec :: integer()} |
-            undefined | null
+            undefined | null,
+        Timezone :: local | utc
     ) ->
         timestamp() |
         undefined.
 
-timestamp(undefined) ->
+timestamp(undefined, _) ->
     undefined;
 
-timestamp(null) ->
+timestamp(null, _) ->
     undefined;
 
-timestamp({Y, M, D}) when is_integer(Y), is_integer(M), is_integer(D) ->
-    timestamp({{Y, M, D}, {0, 0, 0}, 0});
+timestamp({Y, M, D}, Timezone) when is_integer(Y), is_integer(M), is_integer(D) ->
+    timestamp({{Y, M, D}, {0, 0, 0}, 0}, Timezone);
 
-timestamp({{Y, M, D}, {H, Mi, S}}) ->
-    timestamp({{Y, M, D}, {H, Mi, S}, 0});
+timestamp({{Y, M, D}, {H, Mi, S}}, Timezone) ->
+    timestamp({{Y, M, D}, {H, Mi, S}, 0}, Timezone);
 
-timestamp({Date = {_Y, _M, _D}, Time = {_H, _Mi, _S}, USec}) ->
+timestamp({Date = {_Y, _M, _D}, Time = {_H, _Mi, _S}, USec}, local) ->
+    [{UniversalDate, UniversalTime}|_] = calendar:local_time_to_universal_time_dst({Date, Time}),
+    timestamp({UniversalDate, UniversalTime, USec}, utc);
+
+timestamp({Date = {_Y, _M, _D}, Time = {_H, _Mi, _S}, USec}, utc) ->
     Seconds = calendar:datetime_to_gregorian_seconds({Date, Time}) - ?UNIX_BIRTH,
     {Seconds div ?MEGA, Seconds rem ?MEGA, USec}.
 
@@ -278,6 +285,19 @@ timestamp_diff(Diff, [{Unit, Max} | NextUnit], Result) ->
         X -> [{X, Unit} | Result]
     end,
     timestamp_diff(Next, NextUnit, NewResult).
+
+
+%%
+%%  Format date according to some format.
+%%
+timestamp_format(Timestamp, iso8601) ->
+    timestamp_format(Timestamp, {iso8601, utc});
+
+timestamp_format(Timestamp = {_M, _S, MicroSecs}, {iso8601, utc}) ->
+    {{Y, M, D}, {H, Mi, S}} = calendar:now_to_universal_time(Timestamp),
+    Args = [Y, M, D, H, Mi, S, MicroSecs],
+    Date = io_lib:format("~B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~2.10.0B.~6.10.0BZ", Args),
+    erlang:iolist_to_binary(Date).
 
 
 
