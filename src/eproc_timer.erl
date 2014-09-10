@@ -23,7 +23,15 @@
 -module(eproc_timer).
 -behaviour(eproc_fsm_attr).
 -export([set/4, set/3, set/2, cancel/1]).
--export([duration_to_ms/1, timestamp_after/2, timestamp_before/2, timestamp/2, timestamp_diff/2, timestamp_format/2]).
+-export([
+    duration_to_ms/1,
+    timestamp_after/2,
+    timestamp_before/2,
+    timestamp/2,
+    timestamp_diff/2,
+    timestamp_format/2,
+    timestamp_parse/2
+]).
 -export([init/2, handle_created/4, handle_updated/5, handle_removed/3, handle_event/4]).
 -export_type([duration/0]).
 -include("eproc.hrl").
@@ -298,6 +306,33 @@ timestamp_format(Timestamp = {_M, _S, MicroSecs}, {iso8601, utc}) ->
     Args = [Y, M, D, H, Mi, S, MicroSecs],
     Date = io_lib:format("~B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~2.10.0B.~6.10.0BZ", Args),
     erlang:iolist_to_binary(Date).
+
+
+%%
+%%  Parse date according to some format.
+%%
+timestamp_parse(undefined, _Format) ->
+    undefined;
+
+timestamp_parse(null, _Format) ->
+    undefined;
+
+timestamp_parse(TimestampBin, iso8601) when is_binary(TimestampBin) ->
+    <<
+        Year:4/binary, "-", Month:2/binary, "-", Day:2/binary, "T",
+        Hour:2/binary, ":", Min:2/binary,   ":", Sec:2/binary, Rest/binary
+    >> = TimestampBin,
+    {USec, TZone} = case Rest of
+        <<>>                      -> {0, local};
+        <<"Z">>                   -> {0, utc};
+        <<".", US:6/binary>>      -> {binary_to_integer(US), local};
+        <<".", US:6/binary, "Z">> -> {binary_to_integer(US), utc};
+        <<".", MS:3/binary>>      -> {binary_to_integer(MS) * 1000, local};
+        <<".", MS:3/binary, "Z">> -> {binary_to_integer(MS) * 1000, utc}
+    end,
+    Date = {binary_to_integer(Year), binary_to_integer(Month), binary_to_integer(Day)},
+    Time = {binary_to_integer(Hour), binary_to_integer(Min), binary_to_integer(Sec)},
+    timestamp({Date, Time, USec}, TZone).
 
 
 

@@ -291,3 +291,23 @@ timestamp_format_test_() ->
         ?_assertEqual(<<"2014-09-02T14:17:03.004004Z">>, eproc_timer:timestamp_format(TS2, {iso8601, utc}))
     ].
 
+
+%%
+%%  Check if `timestamp_parse/2` works.
+%%
+timestamp_parse_test_() ->
+    TS0 = eproc_timer:timestamp({{2014,9,02},{14,17,3}},       utc),
+    TS1 = eproc_timer:timestamp({{2014,9,02},{14,17,3}, 4000}, utc),
+    TS2 = eproc_timer:timestamp({{2014,9,02},{14,17,3}, 4004}, utc),
+    TS3 = eproc_timer:timestamp({{2014,9,02},{14,17,3}},       local),
+    TS4 = eproc_timer:timestamp({{2014,9,02},{14,17,3}, 4000}, local),
+    TS5 = eproc_timer:timestamp({{2014,9,02},{14,17,3}, 4004}, local),
+    [
+        ?_assertEqual(TS0, eproc_timer:timestamp_parse(<<"2014-09-02T14:17:03Z">>,        iso8601)),
+        ?_assertEqual(TS1, eproc_timer:timestamp_parse(<<"2014-09-02T14:17:03.004Z">>,    iso8601)),
+        ?_assertEqual(TS2, eproc_timer:timestamp_parse(<<"2014-09-02T14:17:03.004004Z">>, iso8601)),
+        ?_assertEqual(TS3, eproc_timer:timestamp_parse(<<"2014-09-02T14:17:03">>,         iso8601)),
+        ?_assertEqual(TS4, eproc_timer:timestamp_parse(<<"2014-09-02T14:17:03.004">>,     iso8601)),
+        ?_assertEqual(TS5, eproc_timer:timestamp_parse(<<"2014-09-02T14:17:03.004004">>,  iso8601))
+    ].
+
