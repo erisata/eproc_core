@@ -655,12 +655,15 @@
         Options :: proplist()
     ) ->
         {ok, fsm_ref()} |
-        {error, already_created}.
+        {error, {already_created, fsm_ref()}}.
 
 create(Module, Args, Options) ->
     {ok, CreateOpts, [], [], CommonOpts, UnknownOpts} = split_options(Options),
-    {ok, InstId} = handle_create(Module, Args, lists:append(CreateOpts, CommonOpts), UnknownOpts),
-    {ok, {inst, InstId}}.
+    case handle_create(Module, Args, lists:append(CreateOpts, CommonOpts), UnknownOpts) of
+        {ok, InstId}                       -> {ok, {inst, InstId}};
+        {error, {already_created, InstId}} -> {error, {already_created, {inst, InstId}}};
+        {error, Reason}                    -> {error, Reason}
+    end.
 
 
 %%
@@ -910,7 +913,7 @@ is_fsm_ref(_) -> false.
         Options :: proplist()
     ) ->
         {ok, fsm_ref()} |
-        {error, already_created} |
+        {error, {already_created, fsm_ref()}} |
         {error, timeout} |
         {error, term()}.
 
@@ -935,7 +938,7 @@ send_create_event(Module, Args, Event, Options) ->
         Options :: proplist()
     ) ->
         {ok, fsm_ref(), Reply :: term()} |
-        {error, already_created} |
+        {error, {already_created, fsm_ref()}} |
         {error, timeout} |
         {error, term()}.
 
@@ -1831,7 +1834,7 @@ handle_create(Module, Args, CreateOpts, CustomOpts) ->
         arch_state  = undefined,
         transitions = undefined
     },
-    {ok, _InstId} = eproc_store:add_instance(Store, Instance).
+    eproc_store:add_instance(Store, Instance).
 
 
 %%

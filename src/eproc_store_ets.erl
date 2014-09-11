@@ -184,7 +184,10 @@ add_instance(_StoreArgs, Instance = #instance{name = Name, group = Group, curr_s
             }),
             {ok, InstId};
         false ->
-            {error, bad_name}
+            case resolve_inst_id({name, Name}) of
+                {ok, OldInstId} -> {error, {already_created, OldInstId}};
+                {error, Reason} -> {error, Reason}
+            end
     end.
 
 

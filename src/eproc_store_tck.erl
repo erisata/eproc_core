@@ -179,7 +179,7 @@ eproc_store_core_test_named_instance(Config) ->
     Inst = #instance{curr_state = State} = inst_value(),
     {ok, IID1} = eproc_store:add_instance(Store, Inst#instance{group = new, name = test_named_instance_a}),
     {ok, IID2} = eproc_store:add_instance(Store, Inst#instance{group = 897, name = test_named_instance_b}),
-    {error, bad_name} = eproc_store:add_instance(Store, Inst#instance{group = 897, name = test_named_instance_b}),
+    {error, {already_created, IID2}} = eproc_store:add_instance(Store, Inst#instance{group = 897, name = test_named_instance_b}),
     true = undefined =/= IID1,
     true = undefined =/= IID2,
     true = IID1 =/= IID2,
