@@ -918,9 +918,13 @@ is_fsm_ref(_) -> false.
         {error, term()}.
 
 send_create_event(Module, Args, Event, Options) ->
-    {ok, FsmRef, NewFsmRef, AllSendOpts} = create_prepare_send(Module, Args, Options),
-    ok = send_event(NewFsmRef, Event, AllSendOpts),
-    {ok, FsmRef}.
+    case create_prepare_send(Module, Args, Options) of
+        {ok, FsmRef, NewFsmRef, AllSendOpts} ->
+            ok = send_event(NewFsmRef, Event, AllSendOpts),
+            {ok, FsmRef};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 
 
@@ -943,9 +947,13 @@ send_create_event(Module, Args, Event, Options) ->
         {error, term()}.
 
 sync_send_create_event(Module, Args, Event, Options) ->
-    {ok, FsmRef, NewFsmRef, AllSendOpts} = create_prepare_send(Module, Args, Options),
-    Reply = sync_send_event(NewFsmRef, Event, AllSendOpts),
-    {ok, FsmRef, Reply}.
+    case create_prepare_send(Module, Args, Options) of
+        {ok, FsmRef, NewFsmRef, AllSendOpts} ->
+            Reply = sync_send_event(NewFsmRef, Event, AllSendOpts),
+            {ok, FsmRef, Reply};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 
 %%
@@ -2391,13 +2399,16 @@ create_prepare_send(Module, Args, Options) ->
 
     CreateOptsWithGroup = resolve_append_group(CreateOpts),
     AllCreateOpts = lists:append([CreateOptsWithGroup, CommonOpts, UnknownOpts]),
-    {ok, FsmRef} = create(Module, Args, AllCreateOpts),
-
-    Registry = resolve_registry(CommonOpts),
-    AllSendOpts = lists:append(SendOpts, CommonOpts),
-    {ok, StartSpec} = resolve_start_spec(CreateOpts),
-    {ok, NewFsmRef} = eproc_registry:make_new_fsm_ref(Registry, FsmRef, StartSpec),
-    {ok, FsmRef, NewFsmRef, AllSendOpts}.
+    case create(Module, Args, AllCreateOpts) of
+        {ok, FsmRef} ->
+            Registry = resolve_registry(CommonOpts),
+            AllSendOpts = lists:append(SendOpts, CommonOpts),
+            {ok, StartSpec} = resolve_start_spec(CreateOpts),
+            {ok, NewFsmRef} = eproc_registry:make_new_fsm_ref(Registry, FsmRef, StartSpec),
+            {ok, FsmRef, NewFsmRef, AllSendOpts};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 
 %%
