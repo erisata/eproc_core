@@ -135,6 +135,7 @@
 %%  TODO: Implement FSM crash listener (`eproc_fsm_mgr`?).
 %%  TODO: Check if InstId can be non-integer.
 %%  TODO: Add support for transient processes, that are not registered to the store.
+%%  TODO: Add `ignore` handling for `handle_cast` and `handle_call`.
 %%
 -module(eproc_fsm).
 -behaviour(gen_server).
