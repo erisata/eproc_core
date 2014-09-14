@@ -280,6 +280,7 @@ timestamp_diff_test_() ->
 
 %%
 %%  Check if `timestamp_format/2` works.
+%%  TODO: This (and other) tests asume current locale to be +3:00. Remove this assumption.
 %%
 timestamp_format_test_() ->
     TS0 = eproc_timer:timestamp({{2014,9,02},{14,17,3}}, local),
