@@ -301,10 +301,22 @@ timestamp_diff(Diff, [{Unit, Max} | NextUnit], Result) ->
 timestamp_format(Timestamp, iso8601) ->
     timestamp_format(Timestamp, {iso8601, utc});
 
-timestamp_format(Timestamp = {_M, _S, MicroSecs}, {iso8601, utc}) ->
+timestamp_format(Timestamp, {iso8601, TZ}) ->
+    timestamp_format(Timestamp, {iso8601, TZ, us});
+
+timestamp_format(Timestamp = {_M, _S, MicroSecs}, {iso8601, utc, Preciseness}) ->
     {{Y, M, D}, {H, Mi, S}} = calendar:now_to_universal_time(Timestamp),
-    Args = [Y, M, D, H, Mi, S, MicroSecs],
-    Date = io_lib:format("~B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~2.10.0B.~6.10.0BZ", Args),
+    Date = case Preciseness of
+        us ->
+            Args = [Y, M, D, H, Mi, S, MicroSecs],
+            Date = io_lib:format("~B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~2.10.0B.~6.10.0BZ", Args);
+        ms ->
+            Args = [Y, M, D, H, Mi, S, MicroSecs div 1000],
+            Date = io_lib:format("~B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~2.10.0B.~3.10.0BZ", Args);
+        sec ->
+            Args = [Y, M, D, H, Mi, S],
+            Date = io_lib:format("~B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~2.10.0BZ", Args)
+    end,
     erlang:iolist_to_binary(Date).
 
 

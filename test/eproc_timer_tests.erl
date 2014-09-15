@@ -289,7 +289,9 @@ timestamp_format_test_() ->
     [
         ?_assertEqual(<<"2014-09-02T11:17:03.000000Z">>, eproc_timer:timestamp_format(TS0, {iso8601, utc})),
         ?_assertEqual(<<"2014-09-02T11:17:03.004004Z">>, eproc_timer:timestamp_format(TS1, {iso8601, utc})),
-        ?_assertEqual(<<"2014-09-02T14:17:03.004004Z">>, eproc_timer:timestamp_format(TS2, {iso8601, utc}))
+        ?_assertEqual(<<"2014-09-02T14:17:03.004004Z">>, eproc_timer:timestamp_format(TS2, {iso8601, utc, us})),
+        ?_assertEqual(<<"2014-09-02T14:17:03.004Z">>,    eproc_timer:timestamp_format(TS2, {iso8601, utc, ms})),
+        ?_assertEqual(<<"2014-09-02T14:17:03Z">>,        eproc_timer:timestamp_format(TS2, {iso8601, utc, sec}))
     ].
 
 
