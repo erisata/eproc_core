@@ -59,9 +59,10 @@
 %%      in the cases, when a call should be made rigth after adding the key and
 %%      the key is needed for routing the response of that call.
 %%  `uniq`
-%%  :   should be set to fail, if the key is already present (active),
-%%      and is registered by different FSM instance. This option is only
-%%      used, if the key is being added synchronously.
+%%  :   should be set to true, if the key should not be registered if it
+%%      is already present (active), and is registered by different FSM instance.
+%%      This option is only used, if the key is being added synchronously.
+%%      The term `{error, exist}` will be returned in such case.
 %%
 -spec add_key(
         Key     :: term(),
@@ -69,6 +70,7 @@
         Opts    :: [sync | uniq]
     ) ->
         ok |
+        {error, exist} |
         {error, Reason :: term()}.
 
 add_key(Key, Scope, Opts) ->
