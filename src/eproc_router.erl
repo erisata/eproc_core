@@ -75,7 +75,7 @@ add_key(Key, Scope, Opts) ->
     case proplists:get_keys(Opts) -- [sync, uniq] of
         [] ->
             Sync = proplists:get_value(sync, Opts, false),
-            {ok, SyncRef} = case Sync of
+            TaskResponse = case Sync of
                 false -> {ok, undefined};
                 true ->
                     {ok, InstId} = eproc_fsm:id(),
@@ -83,9 +83,14 @@ add_key(Key, Scope, Opts) ->
                     Task = {key_sync, Key, InstId, Uniq},
                     eproc_fsm_attr:task(?MODULE, Task, [])
             end,
-            Name = undefined,
-            Action = {key, Key, SyncRef},
-            ok = eproc_fsm_attr:action(?MODULE, Name, Action, Scope);
+            case TaskResponse of
+                {ok, SyncRef} ->
+                    Name = undefined,
+                    Action = {key, Key, SyncRef},
+                    ok = eproc_fsm_attr:action(?MODULE, Name, Action, Scope);
+                {error, Reason} ->
+                    {error, Reason}
+            end;
         Unknown ->
             {error, Unknown}
     end.
