@@ -139,6 +139,7 @@
 %%  TODO: Implement persistent process linking. It could work as follows:
 %%          * Processes are activated only when all linked (related) processes are online.
 %%          * When becoming online, linked processes start to monitor each other.
+%%          * Subprocesses can be one of a ways to link processes.
 %%
 -module(eproc_fsm).
 -behaviour(gen_server).
