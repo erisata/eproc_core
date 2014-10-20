@@ -298,6 +298,7 @@ eproc_store_core_test_add_transition(Config) ->
         sdata = d1,
         timestamp = os:timestamp(),
         duration = 13,
+        trn_node = undefined,
         trigger_type = event,
         trigger_msg = #msg_ref{cid = 1011, peer = {connector, some}},
         trigger_resp = #msg_ref{cid = 1012, peer = {connector, some}},
@@ -437,6 +438,7 @@ eproc_store_core_test_resolve_msg_dst(Config) ->
     Inst = inst_value(),
     {ok, IID1} = eproc_store:add_instance(Store, Inst),
     {ok, IID2} = eproc_store:add_instance(Store, Inst),
+    {ok, NodeRef} = eproc_store:get_node(Store),
     %%  Add transitions.
     Msg1r = #message{msg_id = {IID1, 1, 0, recv}, sender = {ext, some},  receiver = {inst, IID1},      resp_to = undefined, date = os:timestamp(), body = m1},
     Msg2s = #message{msg_id = {IID1, 1, 2, sent}, sender = {inst, IID1}, receiver = {inst, undefined}, resp_to = undefined, date = os:timestamp(), body = m2},
@@ -448,6 +450,7 @@ eproc_store_core_test_resolve_msg_dst(Config) ->
         sdata = d1,
         timestamp = os:timestamp(),
         duration = 13,
+        trn_node = undefined,
         trigger_type = event,
         trigger_msg = #msg_ref{cid = {IID1, 1, 0, recv}, peer = {ext, some}},
         trigger_resp = undefined,
@@ -468,10 +471,12 @@ eproc_store_core_test_resolve_msg_dst(Config) ->
         trn_messages = []
     },
     Trn1Fix = Trn1#transition{
+        trn_node = NodeRef,
         trn_messages = [#msg_ref{cid = {IID1, 1, 2, sent}, peer = {inst, IID2}}],
         interrupts = []
     },
     Trn2Fix = Trn2#transition{
+        trn_node = NodeRef,
         interrupts = []
     },
     {ok, IID1, 1} = eproc_store:add_transition(Store, IID1, Trn1, [Msg1r, Msg2s]),
@@ -545,6 +550,7 @@ eproc_store_core_test_attrs(Config) ->
     Trn1 = #transition{
         trn_id = 1, sname = [s1], sdata = d1,
         timestamp = os:timestamp(), duration = 13, trigger_type = event,
+        trn_node = undefined,
         trigger_msg = #msg_ref{cid = 1011, peer = {connector, some}},
         trigger_resp = undefined,
         trn_messages = [],
@@ -631,6 +637,7 @@ eproc_store_router_test_attrs(Config) ->
     Trn1 = #transition{
         trn_id = 1, sname = [s1], sdata = d1,
         timestamp = os:timestamp(), duration = 13, trigger_type = event,
+        trn_node = undefined,
         trigger_msg = #msg_ref{cid = 1011, peer = {connector, some}},
         trigger_resp = undefined,
         trn_messages = [],
@@ -699,7 +706,7 @@ eproc_store_meta_test_attrs(Config) ->
     %%
     AddTrnFun = fun (IID, AttrActions) ->
         Trn = #transition{
-            trn_id = 1, sname = [s1], sdata = d1, timestamp = os:timestamp(), duration = 13, trigger_type = event,
+            trn_id = 1, sname = [s1], sdata = d1, timestamp = os:timestamp(), trn_node = undefined, duration = 13, trigger_type = event,
             trigger_msg = #msg_ref{cid = {IID, 1, 0, recv}, peer = {connector, some}}, trigger_resp = undefined, trn_messages = [],
             attr_last_nr = 1, attr_actions = AttrActions, inst_status = running, interrupts = undefined
         },

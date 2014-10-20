@@ -218,7 +218,7 @@
 %%  when resuming the FSM.
 %%
 -record(interrupt, {
-    intr_id     :: intr_nr() | intr_id() | undefined,  %% Interrupt reference, undefined if active.
+    intr_id     :: intr_nr() | intr_id() | undefined,   %% Interrupt reference, undefined if active.
     status      :: active | closed,                     %% Interrupt status.
     suspended   :: timestamp(),                         %% When the FSM was suspended.
     reason      :: #user_action{} | {fault, Reason :: term()} | {impl, Reason :: term()},
@@ -236,6 +236,7 @@
     sdata           :: term(),                          %% FSM state data at the end of this transition.
     timestamp       :: timestamp(),                     %% Start of the transition.
     duration        :: duration(),                      %% Duration of the transition (in microseconds).
+    trn_node        :: node_ref(),                      %% Which node the transition was performed on.
     trigger_type    :: trigger_type(),                  %% Type of the trigger, initiated the transition.
     trigger_msg     :: msg_ref(),                       %% Message initiated the transition.
     trigger_resp    :: msg_ref() | undefined,           %% Response to the trigger if the event was synchronous.

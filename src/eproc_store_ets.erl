@@ -204,15 +204,18 @@ add_transition(_StoreArgs, InstId, Transition, Messages) ->
         attr_actions = AttrActions,
         inst_status  = Status
     } = Transition,
+    NormalizedTransition = Transition#transition{
+        trn_node = ?NODE_REF
+    },
     true = is_list(AttrActions),
     [Instance = #instance{
         status = OldStatus,
         curr_state = OldCurrState
     }] = ets:lookup(?INST_TBL, InstId),
     InstWithNewState = Instance#instance{
-        curr_state = eproc_store:apply_transition(Transition, OldCurrState, InstId)
+        curr_state = eproc_store:apply_transition(NormalizedTransition, OldCurrState, InstId)
     },
-    Action = case eproc_store:determine_transition_action(Transition, OldStatus) of
+    Action = case eproc_store:determine_transition_action(NormalizedTransition, OldStatus) of
         none              -> {ok, fun () -> true = ets:insert(?INST_TBL, InstWithNewState), ok end};
         {suspend, Reason} -> {ok, fun () -> write_instance_suspended(InstWithNewState, Reason) end};
         resume            -> {ok, fun () -> write_instance_resumed(InstWithNewState, TrnNr) end};
@@ -221,9 +224,12 @@ add_transition(_StoreArgs, InstId, Transition, Messages) ->
     end,
     case Action of
         {ok, InstFun} ->
-            ok = handle_attr_actions(InstWithNewState, Transition, Messages),
+            ok = handle_attr_actions(InstWithNewState, NormalizedTransition, Messages),
             [ true = ets:insert(?MSG_TBL, Message) || Message <- Messages],
-            true = ets:insert(?TRN_TBL, Transition#transition{trn_id = {InstId, TrnNr}, interrupts = []}),
+            true = ets:insert(?TRN_TBL, NormalizedTransition#transition{
+                trn_id = {InstId, TrnNr},
+                interrupts = []
+            }),
             ok = InstFun(),
             {ok, InstId, TrnNr};
         {error, ErrReason} ->
