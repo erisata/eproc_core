@@ -83,6 +83,7 @@ inst_value() ->
         start_spec = undefined,
         status = running,
         created = Now,
+        create_node = undefined,
         terminated = undefined,
         archived = undefined,
         interrupt = undefined,
@@ -126,10 +127,13 @@ eproc_store_core_test_unnamed_instance(Config) ->
     %%  Try to get instance headers.
     {ok, Inst1 = #instance{inst_id = IID1, group = GRP1}} = eproc_store:get_instance(Store, {inst, IID1}, header),
     {ok, Inst2 = #instance{inst_id = IID2, group = GRP2}} = eproc_store:get_instance(Store, {inst, IID2}, header),
-    Inst1 = Inst#instance{inst_id = IID1, group = GRP1, curr_state = undefined},
-    Inst2 = Inst#instance{inst_id = IID2, group = GRP2, curr_state = undefined},
+    {ok, NodeRef} = eproc_store:get_node(Store),
+    Inst1 = Inst#instance{inst_id = IID1, group = GRP1, create_node = NodeRef, curr_state = undefined},
+    Inst2 = Inst#instance{inst_id = IID2, group = GRP2, create_node = NodeRef, curr_state = undefined},
     false = is_atom(GRP1),
     897 = GRP2,
+    #instance{create_node = CreateNode} = Inst1,
+    false = CreateNode =:= undefined,
     %%  Try to get instance state
     {ok, #instance{curr_state = undefined    }} = eproc_store:get_instance(Store, {inst, IID1}, header),
     {ok, #instance{curr_state = #inst_state{}}} = eproc_store:get_instance(Store, {inst, IID1}, recent),
@@ -142,7 +146,7 @@ eproc_store_core_test_unnamed_instance(Config) ->
     #inst_state{stt_id = 0, sname = [], sdata = {state, a, b}, timestamp = {_, _, _}} = State1,
     %%  Try to load instance data.
     {ok, LoadedInst = #instance{inst_id = IID1, group = GRP1}} = eproc_store:load_instance(Store, {inst, IID1}),
-    LoadedInst = Inst#instance{inst_id = IID1, group = GRP1, curr_state = State#inst_state{}},
+    LoadedInst = Inst#instance{inst_id = IID1, group = GRP1, create_node = NodeRef, curr_state = State#inst_state{}},
     %%  Kill created instances.
     {ok, IID1} = eproc_store:set_instance_killed(Store, {inst, IID1}, #user_action{}),
     {ok, IID1} = eproc_store:set_instance_killed(Store, {inst, IID1}, #user_action{}),
@@ -190,13 +194,14 @@ eproc_store_core_test_named_instance(Config) ->
     {ok, Inst1}         = eproc_store:get_instance(Store, {name, test_named_instance_a}, header),
     {ok, Inst2}         = eproc_store:get_instance(Store, {name, test_named_instance_b}, header),
     {error, not_found}  = eproc_store:get_instance(Store, {name, test_named_instance_c}, header),
-    Inst1 = Inst#instance{inst_id = IID1, group = GRP1, name = test_named_instance_a, curr_state = undefined},
-    Inst2 = Inst#instance{inst_id = IID2, group = GRP2, name = test_named_instance_b, curr_state = undefined},
+    {ok, NodeRef}       = eproc_store:get_node(Store),
+    Inst1 = Inst#instance{inst_id = IID1, group = GRP1, name = test_named_instance_a, create_node = NodeRef, curr_state = undefined},
+    Inst2 = Inst#instance{inst_id = IID2, group = GRP2, name = test_named_instance_b, create_node = NodeRef, curr_state = undefined},
     false = is_atom(GRP1),
     897 = GRP2,
     %%  Try to load instance data.
     {ok, LoadedInst = #instance{inst_id = IID1, group = GRP1}} = eproc_store:load_instance(Store, {name, test_named_instance_a}),
-    LoadedInst = Inst#instance{inst_id = IID1, group = GRP1, name = test_named_instance_a, curr_state = State#inst_state{}},
+    LoadedInst = Inst#instance{inst_id = IID1, group = GRP1, name = test_named_instance_a, create_node = NodeRef, curr_state = State#inst_state{}},
     %%  Kill created instances.
     {ok, IID1}         = eproc_store:set_instance_killed(Store, {name, test_named_instance_a}, #user_action{}),
     {error, not_found} = eproc_store:set_instance_killed(Store, {name, test_named_instance_a}, #user_action{}),

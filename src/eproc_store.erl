@@ -29,7 +29,8 @@
     supervisor_child_specs/1,
     get_instance/3,
     get_transition/4,
-    get_message/3
+    get_message/3,
+    get_node/1
 ]).
 -export([
     add_instance/2,
@@ -255,6 +256,16 @@
         {error, Reason :: term()}.
 
 
+%%
+%%  Returns a reference to the current node.
+%%
+-callback get_node(
+        StoreArgs   :: term()
+    ) ->
+        {ok, node_ref()} |
+        {error, Reason :: term()}.
+
+
 
 %% =============================================================================
 %%  Public API.
@@ -314,6 +325,14 @@ get_transition(Store, FsmRef, TrnNr, Query) ->
 get_message(Store, MsgId, Query) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
     StoreMod:get_message(StoreArgs, MsgId, Query).
+
+
+%%
+%%  Returns a reference to the current node.
+%%
+get_node(Store) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
+    StoreMod:get_node(StoreArgs).
 
 
 

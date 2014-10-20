@@ -30,7 +30,8 @@
     supervisor_child_specs/1,
     get_instance/3,
     get_transition/4,
-    get_message/3
+    get_message/3,
+    get_node/1
 ]).
 -export([
     add_instance/2,
@@ -53,6 +54,8 @@
 -define(KEY_TBL,  'eproc_store_ets$router_key').
 -define(TAG_TBL,  'eproc_store_ets$meta_tag').
 -define(CNT_TBL,  'eproc_store_ets$counter').
+
+-define(NODE_REF, main).
 
 -record(inst_name, {
     name    :: inst_name(),
@@ -178,6 +181,7 @@ add_instance(_StoreArgs, Instance = #instance{name = Name, group = Group, curr_s
                 inst_id = InstId,
                 name = Name,
                 group = ResolvedGroup,
+                create_node = ?NODE_REF,
                 transitions = undefined,
                 curr_state = InitState,
                 arch_state = InitState
@@ -409,6 +413,14 @@ get_message(_StoreArgs, MsgId, all) ->
         {ok, Message} ->
             {ok, Message#message{msg_id = {I, T, M}}}
     end.
+
+
+%%
+%%
+%%
+get_node(_StoreArgs) ->
+    {ok, ?NODE_REF}.
+
 
 
 %% =============================================================================

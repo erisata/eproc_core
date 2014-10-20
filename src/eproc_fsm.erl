@@ -1839,6 +1839,7 @@ handle_create(Module, Args, CreateOpts, CustomOpts) ->
         start_spec  = StartSpec,
         status      = running,
         created     = Now,
+        create_node = undefined,
         terminated  = undefined,
         term_reason = undefined,
         archived    = undefined,

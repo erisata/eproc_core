@@ -66,7 +66,7 @@
 -type party()           :: {inst, inst_id()} | {ext, term()}.
 -type scope()           :: list().
 -type script()          :: [(Call :: mfargs() | {Response :: term(), Call :: mfargs()})].
-
+-type node_ref()        :: atom().
 
 %%
 %%  This record is modelled after the LDAP `inetOrgPersor` object class,
@@ -277,6 +277,7 @@
     start_spec  :: fsm_start_spec() | undefined,        %% Optional FSM start specification.
     status      :: inst_status(),                       %% Current status if the FSM instance.
     created     :: datetime(),                          %% Time, when the instance was created.
+    create_node :: node_ref(),                          %% Node at which this instance was created.
     terminated  :: datetime() | undefined,              %% Time, when the instance was terminated.
     term_reason :: #user_action{} | normal | undefined, %% Reason, why the instance was terminated.
     archived    :: datetime() | undefined,              %% Time, when the instance was archived.
