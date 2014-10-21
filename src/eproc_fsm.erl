@@ -2150,6 +2150,7 @@ perform_transition(Trigger, TransitionFun, State) ->
         inst_status  = InstStatus,
         interrupts   = Interrupts
     },
+    % TODO: add_transition can reply with suggestion to stop the process.
     {ok, InstId, TrnNr} = eproc_store:add_transition(Store, InstId, Transition, TransitionMsgs),
 
     %% Send a reply, if not sent already
