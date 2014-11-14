@@ -172,8 +172,8 @@ supervisor_child_specs(_StoreArgs) ->
 add_instance(_StoreArgs, Instance = #instance{name = Name, group = Group, curr_state = InitState})->
     InstId = ets:update_counter(?CNT_TBL, inst, 1),
     ResolvedGroup = if
-        Group =:= new     -> InstId;
-        is_integer(Group) -> Group
+        Group =:= new -> InstId;
+        true          -> Group
     end,
     case Name =:= undefined orelse ets:insert_new(?NAME_TBL, #inst_name{name = Name, inst_id = InstId}) of
         true ->
