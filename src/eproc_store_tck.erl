@@ -124,6 +124,8 @@ eproc_store_core_test_unnamed_instance(Config) ->
     true = undefined =/= IID1,
     true = undefined =/= IID2,
     true = IID1 =/= IID2,
+    true = is_tuple(IID1),
+    2    = tuple_size(IID1),
     %%  Try to get instance headers.
     {ok, Inst1 = #instance{inst_id = IID1, group = GRP1}} = eproc_store:get_instance(Store, {inst, IID1}, header),
     {ok, Inst2 = #instance{inst_id = IID2, group = GRP2}} = eproc_store:get_instance(Store, {inst, IID2}, header),

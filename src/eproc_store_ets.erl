@@ -170,7 +170,7 @@ supervisor_child_specs(_StoreArgs) ->
 %%  Add new instance to the store.
 %%
 add_instance(_StoreArgs, Instance = #instance{name = Name, group = Group, curr_state = InitState})->
-    InstId = ets:update_counter(?CNT_TBL, inst, 1),
+    InstId = {ets:update_counter(?CNT_TBL, inst, 1), ?NODE_REF},
     ResolvedGroup = if
         Group =:= new -> InstId;
         true          -> Group
