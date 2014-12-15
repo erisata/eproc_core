@@ -209,7 +209,7 @@
 
 -type name() :: {via, Registry :: module(), InstId :: inst_id()}.
 -opaque id()  :: {InstNr :: integer(), Domain :: atom()}.
--opaque group() :: integer().
+-opaque group() :: id().
 
 %%
 %%  An event, received by the FSM.
