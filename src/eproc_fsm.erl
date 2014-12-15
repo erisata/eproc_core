@@ -208,7 +208,7 @@
 
 
 -type name() :: {via, Registry :: module(), InstId :: inst_id()}.
--opaque id()  :: {InstNr :: integer(), Domain :: term()}.
+-opaque id()  :: {InstNr :: integer(), Domain :: atom()}.
 -opaque group() :: integer().
 
 %%
