@@ -19,7 +19,6 @@
 %%
 
 -type proplist()        :: [{term(), term()}].
--type datetime()        :: calendar:datetime().             % {Date, Time} in UTC
 -type timestamp()       :: erlang:timestamp().              % {Mega, Secs, Micro}
 -type duration()        :: eproc_timer:duration_spec().     % {1, min}, etc.
 -type mfargs()          :: {Module :: module(), Function :: atom(), Args :: [term()]}.
@@ -277,11 +276,11 @@
     opts        :: proplist(),                          %% Options, used by the `eproc_fsm` behaviour (limits, etc).
     start_spec  :: fsm_start_spec() | undefined,        %% Optional FSM start specification.
     status      :: inst_status(),                       %% Current status if the FSM instance.
-    created     :: datetime(),                          %% Time, when the instance was created.
+    created     :: timestamp(),                         %% Time, when the instance was created.
     create_node :: node_ref(),                          %% Node at which this instance was created.
-    terminated  :: datetime() | undefined,              %% Time, when the instance was terminated.
+    terminated  :: timestamp() | undefined,             %% Time, when the instance was terminated.
     term_reason :: #user_action{} | normal | undefined, %% Reason, why the instance was terminated.
-    archived    :: datetime() | undefined,              %% Time, when the instance was archived.
+    archived    :: timestamp() | undefined,             %% Time, when the instance was archived.
     interrupt   :: #interrupt{} | undefined,            %% Currently active interrupt.
     curr_state  :: #inst_state{} | undefined,           %% Current state of the instance.       Filled if requested.
     arch_state  :: #inst_state{} | undefined,           %% Oldest known state of the instance.  Filled if requested.

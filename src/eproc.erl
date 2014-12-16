@@ -29,6 +29,6 @@
 -spec now() -> datetime().
 
 now() ->
-    calendar:universal_time().
+    os:timestamp().
 
 
