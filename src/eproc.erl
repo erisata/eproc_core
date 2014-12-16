@@ -26,7 +26,7 @@
 %%
 %%  Returns current time, consistelly for the entire system.
 %%
--spec now() -> datetime().
+-spec now() -> timestamp().
 
 now() ->
     os:timestamp().
