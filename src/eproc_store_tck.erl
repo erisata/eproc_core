@@ -130,6 +130,7 @@ eproc_store_core_test_unnamed_instance(Config) ->
     {ok, Inst1 = #instance{inst_id = IID1, group = GRP1}} = eproc_store:get_instance(Store, {inst, IID1}, header),
     {ok, Inst2 = #instance{inst_id = IID2, group = GRP2}} = eproc_store:get_instance(Store, {inst, IID2}, header),
     {ok, NodeRef} = eproc_store:get_node(Store),
+    #instance{created = {_,_,_}} = Inst1,
     Inst1 = Inst#instance{inst_id = IID1, group = GRP1, create_node = NodeRef, curr_state = undefined},
     Inst2 = Inst#instance{inst_id = IID2, group = GRP2, create_node = NodeRef, curr_state = undefined},
     false = is_atom(GRP1),

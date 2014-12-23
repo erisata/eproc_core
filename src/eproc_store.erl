@@ -232,6 +232,8 @@
 %%  Get particular FSM transition.
 %%  Any partial message destinations should be resolved when returing message references.
 %%
+%% TODO: In the peer field of msg_ref record (e.g. in trigger_msg, trigger_resp or trn_messages) atom is returned
+%%       This contradicts eproc.hrl, according to which the attribute should be {inst, inst_id()} or {Type :: atom(), Id :: term()}.
 -callback get_transition(
         StoreArgs   :: term(),
         FsmRef      :: fsm_ref(),
