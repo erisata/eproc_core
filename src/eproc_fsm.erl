@@ -1712,9 +1712,11 @@ resolve_event_src(SendOptions) ->
             case {eproc_event_src:source(), id()} of
                 {undefined, {ok, InstId}}     -> {ok, {inst, InstId}};
                 {undefined, {error, not_fsm}} -> {ok, undefined};
-                {EventSrc,  _}                -> {ok, EventSrc}
+                {{_, _} = EventSrc,  _}       -> {ok, EventSrc}
             end;
-        {source, EventSrc} ->
+        {source, undefined}->
+            {ok, undefined};
+        {source, {_, _} = EventSrc}->
             {ok, EventSrc}
     end.
 

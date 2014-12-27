@@ -351,8 +351,8 @@ timestamp_parse(TimestampBin, iso8601) when is_binary(TimestampBin) ->
 %%  FSM started.
 %%
 init(InstId, ActiveAttrs) ->
-    InitTimerFun = fun (Attr = #attribute{attr_id = AttrNr, data = Data}) ->
-        {ok, State} = start_timer(InstId, AttrNr, Data),
+    InitTimerFun = fun (Attr = #attribute{attr_id = AttrId, data = Data}) ->
+        {ok, State} = start_timer(InstId, AttrId, Data),
         {Attr, State}
     end,
     Started = lists:map(InitTimerFun, ActiveAttrs),
@@ -362,14 +362,14 @@ init(InstId, ActiveAttrs) ->
 %%
 %%  Attribute created.
 %%
-handle_created(InstId, #attribute{attr_id = AttrNr}, {timer, After, Start, EventMsgCId, Event}, _Scope) ->
+handle_created(InstId, #attribute{attr_id = AttrId}, {timer, After, Start, EventMsgCId, Event}, _Scope) ->
     Data = #data{
         start = Start,
         delay = After,
         event_msg = Event,
         event_cid = EventMsgCId
     },
-    {ok, State} = start_timer(InstId, AttrNr, Data),
+    {ok, State} = start_timer(InstId, AttrId, Data),
     {create, Data, State, false};
 
 handle_created(_InstId, _Attribute, {timer, remove}, _Scope) ->
@@ -380,7 +380,7 @@ handle_created(_InstId, _Attribute, {timer, remove}, _Scope) ->
 %%  Attribute updated by user.
 %%
 handle_updated(InstId, Attribute, AttrState, {timer, After, Start, EventMsgCId, Event}, _Scope) ->
-    #attribute{attr_id = AttrNr} = Attribute,
+    #attribute{attr_id = AttrId} = Attribute,
     NewData = #data{
         start = Start,
         delay = After,
@@ -388,7 +388,7 @@ handle_updated(InstId, Attribute, AttrState, {timer, After, Start, EventMsgCId, 
         event_cid = EventMsgCId
     },
     ok = stop_timer(AttrState),
-    {ok, NewState} = start_timer(InstId, AttrNr, NewData),
+    {ok, NewState} = start_timer(InstId, AttrId, NewData),
     {update, NewData, NewState, false};
 
 handle_updated(_InstId, _Attribute, AttrState, {timer, remove}, _Scope) ->
@@ -409,20 +409,20 @@ handle_removed(_InstId, _Attribute, AttrState) ->
 %%
 handle_event(InstId, Attribute, _State, long_delay) ->
     #attribute{
-        attr_id = AttrNr,
+        attr_id = AttrId,
         data = AttrData
     } = Attribute,
-    {ok, NewState} = start_timer(InstId, AttrNr, AttrData),
+    {ok, NewState} = start_timer(InstId, AttrId, AttrData),
     {handled, NewState};
 
 handle_event(_InstId, Attribute, _State, fired) ->
     #attribute{
-        name = Name,
+        attr_id = AttrId,
         data = #data{event_msg = Event, event_cid = EventMsgCId}
     } = Attribute,
     Trigger = #trigger_spec{
         type = timer,
-        source = Name,
+        source = {attr, AttrId},
         message = Event,
         msg_cid = EventMsgCId,
         sync = false,
@@ -452,21 +452,21 @@ set_timer(Name, After, Start, Event, Scope) ->
 %%
 %%  Starts a timer.
 %%
-start_timer(InstId, AttrNr, #data{start = Start, delay = DelaySpec}) ->
+start_timer(InstId, AttrId, #data{start = Start, delay = DelaySpec}) ->
     Now = os:timestamp(),
     Delay = duration_to_ms(DelaySpec),
     Left = Delay - (timer:now_diff(Start, Now) div 1000),
     if
         Left < 0 ->
-            {ok, EventMsg} = eproc_fsm_attr:make_event(?MODULE, InstId, AttrNr, fired),
+            {ok, EventMsg} = eproc_fsm_attr:make_event(?MODULE, InstId, AttrId, fired),
             self() ! EventMsg,
             {ok, #state{ref = undefined}};
         Left > ?MAX_ATOMIC_DELAY ->
-            {ok, EventMsg} = eproc_fsm_attr:make_event(?MODULE, InstId, AttrNr, long_delay),
+            {ok, EventMsg} = eproc_fsm_attr:make_event(?MODULE, InstId, AttrId, long_delay),
             TimerRef = erlang:send_after(?MAX_ATOMIC_DELAY, self(), EventMsg),
             {ok, #state{ref = TimerRef}};
         true ->
-            {ok, EventMsg} = eproc_fsm_attr:make_event(?MODULE, InstId, AttrNr, fired),
+            {ok, EventMsg} = eproc_fsm_attr:make_event(?MODULE, InstId, AttrId, fired),
             TimerRef = erlang:send_after(Left, self(), EventMsg),
             {ok, #state{ref = TimerRef}}
     end.

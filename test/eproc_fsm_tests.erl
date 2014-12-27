@@ -1284,7 +1284,7 @@ send_create_event_test() ->
         {start_spec, {mfa, ['$fsm_ref', some]}},
         {registry, Registry},
         {timeout, 12300},
-        {source, test},
+        {source, {test, test}},
         {some, opt}
     ])),
     ?assertEqual(1, meck:num_calls(eproc_store, add_instance, '_')),

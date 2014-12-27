@@ -93,7 +93,8 @@
 %%
 -type event_src() ::
     {inst, inst_id()} |
-    {Type :: atom(), Id :: term()}.
+    {Type :: atom(), Id :: term()} |
+    undefined.
 
 
 %%
@@ -142,11 +143,11 @@
 %%
 %%  Example triggers:
 %%
-%%      #trigger_spec{type = event, source = {inst, 12364},    message = any,             sync = false},
-%%      #trigger_spec{type = event, source = {connector, api}, message = any,             sync = false},
-%%      #trigger_spec{type = sync,  source = {connector, api}, message = any,             sync = true},
-%%      #trigger_spec{type = timer, source = my_timer,         message = timeout,         sync = false},
-%%      #trigger_spec{type = admin, source = "John Doe",       message = "Problem fixed", sync = false}.
+%%      #trigger_spec{type = event, source = {inst, {12364,m}}, message = any,             sync = false},
+%%      #trigger_spec{type = event, source = {connector, api},  message = any,             sync = false},
+%%      #trigger_spec{type = sync,  source = {connector, api},  message = any,             sync = true},
+%%      #trigger_spec{type = timer, source = {attr, 1231221},   message = timeout,         sync = false},
+%%      #trigger_spec{type = admin, source = {cn, "John Doe"},  message = "Problem fixed", sync = false}.
 %%
 %%  This structure is transient, not intended for storing in a DB.
 %%
@@ -154,7 +155,7 @@
     type            :: trigger_type(),          %% Type of the trigger.
     source          :: event_src(),             %% Party, initiated the trigger, event source, admin name.
     message         :: term(),                  %% Event message / body.
-    msg_cid         :: undefined | msg_cid(),    %% Event message id, optional.
+    msg_cid         :: undefined | msg_cid(),   %% Event message id, optional.
     sync = false    :: boolean(),               %% True, if the trigger expects an immediate response.
     reply_fun       :: undefined | function(),  %% Function used to sent response if the trigger is sync.
     src_arg         :: boolean()                %% If set to true, event source will be passed to an FSM implementation.
