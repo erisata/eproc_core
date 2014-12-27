@@ -206,7 +206,8 @@
 
 %%
 %%  Get instance data by FSM reference (id or name).
-%%  Several instances can be retrieved by providing a list of FsmRefs.
+%%  Several instances can be retrieved by providing a list of FsmRefs
+%%  or by providing a filter to return matching instances.
 %%
 %%  The parameter Query can have several values:
 %%
@@ -221,11 +222,23 @@
 %%
 -callback get_instance(
         StoreArgs   :: term(),
-        FsmRef      :: fsm_ref() | {list, [fsm_ref()]},
-        Query       :: header | current
+        FsmRef      :: fsm_ref() | {list, [fsm_ref()]} | {filter, ResFrom, ResCount, [Filter]},
+        Query       :: header | current | recent
     ) ->
         {ok, #instance{} | [#instance{}]} |
-        {error, Reason :: term()}.
+        {error, Reason :: term()}
+    when
+        ResFrom  :: integer(),
+        ResCount :: integer(),
+        Filter ::
+            %% NOTE: ProcessName can be handled via fsmref directly.
+            %% TODO: Faulty (see webapi).
+            {last_trn, From :: timestamp() | undefined, Till :: timestamp() | undefined} |
+            {created,  From :: timestamp() | undefined, Till :: timestamp() | undefined} |
+            {tags, [{TagName :: binary(), TagType :: binary() | undefined}]} |
+            {module, Module :: module()} |
+            {status, Status :: inst_status()} |
+            {age, duration()}.
 
 
 %%
