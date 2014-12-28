@@ -58,8 +58,7 @@ ref() ->
 %%  Load FSM instances.
 %%
 load() ->
-    ?MODULE ! 'eproc_reg_gproc$load',
-    ok.
+    gen_server:cast(?MANAGER, 'eproc_reg_gproc$load').
 
 
 
@@ -174,6 +173,9 @@ handle_call(_Message, _From, State) ->
 %%
 %%  Asynchronous messages.
 %%
+handle_cast('eproc_reg_gproc$load', State) ->
+    handle_info('eproc_reg_gproc$load', State);
+
 handle_cast(_Message, State) ->
     {stop, not_implemented, State}.
 
