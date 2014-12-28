@@ -28,7 +28,7 @@ reg_from_env_test() ->
     ok = meck:expect(eproc_core_app, registry_cfg, fun
         () -> {ok, {eproc_reg_gproc, ref, []}}
     end),
-    ?assertEqual({ok, {eproc_reg_gproc, {}}}, eproc_registry:ref()),
+    ?assertEqual({ok, {eproc_reg_gproc, []}}, eproc_registry:ref()),
     ?assert(meck:validate(eproc_core_app)),
     ok = meck:unload(eproc_core_app).
 

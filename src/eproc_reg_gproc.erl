@@ -22,7 +22,7 @@
 -behaviour(eproc_registry).
 -behaviour(gen_server).
 -compile([{parse_transform, lager_transform}]).
--export([start_link/1, ref/0]).
+-export([start_link/2, ref/0, load/0]).
 -export([supervisor_child_specs/1, register_fsm/3]).
 -export([register_name/2, unregister_name/1, whereis_name/1, send/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -43,15 +43,23 @@
 %%
 %%  Start the registry.
 %%
-start_link(Name) ->
-    gen_server:start_link(Name, ?MODULE, {}, []).
+start_link(Name, Load) ->
+    gen_server:start_link(Name, ?MODULE, {Load}, []).
 
 
 %%
 %%  Create reference to this registry.
 %%
 ref() ->
-    eproc_store:ref(?MODULE, {}).
+    eproc_store:ref(?MODULE, []).
+
+
+%%
+%%  Load FSM instances.
+%%
+load() ->
+    ?MODULE ! 'eproc_reg_gproc$load',
+    ok.
 
 
 
@@ -62,13 +70,14 @@ ref() ->
 %%
 %%  Returns supervisor child specifications for starting the registry.
 %%
-supervisor_child_specs(_RegistryArgs) ->
+supervisor_child_specs(RegistryArgs) ->
+    Load = proplists:get_value(load, RegistryArgs, true),
     Reg = ?MODULE,
     SupDef = eproc_fsm_def_sup,
     SupMfa = eproc_fsm_mfa_sup,
     DefSpec = {{Reg, sup_def}, {SupDef, start_link, [{local, ?SUP_DEF}]}, permanent, 10000, supervisor, [SupDef]},
     MfaSpec = {{Reg, sup_mfa}, {SupMfa, start_link, [{local, ?SUP_MFA}]}, permanent, 10000, supervisor, [SupMfa]},
-    MgrSpec = {{Reg, manager}, {Reg,    start_link, [{local, ?MANAGER}]}, permanent, 10000, worker,     [Reg]},
+    MgrSpec = {{Reg, manager}, {Reg,    start_link, [{local, ?MANAGER}, Load]}, permanent, 10000, worker, [Reg]},
     {ok, [DefSpec, MfaSpec, MgrSpec]}.
 
 
@@ -135,6 +144,7 @@ send({new, _RegistryArgs, FsmRef, StartSpec}, Message) ->
 %% =============================================================================
 
 -record(state, {
+    loaded  :: boolean()
 }).
 
 
@@ -146,9 +156,12 @@ send({new, _RegistryArgs, FsmRef, StartSpec}, Message) ->
 %%
 %%  Initialization.
 %%
-init({}) ->
-    self() ! 'eproc_reg_gproc$load',
-    {ok, #state{}}.
+init({Load}) ->
+    case Load of
+        true  -> self() ! 'eproc_reg_gproc$load';
+        false -> ok
+    end,
+    {ok, #state{loaded = false}}.
 
 
 %%
@@ -168,10 +181,14 @@ handle_cast(_Message, State) ->
 %%
 %%  Loads all FSM instances asynchronously.
 %%
-handle_info('eproc_reg_gproc$load', State) ->
-    ok = start_all(),
-    {noreply, State}.
-
+handle_info('eproc_reg_gproc$load', State = #state{loaded = Loaded}) ->
+    case Loaded of
+        true ->
+            {noreply, State};
+        false ->
+            ok = start_all(),
+            {noreply, State}
+    end.
 
 
 %%
