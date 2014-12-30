@@ -221,11 +221,12 @@ duration_format(Duration, iso8601) ->
     Time = lists:filtermap(FormatFun, lists:zip([Hs, Mins], ["H", "M"])),
     DateFmt = lists:concat(Date),
     TimeFmt = lists:concat([lists:concat(Time),  SecMSecs]),
-    case {DateFmt, TimeFmt} of
+    Result = case {DateFmt, TimeFmt} of
         {"", ""} -> "PT0S";
         {D, ""} -> lists:append("P", D);
         {D, T} -> lists:concat(["P", D, "T", T])
-    end.
+    end,
+    erlang:list_to_binary(Result).
 
 
 %%
