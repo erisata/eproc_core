@@ -218,6 +218,27 @@ duration_to_ms_test_() -> [
     ?_assertEqual(63072000000, eproc_timer:duration_to_ms({2, year})),
     ?_assertEqual(2010, eproc_timer:duration_to_ms([{2, s}, {10, ms}]))
     ].
+    
+    
+%%
+%%  Check if `duration_format/2` works.
+%%
+duration_format_test_() -> [
+    ?_assertEqual("PT0S", eproc_timer:duration_format([], iso8601)),
+    ?_assertEqual("PT2M3.456S", eproc_timer:duration_format(123456, iso8601)),
+    ?_assertEqual("PT0.002S", eproc_timer:duration_format({2, ms}, iso8601)),
+    ?_assertEqual("PT2S", eproc_timer:duration_format({2, s}, iso8601)),
+    ?_assertEqual("PT2S", eproc_timer:duration_format({2, sec}, iso8601)),
+    ?_assertEqual("PT2M", eproc_timer:duration_format({2, min}, iso8601)),
+    ?_assertEqual("PT2H", eproc_timer:duration_format({2, hour}, iso8601)),
+    ?_assertEqual("P2D", eproc_timer:duration_format({2, day}, iso8601)),
+    ?_assertEqual("P14D", eproc_timer:duration_format({2, week}, iso8601)),
+    ?_assertEqual("P60D", eproc_timer:duration_format({2, month}, iso8601)),
+    ?_assertEqual("P730D", eproc_timer:duration_format({2, year}, iso8601)),
+    ?_assertEqual("PT2.010S", eproc_timer:duration_format([{2, s}, {10, ms}], iso8601)),
+    ?_assertEqual("P5DT0.123S", eproc_timer:duration_format([{5, day}, {123, ms}], iso8601)),
+    ?_assertEqual("PT5M45S", eproc_timer:duration_format({345, s}, iso8601))
+    ].
 
 
 %%

@@ -25,6 +25,7 @@
 -export([set/4, set/3, set/2, cancel/1]).
 -export([
     duration_to_ms/1,
+    duration_format/2,
     timestamp_after/2,
     timestamp_before/2,
     timestamp/2,
@@ -144,7 +145,7 @@ cancel(Name) ->
 %%  Conversion is made approximatly, assuming all months are of 30 days
 %%  and years are of 365 days.
 %%
-%%  Esample specs:
+%%  Example specs:
 %%
 %%      {3, min}
 %%      {100, hour}
@@ -187,6 +188,44 @@ duration_to_ms(Spec) when is_integer(Spec) ->
 
 duration_to_ms(Spec) when is_list(Spec) ->
     lists:sum(lists:map(fun duration_to_ms/1, Spec)).
+
+
+%%
+%%  Format duration according to some format.
+%%  - iso8601:
+%%      Splits duration into days, hours, minutes, seconds and milisecons.
+%%      Carry over values are not obtained (thus 120 s will be formatted as 2 min). 
+%%      If miliseconds are not 0, always displays 3 digits.
+%%      More information about format:
+%%      http://en.wikipedia.org/wiki/ISO_8601#Durations
+%%      http://www.datypic.com/sc/xsd/t-xsd_duration.html
+%%
+duration_format(Duration, iso8601) ->
+    DurationMs = duration_to_ms(Duration),
+    SplitFun = fun (Divisor, {Dividend, List}) ->
+        Remainder = Dividend rem Divisor,
+        NewDividend = Dividend div Divisor,
+        {NewDividend, [Remainder | List]}
+    end,
+    {Ds, [Hs, Mins, Secs, MSecs]} = lists:foldl(SplitFun, {DurationMs, []}, [1000, 60, 60, 24]),
+    SecMSecs = case {Secs, MSecs} of
+        {0, 0} -> "";
+        {S, 0} -> lists:concat([S, "S"]);
+        {S, MS} -> lists:flatten(io_lib:format("~B.~3.10.0BS", [S, MS]))
+    end,
+    FormatFun= fun
+        ({0, _}) -> false;
+        ({Number, Letter}) -> {true, lists:concat([Number, Letter])}
+    end,
+    Date = lists:filtermap(FormatFun, lists:zip([Ds], ["D"])),  % Just in case there will be a need to convert to years
+    Time = lists:filtermap(FormatFun, lists:zip([Hs, Mins], ["H", "M"])),
+    DateFmt = lists:concat(Date),
+    TimeFmt = lists:concat([lists:concat(Time),  SecMSecs]),
+    case {DateFmt, TimeFmt} of
+        {"", ""} -> "PT0S";
+        {D, ""} -> lists:append("P", D);
+        {D, T} -> lists:concat(["P", D, "T", T])
+    end.
 
 
 %%
@@ -313,8 +352,8 @@ timestamp_format(Timestamp = {_M, _S, US}, {iso8601, utc, Preciseness}) ->
         sec -> io_lib:format("~B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~2.10.0BZ",          [Y, M, D, H, Mi, S])
     end,
     erlang:iolist_to_binary(Date).
-
-
+    
+    
 %%
 %%  Parse date according to some format.
 %%
