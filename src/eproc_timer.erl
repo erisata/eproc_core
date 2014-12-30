@@ -194,7 +194,7 @@ duration_to_ms(Spec) when is_list(Spec) ->
 %%  Format duration according to some format.
 %%  - iso8601:
 %%      Splits duration into days, hours, minutes, seconds and milisecons.
-%%      Carry over values are not obtained (thus 120 s will be formatted as 2 min). 
+%%      Carry over values are not obtained (thus 120 s will be formatted as 2 min).
 %%      If miliseconds are not 0, always displays 3 digits.
 %%      More information about format:
 %%      http://en.wikipedia.org/wiki/ISO_8601#Durations
@@ -353,8 +353,8 @@ timestamp_format(Timestamp = {_M, _S, US}, {iso8601, utc, Preciseness}) ->
         sec -> io_lib:format("~B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~2.10.0BZ",          [Y, M, D, H, Mi, S])
     end,
     erlang:iolist_to_binary(Date).
-    
-    
+
+
 %%
 %%  Parse date according to some format.
 %%

@@ -218,8 +218,8 @@ duration_to_ms_test_() -> [
     ?_assertEqual(63072000000, eproc_timer:duration_to_ms({2, year})),
     ?_assertEqual(2010, eproc_timer:duration_to_ms([{2, s}, {10, ms}]))
     ].
-    
-    
+
+
 %%
 %%  Check if `duration_format/2` works.
 %%
