@@ -30,6 +30,7 @@
     supervisor_child_specs/1,
     get_instance/3,
     get_transition/4,
+    get_state/4,
     get_message/3,
     get_node/1
 ]).
@@ -403,6 +404,42 @@ get_transition(_StoreArgs, FsmRef, {list, From, Count}, all) ->
 %%
 %%
 %%
+get_state(StoreArgs, FsmRef, SttNr, all) when is_integer(SttNr); SttNr =:= current ->
+    case get_state(StoreArgs, FsmRef, {list, SttNr, 1}, all) of
+        {ok, [InstState]} -> {ok, InstState};
+        {error, Reason}   -> {error, Reason}
+    end;
+
+get_state(_StoreArgs, FsmRef, {list, From, Count}, all) ->
+    case read_instance(FsmRef, full) of
+        {ok, Instance} ->
+            #instance{
+                inst_id = IID,
+                curr_state = #inst_state{stt_id = CurrSttNr},
+                arch_state = #inst_state{stt_id = ArchSttNr} = ArchState
+            } = Instance,
+            FromSttNr = case From of
+                current -> CurrSttNr;
+                _       -> From
+            end,
+            TillSttNr = erlang:max(ArchSttNr, FromSttNr - Count + 1),
+            {_, InstStates} = lists:foldl(
+                fun (SttNr, {PrevState, States}) ->
+                    State = derive_state(IID, SttNr, PrevState),
+                    {State, [State | States]}
+                end,
+                {ArchState, []},
+                lists:seq(TillSttNr, FromSttNr)
+            ),
+            {ok, InstStates};
+        {error, ReadErr} ->
+            {error, ReadErr}
+    end.
+
+
+%%
+%%
+%%
 get_message(_StoreArgs, MsgId, all) ->
     {InstId, TrnNr, MsgNr} = case MsgId of
         {I, T, M}    -> {I, T, M};
@@ -542,6 +579,18 @@ read_message(MsgCid) ->
         []        -> {error, not_found};
         [Message] -> {ok, Message}
     end.
+
+
+%%
+%%  Get specified state based on a previous state
+%%
+derive_state(_InstId, SttNr, OlderState = #inst_state{stt_id = SttNr}) ->
+    OlderState;
+
+derive_state(InstId, SttNr, OlderState = #inst_state{stt_id = OlderSttNr}) when SttNr > OlderSttNr ->
+    PrevState = derive_state(InstId, SttNr - 1, OlderState),
+    {ok, Transition} = read_transition(InstId, SttNr, false),
+    eproc_store:apply_transition(Transition, PrevState, InstId).
 
 
 %%

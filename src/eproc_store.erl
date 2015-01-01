@@ -29,6 +29,7 @@
     supervisor_child_specs/1,
     get_instance/3,
     get_transition/4,
+    get_state/4,
     get_message/3,
     get_node/1
 ]).
@@ -252,6 +253,21 @@
         Query       :: all
     ) ->
         {ok, #transition{}} |
+        {ok, [#transition{}]} |
+        {error, Reason :: term()}.
+
+
+%%
+%%  Get particular FSM state (or a list of them).
+%%
+-callback get_state(
+        StoreArgs   :: term(),
+        FsmRef      :: fsm_ref(),
+        SttNr       :: stt_nr() | current | {list, From :: (stt_nr() | current), Count :: integer()},
+        Query       :: all
+    ) ->
+        {ok, #inst_state{}} |
+        {ok, [#inst_state{}]} |
         {error, Reason :: term()}.
 
 
@@ -330,6 +346,14 @@ get_instance(Store, FsmRef, Query) ->
 get_transition(Store, FsmRef, TrnNr, Query) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
     StoreMod:get_transition(StoreArgs, FsmRef, TrnNr, Query).
+
+
+%%
+%%  Get particular FSM state (or a list of them).
+%%
+get_state(Store, FsmRef, SttNr, Query) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
+    StoreMod:get_state(StoreArgs, FsmRef, SttNr, Query).
 
 
 %%
@@ -461,13 +485,17 @@ apply_transition(Transition, InstState, InstId) ->
         attrs_active = Attrs
     } = InstState,
     #transition{
-        trn_id = TrnNr,
+        trn_id = TrnId,
         sname = SName,
         sdata = SData,
         timestamp = Timestamp,
         attr_last_nr = AttrLastNr,
         attr_actions = AttrActions
     } = Transition,
+    TrnNr = case TrnId of
+        {_IID, T} -> T;
+        _         -> TrnId
+    end,
     TrnNr = SttNr + 1,
     {ok, NewAttrs} = eproc_fsm_attr:apply_actions(AttrActions, Attrs, InstId, TrnNr),
     InstState#inst_state{

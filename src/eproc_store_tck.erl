@@ -30,6 +30,7 @@
     eproc_store_core_test_add_transition/1,
     eproc_store_core_test_resolve_msg_dst/1,
     eproc_store_core_test_load_running/1,
+    eproc_store_core_test_get_state/1,
     eproc_store_core_test_attrs/1,
     eproc_store_router_test_attrs/1,
     eproc_store_meta_test_attrs/1
@@ -49,6 +50,7 @@ testcases(core) -> [
     eproc_store_core_test_add_transition,
     eproc_store_core_test_resolve_msg_dst,
     eproc_store_core_test_load_running,
+    eproc_store_core_test_get_state,
     eproc_store_core_test_attrs
     ];
 
@@ -99,6 +101,39 @@ inst_value() ->
         arch_state = undefined,
         transitions = undefined
     }.
+
+
+%%
+%%
+%%
+trn_value(InstId, TrnNr, async_void) ->
+    Timestamp = {0, TrnNr, 0},
+    MsgCid = {InstId, TrnNr, 0, recv},
+    Trn = #transition{
+        trn_id = TrnNr,
+        sname = [s, TrnNr],
+        sdata = {d, TrnNr},
+        timestamp = Timestamp,
+        duration = 13,
+        trn_node = undefined,
+        trigger_type = event,
+        trigger_msg = #msg_ref{cid = MsgCid, peer = {connector, some}},
+        trigger_resp = undefined,
+        trn_messages = [],
+        attr_last_nr = 0,
+        attr_actions = [],
+        inst_status = running,
+        interrupts = undefined
+    },
+    Msg = #message{
+        msg_id = MsgCid,
+        sender = {connector, some},
+        receiver = {inst, InstId},
+        resp_to = undefined,
+        date = Timestamp,
+        body = {m, TrnNr}
+    },
+    {ok, Trn, [Msg]}.
 
 
 
@@ -533,6 +568,82 @@ eproc_store_core_test_load_running(Config) ->
     [  ] = [ ok || {{inst, I}, {default, [3]}} <- Running, I =:= IID3 ],
     [ok] = [ ok || {{inst, I}, {default, [4]}} <- Running, I =:= IID4 ],
     [ok] = [ ok || {{inst, I}, {default, [5]}} <- Running, I =:= IID5 ],
+    ok.
+
+
+%%
+%%
+%%
+eproc_store_core_test_get_state(Config) ->
+    Store = store(Config),
+    %%  Prepare the data.
+    Inst = inst_value(),
+    {ok, IID} = eproc_store:add_instance(Store, Inst),
+    {ok, Trn1, Msgs1} = trn_value(IID, 1, async_void),
+    {ok, Trn2, Msgs2} = trn_value(IID, 2, async_void),
+    {ok, Trn3, Msgs3} = trn_value(IID, 3, async_void),
+    {ok, Trn4, Msgs4} = trn_value(IID, 4, async_void),
+    {ok, Trn5, Msgs5} = trn_value(IID, 5, async_void),
+    A1C = #attr_action{module = m, attr_nr = 1, action = {create, undefined, [], some1}},
+    A2C = #attr_action{module = m, attr_nr = 2, action = {create, undefined, [], some2}},
+    A3C = #attr_action{module = m, attr_nr = 3, action = {create, undefined, [], some3}},
+    A2D = #attr_action{module = m, attr_nr = 2, action = {remove, {scope, [ohoho]}}},
+    A1U1 = #attr_action{module = m, attr_nr = 1, action = {update, [wider], some1_b}},
+    A1U2 = #attr_action{module = m, attr_nr = 1, action = {update, [wider], some1_c}},
+    A3U1 = #attr_action{module = m, attr_nr = 3, action = {update, [other], some3_b}},
+    {ok, IID, 1} = eproc_store:add_transition(Store, IID, Trn1#transition{attr_last_nr = 0, attr_actions = []},           Msgs1),
+    {ok, IID, 2} = eproc_store:add_transition(Store, IID, Trn2#transition{attr_last_nr = 2, attr_actions = [A1C, A2C]},   Msgs2),
+    {ok, IID, 3} = eproc_store:add_transition(Store, IID, Trn3#transition{attr_last_nr = 3, attr_actions = [A2D, A3C]},   Msgs3),
+    {ok, IID, 4} = eproc_store:add_transition(Store, IID, Trn4#transition{attr_last_nr = 3, attr_actions = [A1U1]},       Msgs4),
+    {ok, IID, 5} = eproc_store:add_transition(Store, IID, Trn5#transition{attr_last_nr = 3, attr_actions = [A1U2, A3U1]}, Msgs5),
+    %   Get the current state.
+    {ok, State5 = #inst_state{
+        stt_id = 5,
+        sname = [s, 5],
+        sdata = {d, 5},
+        timestamp = {0, 5, 0},
+        attr_last_nr = 3,
+        attrs_active = Attrs5 = [_, _],
+        interrupts = []
+    }} = eproc_store:get_state(Store, {inst, IID}, current, all),
+    #attribute{
+        module = m, name = undefined, scope = [wider], data = some1_c,
+        from = 2, upds = [_, _], till = undefined, reason = undefined
+    } = lists:keyfind(1, #attribute.attr_id, Attrs5),
+    #attribute{
+        module = m, name = undefined, scope = [other], data = some3_b,
+        from = 3, upds = [5], till = undefined, reason = undefined
+    } = lists:keyfind(3, #attribute.attr_id, Attrs5),
+    %   Get the current state by its number.
+    {ok, State5} = eproc_store:get_state(Store, {inst, IID}, 5, all),
+    %   Get some older state.
+    {ok, #inst_state{
+        stt_id = 2,
+        sname = [s, 2],
+        sdata = {d, 2},
+        timestamp = {0, 2, 0},
+        attr_last_nr = 2,
+        attrs_active = Attrs2 = [_, _],
+        interrupts = []
+    }} = eproc_store:get_state(Store, {inst, IID}, 2, all),
+    #attribute{
+        module = m, name = undefined, scope = [], data = some1,
+        from = 2, upds = [], till = undefined, reason = undefined
+    } = lists:keyfind(1, #attribute.attr_id, Attrs2),
+    #attribute{
+        module = m, name = undefined, scope = [], data = some2,
+        from = 2, upds = [], till = undefined, reason = undefined
+    } = lists:keyfind(2, #attribute.attr_id, Attrs2),
+    %   Get a list of states
+    {ok, [
+        #inst_state{stt_id = 4, sname = [s, 4], sdata = {d, 4}, attrs_active = Attrs4 = [_, _], interrupts = []},
+        #inst_state{stt_id = 3, sname = [s, 3], sdata = {d, 3}, attrs_active = Attrs3 = [_, _], interrupts = []},
+        #inst_state{stt_id = 2, sname = [s, 2], sdata = {d, 2}, attrs_active = Attrs2 = [_, _], interrupts = []}
+    ]} = eproc_store:get_state(Store, {inst, IID}, {list, 4, 3}, all),
+    #attribute{data = some1,   from = 2, upds = []}  = lists:keyfind(1, #attribute.attr_id, Attrs3),
+    #attribute{data = some3,   from = 3, upds = []}  = lists:keyfind(3, #attribute.attr_id, Attrs3),
+    #attribute{data = some1_b, from = 2, upds = [4]} = lists:keyfind(1, #attribute.attr_id, Attrs4),
+    #attribute{data = some3,   from = 3, upds = []}  = lists:keyfind(3, #attribute.attr_id, Attrs4),
     ok.
 
 
