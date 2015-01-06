@@ -26,7 +26,7 @@
 -compile([{parse_transform, lager_transform}]).
 -export([start/0, subscribe/1, set/2, cancel/1, pause/1, stop/1]).
 -export([init/1, init/2, handle_state/3, terminate/3, code_change/4, format_status/2]).
--include("eproc.hrl").
+-include_lib("eproc_core/include/eproc.hrl").
 
 
 %% =============================================================================

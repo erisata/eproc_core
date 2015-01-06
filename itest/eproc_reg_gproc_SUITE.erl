@@ -23,7 +23,7 @@
     test_register_fsm/1
 ]).
 -include_lib("common_test/include/ct.hrl").
--include("eproc.hrl").
+-include_lib("eproc_core/include/eproc.hrl").
 
 
 %%

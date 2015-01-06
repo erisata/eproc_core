@@ -30,7 +30,7 @@
     test_metadata_integration/1
 ]).
 -include_lib("common_test/include/ct.hrl").
--include("eproc.hrl").
+-include_lib("eproc_core/include/eproc.hrl").
 
 
 %%
