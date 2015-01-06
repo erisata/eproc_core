@@ -644,6 +644,9 @@ eproc_store_core_test_get_state(Config) ->
     #attribute{data = some3,   from = 3, upds = []}  = lists:keyfind(3, #attribute.attr_id, Attrs3),
     #attribute{data = some1_b, from = 2, upds = [4]} = lists:keyfind(1, #attribute.attr_id, Attrs4),
     #attribute{data = some3,   from = 3, upds = []}  = lists:keyfind(3, #attribute.attr_id, Attrs4),
+    %   Check bad scenarios.
+    {error, not_found} = eproc_store:get_state(Store, {inst, IID}, 6, all),
+    {error, not_found} = eproc_store:get_state(Store, {inst, IID}, {list, 6, 17}, all),
     ok.
 
 

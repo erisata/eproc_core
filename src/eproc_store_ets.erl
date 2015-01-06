@@ -422,16 +422,22 @@ get_state(_StoreArgs, FsmRef, {list, From, Count}, all) ->
                 current -> CurrSttNr;
                 _       -> From
             end,
-            TillSttNr = erlang:max(ArchSttNr, FromSttNr - Count + 1),
-            {_, InstStates} = lists:foldl(
-                fun (SttNr, {PrevState, States}) ->
-                    State = derive_state(IID, SttNr, PrevState),
-                    {State, [State | States]}
-                end,
-                {ArchState, []},
-                lists:seq(TillSttNr, FromSttNr)
-            ),
-            {ok, InstStates};
+            case FromSttNr =< CurrSttNr of
+                true ->
+                    TillSttNr = erlang:max(ArchSttNr, FromSttNr - Count + 1),
+                    {_, InstStates} = lists:foldl(
+                        fun (SttNr, {PrevState, States}) ->
+                            State = derive_state(IID, SttNr, PrevState),
+                            {State, [State | States]}
+                        end,
+                        {ArchState, []},
+                        lists:seq(TillSttNr, FromSttNr)
+                    ),
+                    {ok, InstStates};
+                false ->
+                    lager:error("Non-existing state requested, from=~p, current=~p", [FromSttNr, CurrSttNr]),
+                    {error, not_found}
+            end;
         {error, ReadErr} ->
             {error, ReadErr}
     end.
