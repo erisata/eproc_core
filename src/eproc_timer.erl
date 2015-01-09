@@ -29,6 +29,7 @@
     timestamp_after/2,
     timestamp_before/2,
     timestamp/2,
+    timestamp_diff_us/2,
     timestamp_diff/2,
     timestamp_format/2,
     timestamp_parse/2
@@ -290,6 +291,28 @@ timestamp({Date = {_Y, _M, _D}, Time = {_H, _Mi, _S}, USec}, utc) ->
     {Seconds div ?MEGA, Seconds rem ?MEGA, USec}.
 
 
+
+%%
+%%  Returns difference of Time2 and Time1 (Time2 - Time1) in microseconds.
+%%
+-spec timestamp_diff_us(
+        Timestamp2 :: timestamp(),
+        Timestamp1 :: timestamp()
+    ) ->
+        timestamp().
+
+timestamp_diff_us(undefined, _) ->
+    undefined;
+
+timestamp_diff_us(_, undefined) ->
+    undefined;
+
+timestamp_diff_us({T2M, T2S, T2U}, {T1M, T1S, T1U}) ->
+    T1 = (T1M * ?MEGA + T1S) * ?MEGA + T1U,
+    T2 = (T2M * ?MEGA + T2S) * ?MEGA + T2U,
+    T2 - T1.
+
+
 %%
 %%  Returns duration between Time1 and Time2 (Time2 - Time1).
 %%  Duration is returned in days, and time is decomposed to
@@ -301,19 +324,15 @@ timestamp({Date = {_Y, _M, _D}, Time = {_H, _Mi, _S}, USec}, utc) ->
     ) ->
         duration().
 
-timestamp_diff(undefined, _) ->
-    undefined;
-
-timestamp_diff(_, undefined) ->
-    undefined;
-
-timestamp_diff({T2M, T2S, T2U}, {T1M, T1S, T1U}) ->
-    T1 = (T1M * ?MEGA + T1S) * ?MEGA + T1U,
-    T2 = (T2M * ?MEGA + T2S) * ?MEGA + T2U,
-    Diff = T2 - T1,
-    case timestamp_diff(Diff, [{us, 1000}, {ms, 1000}, {sec, 60}, {min, 60}, {hour, 24}], []) of
-        [Single] -> Single;
-        Multiple -> Multiple
+timestamp_diff(Timestamp2, Timestamp1) ->
+    case timestamp_diff_us(Timestamp2, Timestamp1) of
+        undefined ->
+            undefined;
+        Diff ->
+            case timestamp_diff(Diff, [{us, 1000}, {ms, 1000}, {sec, 60}, {min, 60}, {hour, 24}], []) of
+                [Single] -> Single;
+                Multiple -> Multiple
+            end
     end.
 
 timestamp_diff(0, _, []) ->

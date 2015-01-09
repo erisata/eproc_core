@@ -234,12 +234,14 @@
         Filter ::
             %% NOTE: ProcessName can be handled via fsmref directly.
             %% TODO: Faulty (see webapi).
+            {id, InstId :: inst_id()} | % At most one in Filter list
+            {name, Name :: inst_name()} | % At most one in Filter list
             {last_trn, From :: timestamp() | undefined, Till :: timestamp() | undefined} |
             {created,  From :: timestamp() | undefined, Till :: timestamp() | undefined} |
             {tags, [{TagName :: binary(), TagType :: binary() | undefined}]} |
             {module, Module :: module()} |
             {status, Status :: inst_status()} |
-            {age, duration()}.
+            {age, Age :: duration()}.  % Older than Age. Instance age = terminated - created, if terminated is undefined, age = now() - created.
 
 
 %%

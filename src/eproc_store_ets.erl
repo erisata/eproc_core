@@ -352,6 +352,29 @@ attr_task(_StoreArgs, AttrModule, AttrTask) ->
 %%
 %%  Get instance data.
 %%
+get_instance(_StoreArgs, {filter, ResFrom, ResCount, Filters}, Query) ->
+    FoldFun = fun
+        (_, {ok, [], _})        -> {error, not_fount};
+        (Fun, {ok, Inst, Filt}) -> Fun(Inst, Filt, Query);
+        (_, {error, Reason})    -> {error, Reason}
+    end,
+    FunList = [
+        fun resolve_instance_id_filter/3,
+        fun resolve_instance_name_filter/3,
+        fun resolve_instance_tags_filters/3,
+        fun resolve_instance_match_filter/3,
+        fun resolve_instance_age_filters/3
+    ],
+    case lists:foldl(FoldFun, {ok, undefined, parse_instance_filters(Filters)}, FunList) of
+        {ok, Instances, _} ->
+            SortFun = fun(#instance{created = Cr1}, #instance{created = Cr2}) ->
+                Cr1 =< Cr2
+            end,
+            InstSorted = lists:sort(SortFun, Instances),
+            sublist(InstSorted, ResFrom, ResCount);
+        {error, Reason} -> {error, Reason}
+    end;
+
 get_instance(_StoreArgs, {list, FsmRefs}, Query) when is_list(FsmRefs) ->
     ReadFun = fun
         (FsmRef, {ok, Insts}) ->
@@ -719,7 +742,242 @@ handle_attr_actions(Instance, Transition = #transition{attr_actions = AttrAction
     ],
     ok.
 
+%% =============================================================================
+%%  get_instance/3 helper functions
+%% =============================================================================
 
+%%
+%% Divides the list of filters (as defined in eproc_store:get_instance/3) into three parts:
+%%      PreFilters - the ones, that must be run before selecting with match spec;
+%%      MatchFilters - filters for match spec;
+%%      PostFilters - the ones, that must be run after selecting with match spec.
+%% In general:
+%%      PreFilters are the ones, that can be implemented easier (more efficiently) than through match spec;
+%%      PostFilters are the ones, that cannot be implemented through match spec or easier methods.
+%% In addition:
+%%      PreFilters are sorted according to the order of priority: id > name > tags;
+%%      MatchFilters are converted into match spec;
+%%      Only age is considered a postfilter. In case of more postfilters later - a sort should be implemented for PostFilters
+%%
+parse_instance_filters(List) ->
+    FoldFun = fun(Filter, {PreFilters, Filters, PostFilters}) ->
+        case parse_instance_filter(Filter) of
+            pre_filter  -> {[Filter | PreFilters], Filters, PostFilters};
+            post_filter -> {PreFilters, Filters, [Filter | PostFilters]};
+            ParsedFilter-> {PreFilters, [ParsedFilter | Filters], PostFilters}
+        end
+    end,
+    {PreFilters, Filters, PostFilters} = lists:foldr(FoldFun, {[], [], []}, List),
+    PreSortFun = fun
+        ({id,_}, _) -> true;
+        (_,{id,_})  -> false;
+        ({name,_},_)-> true;
+        (_,{name,_})-> false;
+        (_,_)       -> true
+    end,
+    {
+        lists:sort(PreSortFun, PreFilters),
+        [{
+            {instance,'$1','$2','$3','$4','$5','$6','$7','$8','$9','$10','$11','$12','$13','$14','$15','$16','$17'},
+            lists:flatten(Filters),
+            ['$_']
+        }],
+        PostFilters
+    }.
+
+%%
+%% Returns pre_filter for prefilters, post_filter for postfilters and the match spec of a match filter.
+%%
+parse_instance_filter({id, _InstId}) ->
+    pre_filter;
+parse_instance_filter({name, _Name}) ->
+    pre_filter;
+parse_instance_filter({last_trn, undefined, undefined}) ->
+    [];
+parse_instance_filter({last_trn, From, undefined}) ->
+    {'>=', {element, 5, '$15'}, {From}};
+parse_instance_filter({last_trn, undefined, Till}) ->
+    {'=<', {element, 5, '$15'}, {Till}};
+parse_instance_filter({last_trn, From, Till}) ->
+    [parse_instance_filter({last_trn, From, undefined}), parse_instance_filter({last_trn, undefined, Till})];
+parse_instance_filter({created, undefined, undefined}) ->
+    [];
+parse_instance_filter({created, From, undefined}) ->
+    {'>=', '$9', {From}};
+parse_instance_filter({created, undefined, Till}) ->
+    {'=<', '$9', {Till}};
+parse_instance_filter({created, From, Till}) ->
+    [parse_instance_filter({created, From, undefined}), parse_instance_filter({created, undefined, Till})];
+parse_instance_filter({tags, _}) ->
+    pre_filter;
+parse_instance_filter({module, Module}) ->
+    {'==', '$4', Module};
+parse_instance_filter({status, Status}) ->
+    {'==', '$8', Status};
+parse_instance_filter({age, _Age}) ->
+    post_filter.
+
+%%
+%% A function group for resolving various filters.
+%% The arguments are:
+%%      Either undefined (if database wasn't querried yet), or #instance{} | [#instance{}] (depending on the function)
+%%      Not yet parsed filters. This might be, depending on the function:
+%%          A triple {PreFilters, MatchSpec, PostFilters};
+%%          A pair {MatchSpec, PostFilters};
+%%          A list of PostFilters.
+%%      Query parameter from get_instance/3.
+%% The return value is either
+%%      Triple {ok, Inst, Filters}, where:
+%%          Inst is undefined if database wasn't querried or depending on the function #instance{} or [#instance{}];
+%%          Filters are remaining filters for next function;
+%%      Pair {error, Reason}.
+%% In a single get_instance/3 call all of these functions are called sequentially (or until {error,_} is recieved).
+%% However, database is queried only in one place - if the instance [list] parameter is undefined AND the exact filter is present.
+%% Later, all the elements of instance list (or analogously for an instance) are checked and the ones, that do not pass the filters, are droped.
+%% Once an instance list is empty - it means that there are no instances, that sattisfy all the filters.
+%% Therefore among these functions undefined instance [list] parameter means that database wasn't yet querried.
+%% Empty instance list parameter means that all the filters cannot be sattisfied.
+%%
+
+%%
+%% Resolves id filter. At most one such filter is expected.
+%% Takes undefined, returns undefined, a single instance or error.
+%%
+resolve_instance_id_filter(undefined, {[{id,InstId}|PreFilters], MFs, PFs}, Query) ->
+    case read_instance({inst,InstId}, Query) of                         % DB query
+        {ok, Inst}      -> {ok, Inst, {PreFilters, MFs, PFs}};
+        {error, Reason} -> {error, Reason}
+    end;
+
+resolve_instance_id_filter(Inst, Filters, _) ->
+    {ok, Inst, Filters}.
+
+
+%%
+%% Resolves name filter. At most one such filter is expected.
+%% Takes undefined or a single instance, returns undefined, a single instance or error.
+%%
+resolve_instance_name_filter(undefined, {[{name,Name}|PreFilters], MFs, PFs}, Query) ->
+    case read_instance({name,Name}, Query) of                       % DB query
+        {ok, Inst}      -> {ok, Inst, {PreFilters, MFs, PFs}};
+        {error, Reason} -> {error, Reason}
+    end;
+
+resolve_instance_name_filter(Instance = #instance{name = Name}, {[{name,Name}|PreFilters], MFs, PFs}, _) ->
+    {ok, Instance, {PreFilters, MFs, PFs}};
+
+resolve_instance_name_filter(#instance{}, {[{name,_}|_],_,_}, _) ->
+    {error, not_found};
+
+resolve_instance_name_filter(Instance, Filters, _) ->
+    {ok, Instance, Filters}.
+
+
+%%
+%% Resolves tags filters.
+%% Takes undefined or a single instance, returns undefined, an instance list or error.
+%%
+resolve_instance_tags_filters(Instance, {PreFilters, MFs, PFs}, Query) ->
+    FoldFun = fun
+        (_, {ok, []})               -> {ok, []};
+        (Filter, {ok, Instances})   -> resolve_instance_tags_filter(Instances, Filter, Query);
+        (_, {error, Reason})        -> {error, Reason}
+    end,
+    InstInit = case Instance of
+        undefined   -> undefined;
+        Inst        -> [Inst]
+    end,
+    case lists:foldl(FoldFun, {ok, InstInit}, PreFilters) of
+        {ok, InstFiltered}  -> {ok, InstFiltered, {MFs, PFs}};
+        {error, Reason}     -> {error, Reason}
+    end.
+
+
+%%
+%% Resolves each tag of a single tags filters.
+%% It is called by resolve_instance_tags_filters/3 instead of get_instance/3.
+%% The first parameter is undefined of a list of instances.
+%% The second parameter is a single tags filter (rather than all the not parsed filters).
+%% The return value is {ok, Instances}, where Instances is an instance list, or {error, Reason}.
+%%
+resolve_instance_tags_filter(Instances, {tags,[]}, _Query) ->
+    {ok, Instances};
+
+resolve_instance_tags_filter(undefined, {tags,[{TagName,TagType}|RemTags]}, Query) ->
+    InstIds = ets:match(?TAG_TBL, {'$0',TagName,TagType,'_','_'}),  % DB query
+    MapFoldFun = fun
+        (InstId, ok) ->
+            case read_instance({inst, InstId}, Query) of            % DB query
+                {ok, Inst}      -> {Inst, ok};
+                {error, Reason} -> {undefined, {error, Reason}}
+            end;
+        (_, {error, Reason}) ->
+            {undefined, {error, Reason}}
+    end,
+    case lists:mapfoldl(MapFoldFun, ok, InstIds) of
+        {Instances, ok}         -> resolve_instance_tags_filter(Instances, {tags, RemTags}, Query);
+        {_, {error, Reason}}    -> {error, Reason}
+    end;
+
+resolve_instance_tags_filter(Instances, {tags, Tags}, _Query) when is_list(Instances) ->
+    FilterFun = fun(#instance{curr_state = #inst_state{attrs_active = Attributes}}) ->
+        AttrFilterFun = fun
+            (#attribute{module=eproc_meta}) -> true;
+            (_)                             -> false
+        end,
+        AttributesFiltered = lists:filter(AttrFilterFun, Attributes),
+        FoldFun = fun
+            ({TagName,TagType}, true)   -> lists:member({tag,TagName,TagType}, AttributesFiltered);
+            (_, false)                  -> false
+        end,
+        lists:foldl(FoldFun, true, Tags)
+    end,
+    {ok, lists:filter(FilterFun, Instances)}.
+
+
+%%
+%% Resolves match filters.
+%% Takes undefined or an instance list, returns an instance list or error.
+%% The second parameter is match spec.
+%% Note that this function never returns undefined.
+%%
+resolve_instance_match_filter(Instances, {MatchFilter, PFs}, Query) ->
+    InstancesRez = case Instances of
+        undefined ->
+            InstancesSelected = ets:select(?INST_TBL, MatchFilter),     % DB query
+            MapFun = fun (Elem) ->
+                {ok, InstanceRez} = read_instance_data(Elem, Query),
+                InstanceRez
+            end,
+            lists:map(MapFun, InstancesSelected);
+        InstList ->
+            ets:match_spec_run(InstList, ets:match_spec_compile(MatchFilter))
+    end,
+    {ok, InstancesRez, PFs}.
+
+
+%%
+%% Resolves age filters.
+%% Takes an instance list, returns an instance list or error.
+%% Note that this function never queries the database and never takes undefined as first parameter.
+%%
+resolve_instance_age_filters(Instances, [], _)->
+    {ok, Instances, []};
+
+resolve_instance_age_filters(Instances, PostFilters, _Query) ->
+    FoldFun = fun({age, Age}, MinAge) ->
+        AgeMs = eproc_timer:duration_to_ms(Age),
+        erlang:min(AgeMs, MinAge)
+    end,
+    AgeFilter = lists:foldl(FoldFun, undefined, PostFilters) * 1000,    % undefined is larger than any integer (or number)
+    Now = os:timestamp(),
+    FilterFun = fun
+        (#instance{created = Created, terminated = undefined}) ->
+            eproc_timer:timestamp_diff_us(Now, Created) >= AgeFilter;
+        (#instance{created = Created, terminated = Terminated}) ->
+            eproc_timer:timestamp_diff_us(Terminated, Created) >= AgeFilter
+    end,
+    {ok, lists:filter(FilterFun, Instances), []}.
 
 
 %% =============================================================================
@@ -840,4 +1098,25 @@ all_lists_contain(Element, [List | Other]) ->
         true -> all_lists_contain(Element, Other)
     end.
 
+%%
+%%  sublist(L, F, C) returns C elements of list L starting with F-th element of the list.
+%%  L should be list, F - positive integer, C positive integer or 0.
+%%
+
+sublist(_, _, 0) ->
+    [];
+
+sublist(List, 1, Count) when Count >= erlang:length(List) ->
+    List;
+
+sublist(List, 1, Count) -> % when Count >= 1
+    {List1, _} = lists:split(Count, List),
+    List1;
+
+sublist(List, From, _Count) when From > erlang:length(List) ->
+    [];
+
+sublist(List, From, Count) -> % when From > 1
+    {_, List2} = lists:split(From-1, List),
+    sublist(List2, 1, Count).
 
