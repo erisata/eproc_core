@@ -22,6 +22,7 @@
 -export([
     eproc_store_core_test_unnamed_instance/1,
     eproc_store_core_test_named_instance/1,
+    eproc_store_core_test_get_instance_filter/1,
     eproc_store_core_test_suspend_resume/1,
     eproc_store_core_test_add_transition/1,
     eproc_store_core_test_resolve_msg_dst/1,
@@ -69,6 +70,7 @@ end_per_suite(Config) ->
 
 ?MAP_TCK_TEST(eproc_store_core_test_unnamed_instance).
 ?MAP_TCK_TEST(eproc_store_core_test_named_instance).
+?MAP_TCK_TEST(eproc_store_core_test_get_instance_filter).
 ?MAP_TCK_TEST(eproc_store_core_test_suspend_resume).
 ?MAP_TCK_TEST(eproc_store_core_test_add_transition).
 ?MAP_TCK_TEST(eproc_store_core_test_resolve_msg_dst).

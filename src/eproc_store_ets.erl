@@ -371,7 +371,7 @@ get_instance(_StoreArgs, {filter, ResFrom, ResCount, Filters}, Query) ->
                 Cr1 =< Cr2
             end,
             InstSorted = lists:sort(SortFun, Instances),
-            sublist(InstSorted, ResFrom, ResCount);
+            {ok, sublist(InstSorted, ResFrom, ResCount)};
         {error, Reason} -> {error, Reason}
     end;
 
@@ -904,7 +904,8 @@ resolve_instance_tags_filter(Instances, {tags,[]}, _Query) ->
     {ok, Instances};
 
 resolve_instance_tags_filter(undefined, {tags,[{TagName,TagType}|RemTags]}, Query) ->
-    InstIds = ets:match(?TAG_TBL, {'$0',TagName,TagType,'_','_'}),  % DB query
+    % TODO: call eproc_meta:get_instances/2 ?
+    InstIds = lists:flatten(ets:match(?TAG_TBL, {'_',TagName,TagType,'$3','_'})),  % DB query
     MapFoldFun = fun
         (InstId, ok) ->
             case read_instance({inst, InstId}, Query) of            % DB query
@@ -920,12 +921,17 @@ resolve_instance_tags_filter(undefined, {tags,[{TagName,TagType}|RemTags]}, Quer
     end;
 
 resolve_instance_tags_filter(Instances, {tags, Tags}, _Query) when is_list(Instances) ->
+    % TODO: move functionality to eproc_meta?
     FilterFun = fun(#instance{curr_state = #inst_state{attrs_active = Attributes}}) ->
         AttrFilterFun = fun
-            (#attribute{module=eproc_meta}) -> true;
-            (_)                             -> false
+            % TODO: Filtering is done according to name field of attribute instance.
+            %       The same case is in eproc_webapi_rest_inst:instancef_add_tags/2
+            %       Instertion into tags table is done according to data field of attribute instance.
+            %       Should be unified?
+            (#attribute{module=eproc_meta,name=Name})   -> {true, Name};
+            (_)                                         -> false
         end,
-        AttributesFiltered = lists:filter(AttrFilterFun, Attributes),
+        AttributesFiltered = lists:filtermap(AttrFilterFun, Attributes),
         FoldFun = fun
             ({TagName,TagType}, true)   -> lists:member({tag,TagName,TagType}, AttributesFiltered);
             (_, false)                  -> false
@@ -967,9 +973,9 @@ resolve_instance_age_filters(Instances, [], _)->
 resolve_instance_age_filters(Instances, PostFilters, _Query) ->
     FoldFun = fun({age, Age}, MinAge) ->
         AgeMs = eproc_timer:duration_to_ms(Age),
-        erlang:min(AgeMs, MinAge)
+        erlang:max(AgeMs, MinAge)
     end,
-    AgeFilter = lists:foldl(FoldFun, undefined, PostFilters) * 1000,    % undefined is larger than any integer (or number)
+    AgeFilter = lists:foldl(FoldFun, 0, PostFilters) * 1000,    % undefined is larger than any integer (or number)
     Now = os:timestamp(),
     FilterFun = fun
         (#instance{created = Created, terminated = undefined}) ->

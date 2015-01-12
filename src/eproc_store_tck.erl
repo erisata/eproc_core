@@ -26,6 +26,7 @@
 -export([
     eproc_store_core_test_unnamed_instance/1,
     eproc_store_core_test_named_instance/1,
+    eproc_store_core_test_get_instance_filter/1,
     eproc_store_core_test_suspend_resume/1,
     eproc_store_core_test_add_transition/1,
     eproc_store_core_test_resolve_msg_dst/1,
@@ -46,6 +47,7 @@
 testcases(core) -> [
     eproc_store_core_test_unnamed_instance,
     eproc_store_core_test_named_instance,
+    eproc_store_core_test_get_instance_filter,
     eproc_store_core_test_suspend_resume,
     eproc_store_core_test_add_transition,
     eproc_store_core_test_resolve_msg_dst,
@@ -256,6 +258,85 @@ eproc_store_core_test_named_instance(Config) ->
     {ok, IID3} = eproc_store:add_instance(Store, Inst#instance{group = new, name = test_named_instance_a}),
     {ok, IID3} = eproc_store:set_instance_killed(Store, {name, test_named_instance_a}, #user_action{}),
     true = IID3 =/= IID1,
+    ok.
+
+
+%%
+%% Check if get_instance works with filters
+%%
+eproc_store_core_test_get_instance_filter(Config) ->
+    Store = store(Config),
+%     DFun = fun(DateTime) ->
+%         Seconds = calendar:datetime_to_gregorian_seconds(DateTime) - 62167219200,
+%         {Seconds div 1000000, Seconds rem 1000000, 0}.
+%     end,
+    AddTrnFun = fun (IID, TrnId, Timestamp, AttrActions) ->
+        Trn = #transition{
+            trn_id = TrnId, sname = [new_state], sdata = some_data, timestamp = Timestamp, trn_node = undefined, duration = 16, trigger_type = event,
+            trigger_msg = #msg_ref{cid = {IID, TrnId, 0, recv}, peer = {connector, some}}, trigger_resp = undefined, trn_messages = [],
+            attr_last_nr = 1, attr_actions = AttrActions, inst_status = running, interrupts = undefined
+        },
+        Msg = #message{msg_id = {IID, TrnId, 0, recv}, sender = {connector, some}, receiver = {inst, IID}, resp_to = undefined, date = Timestamp, body = some_message},
+        {ok, IID, TrnId} = eproc_store:add_transition(Store, IID, Trn, [Msg])
+    end,
+    Now = os:timestamp(),
+    OldDate1 = eproc_timer:timestamp_before({3,day}, Now),
+    OldDate2 = eproc_timer:timestamp_before({2,day}, Now),
+    OldDate3 = eproc_timer:timestamp_before({1,day}, Now),
+    OldDate4 = eproc_timer:timestamp_before({12,hour}, Now),
+    TagName1 = <<"123">>, TagType1 = <<"cust_nr">>,
+    TagName2 = <<"rejected">>, TagType2 = <<"resolution">>,
+    % Create and add testing instances
+    Inst = inst_value(),
+    {ok, IID1} = eproc_store:add_instance(Store, Inst#instance{name = testing_name, created = OldDate3}),
+    {ok, IID2} = eproc_store:add_instance(Store, Inst#instance{created = OldDate3}),
+    {ok, IID3} = eproc_store:add_instance(Store, Inst#instance{created = OldDate1, terminated = OldDate3}),
+    {ok, IID4} = eproc_store:add_instance(Store, Inst#instance{module = some_other_fsm}),
+    {ok, IID5} = eproc_store:add_instance(Store, Inst#instance{status = resuming}),
+    % Add transitions for testing
+    AddTrnFun(IID1, 1, OldDate1, []),
+    AddTrnFun(IID1, 2, os:timestamp(), []),
+    AddTrnFun(IID4, 1, OldDate1, [
+        #attr_action{module = eproc_meta, attr_nr = 1, needs_store = true, action = {create, {tag,TagName1,TagType1}, [], {data, TagName1, TagType1}}},
+        #attr_action{module = eproc_meta, attr_nr = 2, needs_store = true, action = {create, {tag,TagName2,TagType2}, [], {data, TagName2, TagType2}}}
+    ]),
+    AddTrnFun(IID2, 1, OldDate3, [
+        #attr_action{module = eproc_meta, attr_nr = 1, needs_store = true, action = {create, {tag,TagName1,TagType1}, [], {data, TagName1, TagType1}}}
+    ]),
+    % Get reference instances
+    {ok, Inst1} = eproc_store:get_instance(Store, {inst, IID1}, current),
+    {ok, Inst2} = eproc_store:get_instance(Store, {inst, IID2}, current),
+    {ok, Inst3} = eproc_store:get_instance(Store, {inst, IID3}, current),
+    {ok, Inst4} = eproc_store:get_instance(Store, {inst, IID4}, current),
+    {ok, Inst5} = eproc_store:get_instance(Store, {inst, IID5}, current),
+    % Performing sucessful tests
+    {ok, Res01} = eproc_store:get_instance(Store, {filter, 1, 99, []}, current),
+    {ok, Res02} = eproc_store:get_instance(Store, {filter, 1, 99, [{id, IID1}]}, current),
+    {ok, Res03} = eproc_store:get_instance(Store, {filter, 1, 99, [{name, testing_name}]}, current),
+    {ok, Res04} = eproc_store:get_instance(Store, {filter, 1, 99, [{last_trn, undefined, OldDate2}]}, current),
+    {ok, Res05} = eproc_store:get_instance(Store, {filter, 1, 99, [{last_trn, OldDate2, undefined}]}, current),
+    {ok, Res06} = eproc_store:get_instance(Store, {filter, 1, 99, [{last_trn, OldDate2, OldDate4}]}, current),
+    {ok, Res07} = eproc_store:get_instance(Store, {filter, 1, 99, [{created, undefined, OldDate2}]}, current),
+    {ok, Res08} = eproc_store:get_instance(Store, {filter, 1, 99, [{created, OldDate2, undefined}]}, current),
+    {ok, Res09} = eproc_store:get_instance(Store, {filter, 1, 99, [{created, OldDate2, OldDate4}]}, current),
+    {ok, Res10} = eproc_store:get_instance(Store, {filter, 1, 99, [{tags, [{<<"123">>, <<"cust_nr">>}]}]}, current),
+    {ok, Res11} = eproc_store:get_instance(Store, {filter, 1, 99, [{tags, [{<<"123">>, <<"cust_nr">>},{<<"rejected">>, <<"resolution">>}]}]}, current),
+    {ok, Res12} = eproc_store:get_instance(Store, {filter, 1, 99, [{tags, [{<<"123">>, <<"cust_nr">>}]}, {tags,[{<<"rejected">>, <<"resolution">>}]}]}, current),
+
+
+    %{ok, Res02} = eproc_store:get_instance(Store, {filter, 2, 2, []}, current),
+    % Evaluating results
+    Req = fun(List) ->
+        [Elem || Elem <- List, Elem == Inst1 orelse Elem == Inst2 orelse Elem == Inst3 orelse Elem == Inst4 orelse Elem == Inst5]
+    end,
+    ?assertThat(Res01, contains_member(Inst1)),
+    ?assertThat(Res01, contains_member(Inst2)),
+    ?assertThat(Res01, contains_member(Inst3)),
+    ?assertThat(Res01, contains_member(Inst4)),
+    ?assertThat(Res01, contains_member(Inst5)),
+    ?assertThat(Req(Res01), has_length(5)),
+    ?assertThat(Res02, contains_member(Inst1)),
+    ?assertThat(Res03, is([Inst1])),
     ok.
 
 
