@@ -354,7 +354,7 @@ attr_task(_StoreArgs, AttrModule, AttrTask) ->
 %%
 get_instance(_StoreArgs, {filter, ResFrom, ResCount, Filters}, Query) ->
     FoldFun = fun
-        (_, {ok, [], _})        -> {error, not_fount};
+        (_, {ok, [], _})        -> {error, not_found};
         (Fun, {ok, Inst, Filt}) -> Fun(Inst, Filt, Query);
         (_, {error, Reason})    -> {error, Reason}
     end,
@@ -794,8 +794,9 @@ parse_instance_filter({name, _Name}) ->
     pre_filter;
 parse_instance_filter({last_trn, undefined, undefined}) ->
     [];
-parse_instance_filter({last_trn, From, undefined}) ->
-    {'>=', {element, 5, '$15'}, {From}};
+parse_instance_filter({last_trn, From, undefined}) ->   % compares #instance{curr_state = #inst_state{timestamp}} and
+    [{'>=', {element, 5, '$15'}, {From}},               % checks that #instance{curr_state = #inst_state{sname =/= 0}}
+    {'=/=', {element, 2, '$15'}, 0}];
 parse_instance_filter({last_trn, undefined, Till}) ->
     {'=<', {element, 5, '$15'}, {Till}};
 parse_instance_filter({last_trn, From, Till}) ->
