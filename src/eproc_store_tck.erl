@@ -382,10 +382,10 @@ eproc_store_core_test_get_instance_filter(Config) ->
     ?assertThat(Res52, contains_member(Inst4)),
     ?assertThat(Req(Res52), has_length(2)),
     ?assertThat(Req(Res53), is([Inst2])),
-    % Performing unsucessful tests
-    {error, not_found} = eproc_store:get_instance(Store, {filter, From, Count, [{id, non_existent_id}]}, current),
-    {error, not_found} = eproc_store:get_instance(Store, {filter, From, Count, [{name, non_existent_name}]}, current),
-    {error, not_found} = eproc_store:get_instance(Store, {filter, From, Count, [{id, IID3},{name, testing_name}]}, current),
+    % Performing empty list tests
+    {ok, []} = eproc_store:get_instance(Store, {filter, From, Count, [{id, non_existent_id}]}, current),
+    {ok, []} = eproc_store:get_instance(Store, {filter, From, Count, [{name, non_existent_name}]}, current),
+    {ok, []} = eproc_store:get_instance(Store, {filter, From, Count, [{id, IID3},{name, testing_name}]}, current),
     ok.
 
 
