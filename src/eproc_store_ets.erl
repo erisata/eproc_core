@@ -355,16 +355,21 @@ attr_task(_StoreArgs, AttrModule, AttrTask) ->
 get_instance(_StoreArgs, {filter, ResFrom, ResCount, Filters}, Query) ->
     FoldFun = fun
         (_, {[], _})        -> {[], []};
-        (Fun, {Inst, Filt}) -> Fun(Inst, Filt, Query)
+        (Fun, {Inst, Filt}) -> Fun(Inst, Filt)
     end,
     FunList = [
-        fun resolve_instance_id_filter/3,
-        fun resolve_instance_name_filter/3,
-        fun resolve_instance_tags_filters/3,
-        fun resolve_instance_match_filter/3,
-        fun resolve_instance_age_filters/3
+        fun resolve_instance_id_filter/2,
+        fun resolve_instance_name_filter/2,
+        fun resolve_instance_tags_filters/2,
+        fun resolve_instance_match_filter/2,
+        fun resolve_instance_age_filters/2
     ],
-    {Instances, _} = lists:foldl(FoldFun, {undefined, parse_instance_filters(Filters)}, FunList),
+    {InstancesPreQ, _} = lists:foldl(FoldFun, {undefined, parse_instance_filters(Filters)}, FunList),
+    MapFun = fun (InstancePreQ) ->
+        {ok, InstanceRez} = read_instance_data(InstancePreQ, Query),
+        InstanceRez
+    end,
+    Instances = lists:map(MapFun, InstancesPreQ),
     SortFun = fun(#instance{created = Cr1}, #instance{created = Cr2}) ->
         Cr1 =< Cr2
     end,
@@ -841,13 +846,13 @@ parse_instance_filter({age, _Age}) ->
 %% Resolves id filter. At most one such filter is expected.
 %% Takes undefined, returns undefined or a list with single instance.
 %%
-resolve_instance_id_filter(undefined, {[{id,InstId}|PreFilters], MFs, PFs}, Query) ->
-    case read_instance({inst,InstId}, Query) of                         % DB query
+resolve_instance_id_filter(undefined, {[{id,InstId}|PreFilters], MFs, PFs}) ->
+    case read_instance({inst,InstId}, full) of                         % DB query
         {ok, Inst}  -> {[Inst], {PreFilters, MFs, PFs}};
         {error, _}  -> {[], {PreFilters, MFs, PFs}}
     end;
 
-resolve_instance_id_filter(undefined, Filters, _) ->
+resolve_instance_id_filter(undefined, Filters) ->
     {undefined, Filters}.
 
 
@@ -855,19 +860,19 @@ resolve_instance_id_filter(undefined, Filters, _) ->
 %% Resolves name filter. At most one such filter is expected.
 %% Takes undefined or a list with single instance, returns undefined or a list with single instance.
 %%
-resolve_instance_name_filter(undefined, {[{name,Name}|PreFilters], MFs, PFs}, Query) ->
-    case read_instance({name,Name}, Query) of                       % DB query
+resolve_instance_name_filter(undefined, {[{name,Name}|PreFilters], MFs, PFs}) ->
+    case read_instance({name,Name}, full) of                       % DB query
         {ok, Inst}  -> {[Inst], {PreFilters, MFs, PFs}};
         {error, _}  -> {[], {PreFilters, MFs, PFs}}
     end;
 
-resolve_instance_name_filter([Instance = #instance{name = Name}], {[{name,Name}|PreFilters], MFs, PFs}, _) ->
+resolve_instance_name_filter([Instance = #instance{name = Name}], {[{name,Name}|PreFilters], MFs, PFs}) ->
     {[Instance], {PreFilters, MFs, PFs}};
 
-resolve_instance_name_filter([#instance{}], {[{name,_}|PreFilters], MFs, PFs}, _) ->
+resolve_instance_name_filter([#instance{}], {[{name,_}|PreFilters], MFs, PFs}) ->
     {[], {PreFilters, MFs, PFs}};
 
-resolve_instance_name_filter(Instances, Filters, _) ->
+resolve_instance_name_filter(Instances, Filters) ->
     {Instances, Filters}.
 
 
@@ -875,10 +880,10 @@ resolve_instance_name_filter(Instances, Filters, _) ->
 %% Resolves tags filters.
 %% Takes undefined or a list with single instance.
 %%
-resolve_instance_tags_filters(Instances, {PreFilters, MFs, PFs}, Query) ->
+resolve_instance_tags_filters(Instances, {PreFilters, MFs, PFs}) ->
     FoldFun = fun
         (_, [])         -> [];
-        (Filter, Insts) -> resolve_instance_tags_filter(Insts, Filter, Query)
+        (Filter, Insts) -> resolve_instance_tags_filter(Insts, Filter)
     end,
     {lists:foldl(FoldFun, Instances, PreFilters), {MFs, PFs}}.
 
@@ -890,24 +895,27 @@ resolve_instance_tags_filters(Instances, {PreFilters, MFs, PFs}, Query) ->
 %% The second parameter is a single tags filter (rather than all the not parsed filters).
 %% The return value is an instance list.
 %%
-resolve_instance_tags_filter(Instances, {tags,[]}, _Query) ->
+resolve_instance_tags_filter(Instances, {tags,[]}) ->
     Instances;
 
-resolve_instance_tags_filter(undefined, {tags,[{TagName,TagType}|RemTags]}, Query) ->
+resolve_instance_tags_filter(undefined, {tags,[{TagName,TagType}|RemTags]}) ->
     % TODO: call eproc_meta:get_instances/2 ?
-    InstIds = lists:flatten(ets:match(?TAG_TBL, {'_',TagName,TagType,'$3','_'})),  % DB query
+    InstIds = case TagType of
+        undefined   -> lists:flatten(ets:match(?TAG_TBL, {'_',TagName,'_','$3','_'}));  % DB query
+        TT          -> lists:flatten(ets:match(?TAG_TBL, {'_',TagName,TT,'$3','_'}))  % DB query
+    end,
     FilterMapFun = fun(InstId) ->
-        case read_instance({inst, InstId}, Query) of            % DB query
+        case read_instance({inst, InstId}, full) of            % DB query
             {ok, Inst}  -> {true, Inst};
             {error, _}  -> false
         end
     end,
     case lists:filtermap(FilterMapFun, InstIds) of
         []          -> [];
-        Instances   -> resolve_instance_tags_filter(Instances, {tags, RemTags}, Query)
+        Instances   -> resolve_instance_tags_filter(Instances, {tags, RemTags})
     end;
 
-resolve_instance_tags_filter(Instances, {tags, Tags}, _Query) when is_list(Instances) ->
+resolve_instance_tags_filter(Instances, {tags, Tags}) when is_list(Instances) ->
     % TODO: move functionality to eproc_meta?
     FilterFun = fun(#instance{curr_state = #inst_state{attrs_active = Attributes}}) ->
         AttrFilterFun = fun
@@ -920,8 +928,16 @@ resolve_instance_tags_filter(Instances, {tags, Tags}, _Query) when is_list(Insta
         end,
         AttributesFiltered = lists:filtermap(AttrFilterFun, Attributes),
         FoldFun = fun
-            ({TagName,TagType}, true)   -> lists:member({tag,TagName,TagType}, AttributesFiltered);
-            (_, false)                  -> false
+            (_, false)                  ->
+                false;
+            ({TagName, undefined}, true) ->
+                TagFoldFun = fun
+                    (_, true)               -> true;
+                    ({tag, Name, _}, false) -> Name == TagName
+                end,
+                lists:foldl(TagFoldFun, false, AttributesFiltered);
+            ({TagName,TagType}, true)   ->
+                lists:member({tag,TagName,TagType}, AttributesFiltered)
         end,
         lists:foldl(FoldFun, true, Tags)
     end,
@@ -930,22 +946,14 @@ resolve_instance_tags_filter(Instances, {tags, Tags}, _Query) when is_list(Insta
 
 %%
 %% Resolves match filters.
-%% The second parameter is match spec.
+%% MatchFilter parameter is a match spec.
 %% Never returns undefined.
 %%
-resolve_instance_match_filter(Instances, {MatchFilter, PFs}, Query) ->
-    InstancesRez = case Instances of
-        undefined ->
-            InstancesSelected = ets:select(?INST_TBL, MatchFilter),     % DB query
-            MapFun = fun (Elem) ->
-                {ok, InstanceRez} = read_instance_data(Elem, Query),
-                InstanceRez
-            end,
-            lists:map(MapFun, InstancesSelected);
-        InstList ->
-            ets:match_spec_run(InstList, ets:match_spec_compile(MatchFilter))
-    end,
-    {InstancesRez, PFs}.
+resolve_instance_match_filter(undefined, {MatchFilter, PFs}) ->
+    {ets:select(?INST_TBL, MatchFilter), PFs};                 % DB query
+
+resolve_instance_match_filter(Instances, {MatchFilter, PFs}) ->
+    {ets:match_spec_run(Instances, ets:match_spec_compile(MatchFilter)), PFs}.
 
 
 %%
@@ -953,10 +961,10 @@ resolve_instance_match_filter(Instances, {MatchFilter, PFs}, Query) ->
 %% Never takes or returns undefined.
 %% Note that this function never queries the database.
 %%
-resolve_instance_age_filters(Instances, [], _)->
+resolve_instance_age_filters(Instances, [])->
     {Instances, []};
 
-resolve_instance_age_filters(Instances, PostFilters, _Query) ->
+resolve_instance_age_filters(Instances, PostFilters) ->
     FoldFun = fun({age, Age}, MinAge) ->
         AgeMs = eproc_timer:duration_to_ms(Age),
         erlang:max(AgeMs, MinAge)

@@ -18,6 +18,7 @@
 -compile([{parse_transform, lager_transform}]).
 -include("eproc.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("hamcrest/include/hamcrest.hrl").
 
 
 %%
@@ -238,6 +239,78 @@ duration_format_test_() -> [
     ?_assertEqual(<<"PT2.010S">>, eproc_timer:duration_format([{2, s}, {10, ms}], iso8601)),
     ?_assertEqual(<<"P5DT0.123S">>, eproc_timer:duration_format([{5, day}, {123, ms}], iso8601)),
     ?_assertEqual(<<"PT5M45S">>, eproc_timer:duration_format({345, s}, iso8601))
+    ].
+
+
+%%
+%%  Check if `duration_format/2` works.
+%%
+duration_parse_test_() ->
+    Dur01 = eproc_timer:duration_parse("P2Y", iso8601),
+    Dur02 = eproc_timer:duration_parse("P2Y3M", iso8601),
+    Dur03 = eproc_timer:duration_parse("P2YT3M", iso8601),
+    Dur04 = eproc_timer:duration_parse("PT3M15S", iso8601),
+    Dur05 = eproc_timer:duration_parse("PT3M1.S", iso8601),
+    Dur06 = eproc_timer:duration_parse("PT2.5S", iso8601),
+    Dur07 = eproc_timer:duration_parse("PT3.50S", iso8601),
+    Dur08 = eproc_timer:duration_parse("PT4.500S", iso8601),
+    Dur09 = eproc_timer:duration_parse("PT5.05S", iso8601),
+    Dur10 = eproc_timer:duration_parse("PT6.005S", iso8601),
+    Dur11 = eproc_timer:duration_parse("PT7.123S", iso8601),
+    Dur12 = eproc_timer:duration_parse("PT8.4567S", iso8601),
+    Dur13 = eproc_timer:duration_parse("P24Y11M31DT12H23M34.567S", iso8601),
+
+    % Preparation of results for checks
+    Dur05a = lists:filter(fun
+        ({_, min}) -> false;
+        ({_, s}) -> false;
+        (_) -> true
+    end, Dur05),
+
+    [
+        ?_assertEqual([{2,year}], Dur01),
+        ?_assertThat(Dur02, contains_member({2,year})),
+        ?_assertThat(Dur02, contains_member({3,month})),
+        ?_assertThat(Dur02, has_length(2)),
+        ?_assertThat(Dur03, contains_member({2,year})),
+        ?_assertThat(Dur03, contains_member({3,min})),
+        ?_assertThat(Dur03, has_length(2)),
+        ?_assertThat(Dur04, contains_member({3,min})),
+        ?_assertThat(Dur04, contains_member({15,s})),
+        ?_assertThat(Dur04, has_length(2)),
+        ?_assertThat(Dur05, contains_member({3,min})),
+        ?_assertThat(Dur05, contains_member({1,s})),
+        ?_assertThat(Dur05a, any_of([is([{0,ms}]), is([])])),
+        ?_assertThat(Dur05, any_of([has_length(2), has_length(3)])),
+        ?_assertThat(Dur06, contains_member({2,s})),
+        ?_assertThat(Dur06, contains_member({500,ms})),
+        ?_assertThat(Dur06, has_length(2)),
+        ?_assertThat(Dur07, contains_member({3,s})),
+        ?_assertThat(Dur07, contains_member({500,ms})),
+        ?_assertThat(Dur07, has_length(2)),
+        ?_assertThat(Dur08, contains_member({4,s})),
+        ?_assertThat(Dur08, contains_member({500,ms})),
+        ?_assertThat(Dur08, has_length(2)),
+        ?_assertThat(Dur09, contains_member({5,s})),
+        ?_assertThat(Dur09, contains_member({50,ms})),
+        ?_assertThat(Dur09, has_length(2)),
+        ?_assertThat(Dur10, contains_member({6,s})),
+        ?_assertThat(Dur10, contains_member({5,ms})),
+        ?_assertThat(Dur10, has_length(2)),
+        ?_assertThat(Dur11, contains_member({7,s})),
+        ?_assertThat(Dur11, contains_member({123,ms})),
+        ?_assertThat(Dur11, has_length(2)),
+        ?_assertThat(Dur12, contains_member({8,s})),
+        ?_assertThat(Dur12, contains_member({456,ms})),
+        ?_assertThat(Dur12, has_length(2)),
+        ?_assertThat(Dur13, contains_member({24,year})),
+        ?_assertThat(Dur13, contains_member({11,month})),
+        ?_assertThat(Dur13, contains_member({31,day})),
+        ?_assertThat(Dur13, contains_member({12,hour})),
+        ?_assertThat(Dur13, contains_member({23,min})),
+        ?_assertThat(Dur13, contains_member({34,s})),
+        ?_assertThat(Dur13, contains_member({567,ms})),
+        ?_assertThat(Dur13, has_length(7))
     ].
 
 

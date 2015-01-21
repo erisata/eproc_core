@@ -26,6 +26,7 @@
 -export([
     duration_to_ms/1,
     duration_format/2,
+    duration_parse/2,
     timestamp_after/2,
     timestamp_before/2,
     timestamp/2,
@@ -228,6 +229,70 @@ duration_format(Duration, iso8601) ->
         {D, T} -> lists:concat(["P", D, "T", T])
     end,
     erlang:list_to_binary(Result).
+
+%%
+%%  Parse duration according to some format.
+%%
+duration_parse(undefined, _Format) ->
+    undefined;
+
+duration_parse(null, _Format) ->
+    undefined;
+
+duration_parse(Duration, iso8601) when is_list(Duration) ->
+    SplitFun= fun
+        ($T) -> false;
+        (_)  -> true
+    end,
+    {[$P | Date], TTime} = lists:splitwith(SplitFun, Duration),
+    DateParse = duration_parser(Date, [], [{$Y,year},{$M,month},{$D,day}], []),
+    case TTime of
+        [$T | Time] ->
+            duration_parser(Time, [], [{$H,hour},{$M,min},{$S,s}], DateParse);
+        [] ->
+            DateParse
+    end.
+
+
+%%
+%% Helper function for duration_parse/2
+%% The parameters are:
+%% 		String to be parsed;
+%%		Buffer of previously parsed tokens;
+%%		List of pairs {Matcher,Atom}, where Matcher is a match symbol and Atom is respective atom of duration record.
+%%			It is use to force a certain order of duration elements.
+%%		Result is accumulator of parsed duration.
+%%
+duration_parser("", [], _, Result) ->
+    Result;
+
+duration_parser(String, [], MatchList, Result) ->
+    {ok, [Int], RestString} = io_lib:fread("~d", String),
+    duration_parser(RestString, [Int], MatchList, Result);
+
+duration_parser([Matcher | RestString], [Int], [{Matcher, Atom} | RestList], Result) when erlang:is_integer(Int) ->
+    duration_parser(RestString, [], RestList, [{Int, Atom} | Result]);
+
+duration_parser([$. | RestString], [Int], MatchList, Result) ->
+    duration_parser(RestString, [$., "", Int], MatchList, Result);
+
+duration_parser([Char | RestString], [$., FractPart, WholePart], MatchList, Result) when $0 =< Char, Char =< $9 ->
+    duration_parser(RestString, [$., [Char|FractPart], WholePart], MatchList, Result);
+
+duration_parser([$S | RestString], [$., FractPart, WholePart], MatchList, Result) ->
+    FractPartOrder = lists:reverse(FractPart),
+    FractPartFull = case string:len(FractPartOrder) of
+        0 -> "0";
+        1 -> lists:append(FractPartOrder,"00");
+        2 -> lists:append(FractPartOrder,"0");
+        3 -> FractPartOrder;
+        N when N > 3 -> string:substr(FractPartOrder, 1, 3)
+    end,
+    {ok, [FractPartNumber], ""} = io_lib:fread("~d", FractPartFull),
+    duration_parser([$S | RestString], [WholePart], MatchList, [{FractPartNumber, ms} | Result]);
+
+duration_parser(String, [Int], [{_, _} | RestList], Result) ->
+    duration_parser(String, [Int], RestList, Result).
 
 
 %%
