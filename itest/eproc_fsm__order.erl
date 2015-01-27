@@ -29,7 +29,7 @@
 -compile([{parse_transform, lager_transform}]).
 -export([create/1, process/1, delivered/1]).
 -export([init/1, init/2, handle_state/3, terminate/3, code_change/4, format_status/2]).
--include("eproc.hrl").
+-include_lib("eproc_core/include/eproc.hrl").
 
 -define(ORDER_KEY(O),    {?MODULE, order, O}).
 -define(DELIVERY_KEY(D), {?MODULE, delivery, D}).

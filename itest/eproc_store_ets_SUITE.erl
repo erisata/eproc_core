@@ -33,7 +33,7 @@
     eproc_store_meta_test_attrs/1
 ]).
 -include_lib("common_test/include/ct.hrl").
--include("eproc.hrl").
+-include_lib("eproc_core/include/eproc.hrl").
 
 %%
 %%
