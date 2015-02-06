@@ -1340,7 +1340,7 @@ kill_test() ->
             }}
     end),
     ok = meck:expect(eproc_store, set_instance_killed, fun
-        (store, {inst, InstId = 100}, #user_action{user = <<"SomeUser">>, time = {_, _, _}, comment = <<"Hmm">>}) ->
+        (store, {inst, InstId = 100}, #user_action{user = #user{uid = <<"SomeUser">>}, time = {_, _, _}, comment = <<"Hmm">>}) ->
             {ok, InstId};
         (store, {inst, unknown}, #user_action{}) ->
             {error, not_found}
@@ -1381,7 +1381,7 @@ suspend_test() ->
             }}
     end),
     ok = meck:expect(eproc_store, set_instance_suspended, fun
-        (store, {inst, InstId = 100}, #user_action{user = <<"SomeUser">>, time = {_, _, _}, comment = <<"Hmm">>}) ->
+        (store, {inst, InstId = 100}, #user_action{user = #user{uid = <<"SomeUser">>}, time = {_, _, _}, comment = <<"Hmm">>}) ->
             {ok, InstId};
         (store, {inst, unknown}, #user_action{}) ->
             {error, not_found}

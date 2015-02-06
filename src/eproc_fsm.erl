@@ -127,7 +127,7 @@
 %%  `{timeout, Timeout}`
 %%  :   Timeout for the function, 5000 (5 seconds) is the default.
 %%
-%%  `{user, (User :: binary() | {User :: binary(), Comment :: binary()})}`
+%%  `{user, (User :: (binary() | #user{}) | {User :: (binary() | #user{}), Comment :: binary()}`
 %%  :   indicates a user initiaten an action. This option is mainly
 %%      used for administrative actions: kill, suspend and resume.
 %%
@@ -1798,10 +1798,14 @@ resolve_registry(StartOpts) ->
 %%
 resolve_user_action(CommonOpts) ->
     {User, Comment} = case proplists:get_value(user, CommonOpts) of
-        {U, C} when is_binary(U), is_binary(C) ->
+        {U = #user{}, C} when is_binary(C) ->
             {U, C};
-        U when is_binary(U) ->
+        {U, C} when is_binary(U), is_binary(C) ->
+            {#user{uid = U}, C};
+        U = #user{} ->
             {U, undefined};
+        U when is_binary(U) ->
+            {#user{uid = U}, undefined};
         undefined ->
             {undefined, undefined}
     end,
