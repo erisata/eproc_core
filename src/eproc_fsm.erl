@@ -1947,7 +1947,7 @@ start_loaded(Instance, StartOpts, State) ->
                             ok = limits_reset(State),
                             Trigger = #trigger_spec{
                                 type = admin,
-                                source = ResumedUser,
+                                source = {admin, ResumedUser},
                                 message = resume,
                                 msg_cid = undefined,
                                 sync = false,

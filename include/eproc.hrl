@@ -93,6 +93,7 @@
 %%
 -type event_src() ::
     {inst, inst_id()} |
+    {admin, #user{}} |
     {Type :: atom(), Id :: term()} |
     undefined.
 
@@ -143,11 +144,11 @@
 %%
 %%  Example triggers:
 %%
-%%      #trigger_spec{type = event, source = {inst, {12364,m}}, message = any,             sync = false},
-%%      #trigger_spec{type = event, source = {connector, api},  message = any,             sync = false},
-%%      #trigger_spec{type = sync,  source = {connector, api},  message = any,             sync = true},
-%%      #trigger_spec{type = timer, source = {attr, 1231221},   message = timeout,         sync = false},
-%%      #trigger_spec{type = admin, source = {cn, "John Doe"},  message = "Problem fixed", sync = false}.
+%%      #trigger_spec{type = event, source = {inst, {12364,m}},     message = any,             sync = false},
+%%      #trigger_spec{type = event, source = {connector, api},      message = any,             sync = false},
+%%      #trigger_spec{type = sync,  source = {connector, api},      message = any,             sync = true},
+%%      #trigger_spec{type = timer, source = {attr, 1231221},       message = timeout,         sync = false},
+%%      #trigger_spec{type = admin, source = {admin, {user, ...}},  message = "Problem fixed", sync = false}.
 %%
 %%  This structure is transient, not intended for storing in a DB.
 %%
