@@ -206,9 +206,26 @@
 
 
 %%
-%%  Get instance data by FSM reference (id or name).
-%%  Several instances can be retrieved by providing a list of FsmRefs
-%%  or by providing a filter to return matching instances.
+%%  Get instance data by FSM reference (id or name), list of references or a filter.
+%%
+%%  In the case of single reference (`FsmRef = fsm_ref()`), this function returns
+%%  `{ok, #instance{}}` or `{error, not_found}` if the specified instance was not found.
+%%
+%%  In the case of a list of references (`FsmRef = {list, [fsm_ref()]}`), this
+%%  function returns `{ok, [#instance{}]}`, where order of instances corresponds
+%%  to the order of supplied FSM references. This function returns `{error, not_found}`
+%%  if any of the requested instances were not found.
+%%
+%%  In the case of a filtering (`FsmRef = {filter, Paging, [FilterClause]}`), this
+%%  function returns `{ok, {TotalCount, TotalExact, [#instance{}]}}`, where `TotalCount`
+%%  is a number of known rows, matching the specified filter.
+%%  This number should be considered exact, if `TotalExact=true`.
+%%  More than `TotalCount` of instances can exist if `TotalExact=false`.
+%%  The returned result is an intersection (`AND`) of all filter clauses.
+%%  The result will have union (`OR`) of all filter values, specified in a single filter clause.
+%%
+%%  Whe performing filtering of the instances, result paging is supported including row sorting.
+%%  The defaut sorting is by `last_trn`.
 %%
 %%  The parameter Query can have several values:
 %%
@@ -223,25 +240,34 @@
 %%
 -callback get_instance(
         StoreArgs   :: term(),
-        FsmRef      :: fsm_ref() | {list, [fsm_ref()]} | {filter, ResFrom, ResCount, [Filter]},
+        FsmRef      :: fsm_ref() | {list, [fsm_ref()]} | {filter, Paging, [FilterClause]},
         Query       :: header | current | recent
     ) ->
-        {ok, #instance{} | [#instance{}]} |
+        {ok, #instance{} | [#instance{}] | {TotalCount, TotalExact, [#instance{}]}} |
+        {error, not_found} |
         {error, Reason :: term()}
     when
-        ResFrom  :: integer(),
-        ResCount :: integer(),
-        Filter ::
-            %% NOTE: ProcessName can be handled via fsmref directly.
+        FilterClause ::
             %% TODO: Faulty (see webapi).
-            {id, InstId :: inst_id()} | % At most one in Filter list
-            {name, Name :: inst_name()} | % At most one in Filter list
-            {last_trn, From :: timestamp() | undefined, Till :: timestamp() | undefined} |
-            {created,  From :: timestamp() | undefined, Till :: timestamp() | undefined} |
-            {tags, [{TagName :: binary(), TagType :: binary() | undefined}]} |
-            {module, Module :: module()} |
-            {status, Status :: inst_status()} |
-            {age, Age :: duration()}.  % Older than Age. Instance age = terminated - created, if terminated is undefined, age = now() - created.
+            {id,        IIdFilter | [IIdFilter]} | % At most one in Filter list
+            {name,      INmFilter | [INmFilter]} | % At most one in Filter list
+            {last_trn,  From :: timestamp() | undefined, Till :: timestamp() | undefined} |
+            {created,   From :: timestamp() | undefined, Till :: timestamp() | undefined} |
+            {tag,       TagFilter | [TagFilter]} |
+            {module,    ModFilter | [ModFilter]} |
+            {status,    StsFilter | [StsFilter]} |
+            {age,       Age :: duration()},  % Older than Age. Instance age = terminated - created, if terminated is undefined, age = now() - created.
+        IIdFilter :: InstId :: inst_id(),
+        INmFilter :: Name :: inst_name(),
+        TagFilter :: TagName :: binary() | {TagName :: binary(), TagType :: binary() | undefined},
+        ModFilter :: Module :: module(),
+        StsFilter :: Status :: inst_status(),
+        Paging    :: {ResFrom, ResCount} | {ResFrom, ResCount, SortedBy}, % SortedBy=last_trn by default
+        ResFrom   :: integer() | undefined,
+        ResCount  :: integer() | undefined,
+        SortedBy  :: id | name | last_trn | created | module | status | age,
+        TotalCount :: integer() | undefined,
+        TotalExact :: boolean().
 
 
 %%
