@@ -883,16 +883,16 @@ resolve_instance_id_filter(undefined, Filters) ->
 %% Resolves name filter. At most one such filter is expected.
 %% Takes undefined or a list with single instance, returns undefined or a list with single instance.
 %%
-resolve_instance_name_filter(undefined, {[{name,Name}|PreFilters], MFs, PFs}) ->
-    case read_instance({name,Name}, full) of                       % DB query
+resolve_instance_name_filter(undefined, {[{name, Name} | PreFilters], MFs, PFs}) ->
+    case read_instance({name, Name}, full) of
         {ok, Inst}  -> {[Inst], {PreFilters, MFs, PFs}};
-        {error, _}  -> {[], {PreFilters, MFs, PFs}}
+        {error, _}  -> {[],     {PreFilters, MFs, PFs}}
     end;
 
-resolve_instance_name_filter([Instance = #instance{name = Name}], {[{name,Name}|PreFilters], MFs, PFs}) ->
+resolve_instance_name_filter([Instance = #instance{name = Name}], {[{name, Name} | PreFilters], MFs, PFs}) ->
     {[Instance], {PreFilters, MFs, PFs}};
 
-resolve_instance_name_filter([#instance{}], {[{name,_}|PreFilters], MFs, PFs}) ->
+resolve_instance_name_filter([#instance{}], {[{name, _} | PreFilters], MFs, PFs}) ->
     {[], {PreFilters, MFs, PFs}};
 
 resolve_instance_name_filter(Instances, Filters) ->
