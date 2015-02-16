@@ -749,6 +749,8 @@ handle_attr_actions(Instance, Transition = #transition{attr_actions = AttrAction
     ],
     ok.
 
+
+
 %% =============================================================================
 %%  get_instance/3 helper functions
 %% =============================================================================
@@ -785,45 +787,60 @@ parse_instance_filters(List) ->
     {
         lists:sort(PreSortFun, PreFilters),
         [{
-            {instance,'$1','$2','$3','$4','$5','$6','$7','$8','$9','$10','$11','$12','$13','$14','$15','$16','$17'},
+            #instance{module = '$1', status = '$2', created = '$3', curr_state = '$4', _ = '_'},
             lists:flatten(Filters),
             ['$_']
         }],
         PostFilters
     }.
 
+
 %%
 %% Returns pre_filter for prefilters, post_filter for postfilters and the match spec of a match filter.
 %%
 parse_instance_filter({id, _InstId}) ->
     pre_filter;
+
 parse_instance_filter({name, _Name}) ->
     pre_filter;
+
 parse_instance_filter({last_trn, undefined, undefined}) ->
     [];
-parse_instance_filter({last_trn, From, undefined}) ->   % compares #instance{curr_state = #inst_state{timestamp}} and
-    [{'>=', {element, 5, '$15'}, {From}},               % checks that #instance{curr_state = #inst_state{sname =/= 0}}
-    {'=/=', {element, 2, '$15'}, 0}];
+
+parse_instance_filter({last_trn, From, undefined}) ->
+    [{'>=', {element, #inst_state.timestamp, '$4'}, {From}},
+    {'=/=', {element, #inst_state.stt_id,    '$4'}, 0}];
+
 parse_instance_filter({last_trn, undefined, Till}) ->
-    {'=<', {element, 5, '$15'}, {Till}};
+    {'=<', {element, #inst_state.timestamp, '$4'}, {Till}};
+
 parse_instance_filter({last_trn, From, Till}) ->
     [parse_instance_filter({last_trn, From, undefined}), parse_instance_filter({last_trn, undefined, Till})];
+
 parse_instance_filter({created, undefined, undefined}) ->
     [];
+
 parse_instance_filter({created, From, undefined}) ->
-    {'>=', '$9', {From}};
+    {'>=', '$3', {From}};
+
 parse_instance_filter({created, undefined, Till}) ->
-    {'=<', '$9', {Till}};
+    {'=<', '$3', {Till}};
+
 parse_instance_filter({created, From, Till}) ->
     [parse_instance_filter({created, From, undefined}), parse_instance_filter({created, undefined, Till})];
+
 parse_instance_filter({tags, _}) ->
     pre_filter;
+
 parse_instance_filter({module, Module}) ->
-    {'==', '$4', Module};
+    {'==', '$1', Module};
+
 parse_instance_filter({status, Status}) ->
-    {'==', '$8', Status};
+    {'==', '$2', Status};
+
 parse_instance_filter({age, _Age}) ->
     post_filter.
+
 
 %%
 %% A function group for resolving various filters.
@@ -901,17 +918,17 @@ resolve_instance_tags_filters(Instances, {PreFilters, MFs, PFs}) ->
 %% The second parameter is a single tags filter (rather than all the not parsed filters).
 %% The return value is an instance list.
 %%
-resolve_instance_tags_filter(Instances, {tags,[]}) ->
+resolve_instance_tags_filter(Instances, {tags, []}) ->
     Instances;
 
-resolve_instance_tags_filter(undefined, {tags,[{TagName,TagType}|RemTags]}) ->
+resolve_instance_tags_filter(undefined, {tags, [{TagName, TagType} | RemTags]}) ->
     % TODO: call eproc_meta:get_instances/2 ?
     InstIds = case TagType of
-        undefined   -> lists:flatten(ets:match(?TAG_TBL, {'_',TagName,'_','$3','_'}));  % DB query
-        TT          -> lists:flatten(ets:match(?TAG_TBL, {'_',TagName,TT,'$3','_'}))  % DB query
+        undefined -> lists:flatten(ets:match(?TAG_TBL, #meta_tag{tag = TagName,            inst_id = '$1', _ = '_'}));
+        TT        -> lists:flatten(ets:match(?TAG_TBL, #meta_tag{tag = TagName, type = TT, inst_id = '$1', _ = '_'}))
     end,
     FilterMapFun = fun(InstId) ->
-        case read_instance({inst, InstId}, full) of            % DB query
+        case read_instance({inst, InstId}, full) of
             {ok, Inst}  -> {true, Inst};
             {error, _}  -> false
         end
@@ -929,8 +946,8 @@ resolve_instance_tags_filter(Instances, {tags, Tags}) when is_list(Instances) ->
             %       The same case is in eproc_webapi_rest_inst:instancef_add_tags/2
             %       Instertion into tags table is done according to data field of attribute instance.
             %       Should be unified?
-            (#attribute{module=eproc_meta,name=Name})   -> {true, Name};
-            (_)                                         -> false
+            (#attribute{module = eproc_meta, name = Name})   -> {true, Name};
+            (_)                                              -> false
         end,
         AttributesFiltered = lists:filtermap(AttrFilterFun, Attributes),
         FoldFun = fun
@@ -1104,25 +1121,15 @@ all_lists_contain(Element, [List | Other]) ->
         true -> all_lists_contain(Element, Other)
     end.
 
+
 %%
 %%  sublist(L, F, C) returns C elements of list L starting with F-th element of the list.
 %%  L should be list, F - positive integer, C positive integer or 0.
 %%
-
-sublist(_, _, 0) ->
-    [];
-
-sublist(List, 1, Count) when Count >= erlang:length(List) ->
-    List;
-
-sublist(List, 1, Count) -> % when Count >= 1
-    {List1, _} = lists:split(Count, List),
-    List1;
-
 sublist(List, From, _Count) when From > erlang:length(List) ->
     [];
 
-sublist(List, From, Count) -> % when From > 1
-    {_, List2} = lists:split(From-1, List),
-    sublist(List2, 1, Count).
+sublist(List, From, Count) ->
+    lists:sublist(List, From, Count).
+
 
