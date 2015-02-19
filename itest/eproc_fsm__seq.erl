@@ -194,7 +194,7 @@ terminate(_Reason, _StateName, _StateData) ->
 %%
 %%
 %%
-code_change(_OldVsn, StateName, StateData, _Extra) ->
+code_change(_OldVsn, StateName, StateData = #state{}, _Extra) ->
     {ok, StateName, StateData}.
 
 

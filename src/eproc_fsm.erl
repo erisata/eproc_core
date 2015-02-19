@@ -127,7 +127,7 @@
 %%  `{timeout, Timeout}`
 %%  :   Timeout for the function, 5000 (5 seconds) is the default.
 %%
-%%  `{user, (User :: (binary() | #user{}) | {User :: (binary() | #user{}), Comment :: binary()}`
+%%  `{user, (User :: (binary() | #user{})) | {User :: (binary() | #user{}), Comment :: binary()}`
 %%  :   indicates a user initiaten an action. This option is mainly
 %%      used for administrative actions: kill, suspend and resume.
 %%
