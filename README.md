@@ -10,6 +10,17 @@ Please look at `eproc` application's description for more general description
 and core principles.
 
 
+Alternatives
+----------------------------------------
+
+See [LinkedIn discussion](https://www.linkedin.com/groups/Erlang-BPM-90878.S.87254805),
+it has the following mentioned:
+
+  * https://github.com/klarna/meshup
+  * https://github.com/spawnproc/bpe
+  * http://cloudi.org/
+
+
 Design
 ========================================
 
