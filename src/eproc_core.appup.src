@@ -1,0 +1,13 @@
+{git,
+    [
+        {"1.1.2", [
+            % eproc_timer delays must be recalculated.
+            {restart_application, eproc_core}
+        ]}
+    ],
+    [
+        {"1.1.2", [
+            {restart_application, eproc_core}
+        ]}
+    ]
+}.
