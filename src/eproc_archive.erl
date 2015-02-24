@@ -20,8 +20,6 @@
 %%  by store implementations and archive implementations. This will
 %%  allow to combine them as needed.
 %%
-%%  TODO: Define and implement.
-%%
 -module(eproc_archive).
 -compile([{parse_transform, lager_transform}]).
 -export([ref/2, archive_instance/4, archive_transitions/4]).
@@ -98,6 +96,6 @@ archive_instance(ArchiveRef, Instance, Transitions, Messages) ->
 
 archive_transitions(ArchiveRef, Instance, Transitions, Messages) ->
     {ArchMod, ArchArgs} = ArchiveRef,
-    ArchMod:archive_instance(ArchArgs, Instance, Transitions, Messages).
+    ArchMod:archive_transitions(ArchArgs, Instance, Transitions, Messages).
 
 
