@@ -579,7 +579,7 @@ set_timer(Name, After, Start, Event, Scope) ->
 start_timer(InstId, AttrId, #data{start = Start, delay = DelaySpec}) ->
     Now = os:timestamp(),
     Delay = duration_to_ms(DelaySpec),
-    Left = Delay - (timer:now_diff(Start, Now) div 1000),
+    Left = Delay - (timer:now_diff(Now, Start) div 1000),
     if
         Left < 0 ->
             {ok, EventMsg} = eproc_fsm_attr:make_event(?MODULE, InstId, AttrId, fired),

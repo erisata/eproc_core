@@ -72,7 +72,7 @@ mocked_cancel_test() ->
 %%
 init_restart_test() ->
     OldNow = erlang:now(),
-    receive after 200 -> ok end,
+    ok = timer:sleep(200),
     Attr1 = #attribute{ % In the past.
         module = eproc_timer, name = undefined, scope = [],
         data = {data, OldNow, 100, {i, t, m1, sent}, msg1},
@@ -80,12 +80,13 @@ init_restart_test() ->
     },
     Attr2 =  #attribute{ % In the future.
         module = eproc_timer, name = undefined, scope = [],
-        data = {data, erlang:now(), 100, {i, t, m2, sent}, msg2},
+        data = {data, OldNow, 400, {i, t, m2, sent}, msg2},
         from = from_trn, upds = [], till = undefined, reason = undefined
     },
     {ok, _State} = eproc_fsm_attr:init(0, [], 0, store, [Attr1, Attr2]),
-    ?assert(receive _TimerMsg1 -> true after 200 -> false end),
-    ?assert(receive _TimerMsg2 -> true after 400 -> false end).
+    ?assert(receive _TimerMsg1 -> true  after 100 -> false end),    % This should be fired immediatelly.
+    ?assert(receive _TimerMsg2 -> false after 150 -> true  end),    % This should be fired within 200 ms
+    ?assert(receive _TimerMsg2 -> true  after 150 -> false end).    %   from the eproc_fsm_attr:init/5.
 
 
 %%
