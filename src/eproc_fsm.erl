@@ -1285,7 +1285,9 @@ resume(FsmRef, Options) ->
                             try gen_server:call(ResolvedFsmRef, {'eproc_fsm$is_online'}) of
                                 true -> {ok, {inst, InstId}}
                             catch
-                                _:_ -> {error, resume_failed}
+                                C:E ->
+                                    lager:error("FSM resume failed with reason ~p:~p at ~p", [C, E, erlang:get_stacktrace()]),
+                                    {error, resume_failed}
                             end
                     end;
                 {error, running} ->
@@ -2435,7 +2437,9 @@ start_sync({ok, Pid}, StartOpts) ->
             try gen_server:call(Pid, {'eproc_fsm$is_online'}) of
                 true -> {ok, Pid}
             catch
-                _:_ -> {error, start_failed}
+                C:E ->
+                    lager:error("FSM start failed with reason ~p:~p at ~p", [C, E, erlang:get_stacktrace()]),
+                    {error, start_failed}
             end
     end;
 
