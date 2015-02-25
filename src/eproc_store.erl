@@ -151,9 +151,9 @@
         {error, not_found | running | terminated} |
         {error, Reason :: term()}
     when
-        NewStateName :: term(),
-        NewStateData :: term(),
-        ResumeScript :: script().
+        NewStateName :: term() | undefined,
+        NewStateData :: term() | undefined,
+        ResumeScript :: script() | undefined.
 
 
 %%

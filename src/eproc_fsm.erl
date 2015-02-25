@@ -1224,7 +1224,9 @@ suspend(Reason) ->
 %%          attempt or the original state, if there was no resume attempts.
 %%          This is the default option.
 %%        * An the option `{set, NewStateName, NewStateData, ResumeScript}` indicates
-%%          to use new state, as provided explicitly.
+%%          to use new state, as provided explicitly. All of the `NewStateName`,
+%%          `NewStateData`, `ResumeScript` can be `undefined`, which means to leave
+%%          the corresponding field unchanged (or script being empty).
 %%
 %%  `{start, (no | yes | start_spec())}`
 %%  :   indicates, if and how the FSM should be started, after marking it as resuming.
@@ -1944,7 +1946,15 @@ start_loaded(Instance, StartOpts, State) ->
                             {error, Reason}
                     end;
                 #resume_attempt{upd_sname = UpdSName, upd_sdata = UpdSData, resumed = #user_action{user = ResumedUser}} ->
-                    case init_loaded(Instance, UpdSName, UpdSData, State) of
+                    NewSName = case UpdSName of
+                        undefined -> LastSName;
+                        _         -> UpdSName
+                    end,
+                    NewSData = case UpdSData of
+                        undefined -> LastSData;
+                        _         -> UpdSData
+                    end,
+                    case init_loaded(Instance, NewSName, NewSData, State) of
                         {ok, NewState} ->
                             ok = limits_reset(State),
                             Trigger = #trigger_spec{

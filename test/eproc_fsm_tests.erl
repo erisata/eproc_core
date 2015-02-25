@@ -1432,9 +1432,10 @@ resume_no_start_test() ->
 %%        * with original state (1).
 %%        * with updated state (2).
 %%        * with updated state, when new state is invalid (3).
+%%        * with state name updated, and state data left unchanged (4).
 %%    * start
-%%        * as stored (1)
-%%        * as provided (2, 3)
+%%        * as stored (1, 4)
+%%        * as provided (2, 3, 4)
 %%
 resume_and_start_test() ->
     Opts = [{store, store}, {registry, registry}],
@@ -1443,9 +1444,10 @@ resume_and_start_test() ->
     ok = meck:new(eproc_registry_mock, [non_strict]),
     ok = meck:new(eproc_fsm__void, []),
     ok = meck:expect(eproc_store, set_instance_resuming, fun
-        (store, {inst, InstId = 101}, unchanged,           #user_action{}) -> {ok, InstId, {default, []}};
-        (store, {inst, InstId = 102}, {set, [s2], d2, []}, #user_action{}) -> {ok, InstId, {default, []}};
-        (store, {inst, InstId = 103}, {set, [s3], d3, []}, #user_action{}) -> {ok, InstId, {default, []}}
+        (store, {inst, InstId = 101}, unchanged,                         #user_action{}) -> {ok, InstId, {default, []}};
+        (store, {inst, InstId = 102}, {set, [s2], d2, []},               #user_action{}) -> {ok, InstId, {default, []}};
+        (store, {inst, InstId = 103}, {set, [s3], d3, []},               #user_action{}) -> {ok, InstId, {default, []}};
+        (store, {inst, InstId = 104}, {set, [s4], undefined, undefined}, #user_action{}) -> {ok, InstId, {default, []}}
     end),
     ok = meck:expect(eproc_store, load_instance, fun
         (store, {inst, InstId = 101}) ->
@@ -1495,6 +1497,22 @@ resume_and_start_test() ->
                         upd_script = [], resumed = #user_action{}
                     }]
                 }
+            }};
+        (store, {inst, InstId = 104}) ->
+            {ok, #instance{
+                inst_id = InstId, group = InstId, name = name, module = eproc_fsm__void,
+                args = {a}, opts = [], status = resuming, created = erlang:now(),
+                curr_state = #inst_state{
+                    stt_id = 1, sname = [some], sdata = {state, b}, attr_last_nr = 2,
+                    attrs_active = []
+                },
+                interrupt = #interrupt{
+                    intr_id = undefined, status = active, suspended = erlang:now(),
+                    resumes = [#resume_attempt{
+                        res_nr = 1, upd_sname = [s4], upd_sdata = undefined,
+                        upd_script = undefined, resumed = #user_action{}
+                    }]
+                }
             }}
     end),
     ok = meck:expect(eproc_store, set_instance_resumed, fun
@@ -1506,27 +1524,33 @@ resume_and_start_test() ->
     ok = meck:expect(eproc_registry, make_new_fsm_ref, fun
         (registry, {inst, 101}, {default, [aaa]}) -> {ok, {via, eproc_registry_mock, 1}};
         (registry, {inst, 102}, {default, []})    -> {ok, {via, eproc_registry_mock, 2}};
-        (registry, {inst, 103}, {default, []})    -> {ok, {via, eproc_registry_mock, 3}}
+        (registry, {inst, 103}, {default, []})    -> {ok, {via, eproc_registry_mock, 3}};
+        (registry, {inst, 104}, {default, []})    -> {ok, {via, eproc_registry_mock, 4}}
     end),
     ok = meck:expect(eproc_registry_mock, whereis_name, fun
         (1) -> {ok, P} = eproc_fsm:start_link({local, resume_and_start_test_pid1}, {inst, 101}, Opts), unlink(P), P;
         (2) -> {ok, P} = eproc_fsm:start_link({local, resume_and_start_test_pid2}, {inst, 102}, Opts), unlink(P), P;
-        (3) -> {ok, P} = eproc_fsm:start_link({local, resume_and_start_test_pid3}, {inst, 103}, Opts), unlink(P), P
+        (3) -> {ok, P} = eproc_fsm:start_link({local, resume_and_start_test_pid3}, {inst, 103}, Opts), unlink(P), P;
+        (4) -> {ok, P} = eproc_fsm:start_link({local, resume_and_start_test_pid4}, {inst, 104}, Opts), unlink(P), P
     end),
     ok = meck:expect(eproc_fsm__void, code_change, fun
         (state, [some], {state, b}, undefined) -> {ok, [some], {state, b}};
         (state, [s2],   d2,         undefined) -> {ok, [s2],   d2};
-        (state, [s3],   d3,         undefined) -> meck:exception(error, function_clause)
+        (state, [s3],   d3,         undefined) -> meck:exception(error, function_clause);
+        (state, [s4],   {state, b}, undefined) -> {ok, [s4],   {state, b}}
     end),
     ok = meck:expect(eproc_fsm__void, init, fun
         ([some], {state, b}) -> ok;
-        ([s2],   d2        ) -> ok
+        ([s2],   d2        ) -> ok;
+        ([s4],   {state, b}) -> ok
     end),
     {ok, {inst, 101}}      = eproc_fsm:resume(resume_and_start_test_1, [{start, {default, [aaa]}}, {fsm_ref, {inst, 101}}, {state, unchanged} | Opts]),
     {ok, {inst, 102}}      = eproc_fsm:resume(resume_and_start_test_2, [{start, yes}, {fsm_ref, {inst, 102}}, {state, {set, [s2], d2, []}} | Opts]),
     {error, resume_failed} = eproc_fsm:resume(resume_and_start_test_3, [{start, yes}, {fsm_ref, {inst, 103}}, {state, {set, [s3], d3, []}} | Opts]),
+    {ok, {inst, 104}}      = eproc_fsm:resume(resume_and_start_test_4, [{start, yes}, {fsm_ref, {inst, 104}}, {state, {set, [s4], undefined, undefined}} | Opts]),
     exit(whereis(resume_and_start_test_pid1), normal),
     exit(whereis(resume_and_start_test_pid2), normal),
+    exit(whereis(resume_and_start_test_pid4), normal),
     ?assert(meck:validate([eproc_store, eproc_registry, eproc_registry_mock, eproc_fsm__void])),
     ok = meck:unload([eproc_store, eproc_registry, eproc_registry_mock, eproc_fsm__void]).
 
