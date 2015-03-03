@@ -27,10 +27,13 @@
 %%%
 %%% ETS match specifications are used for selecting events.
 %%%
+%%% For distributed environments, this only works for nodes, connected
+%%% using Erlang distribution (uses `gen_server:abcast/2`).
+%%%
 -module(eproc_event_hub).
 -bahaviour(gen_server).
 -compile([{parse_transform, lager_transform}]).
--export([start_link/1, listen/2, recv/3, notify/2]).
+-export([start_link/1, start/1, listen/2, recv/3, notify/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -include("eproc.hrl").
 -export_type([session_ref/0]).
@@ -52,6 +55,18 @@
 
 start_link(Name) ->
     gen_server:start_link(Name, ?MODULE, {}, []).
+
+
+%%
+%%  Start this hub without linking.
+%%
+-spec start(
+        Name :: otp_name()
+    ) ->
+        {ok, pid()} | ignore | {error, term()}.
+
+start(Name) ->
+    gen_server:start(Name, ?MODULE, {}, []).
 
 
 %%
@@ -95,8 +110,15 @@ recv(Name, {session, SessionId, Start, Duration}, MatchSpec) ->
 %%
 %%  Event senders invoke this to publish events.
 %%
+-spec notify(
+        Name    :: otp_ref(),
+        Event   :: term()
+    ) ->
+        ok.
+
 notify(Name, Event) ->
-    gen_server:cast(Name, {notify, Event}).
+    abcast = gen_server:abcast(Name, {notify, Event}),
+    ok.
 
 
 

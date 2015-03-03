@@ -13,11 +13,23 @@
 %| See the License for the specific language governing permissions and
 %| limitations under the License.
 %\--------------------------------------------------------------------
-{merge_tests, false}.
-{auto_compile, true}.
-{suites, ".", [
-    eproc_fsm_SUITE,
-    eproc_reg_gproc_SUITE,
-    eproc_store_ets_SUITE,
-    eproc_event_hub_SUITE
-]}.
+[
+    {kernel, [
+        {error_logger, {file, "cluster_testA_kernel.log"}},
+        {distributed, []},
+        {sync_nodes_mandatory, []},
+        {sync_nodes_optional, ['testA@{{HOSTNAME}}', 'testB@{{HOSTNAME}}']},
+        {sync_nodes_timeout, 5000}
+    ]},
+    {sasl, [
+        {sasl_error_logger, {file, "cluster_testA_sasl.log"}}
+    ]},
+    {lager, [
+        {handlers, [{lager_file_backend, [{file, "cluster_testA_lager.log"}, {level, debug}]}]},
+        {error_logger_redirect, true}
+    ]},
+    {eproc_core, [
+        {store,     {eproc_store_ets, ref, []}},
+        {registry,  {eproc_reg_gproc, ref, []}}
+    ]}
+].
