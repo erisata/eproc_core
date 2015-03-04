@@ -1,13 +1,12 @@
 {git,
     [
-        {"1.1.2", [
-            % eproc_timer delays must be recalculated.
-            {restart_application, eproc_core}
+        {"1.2.0", [
+            {load_module, eproc_event_hub}
         ]}
     ],
     [
-        {"1.1.2", [
-            {restart_application, eproc_core}
+        {"1.2.0", [
+            {load_module, eproc_event_hub}
         ]}
     ]
 }.
