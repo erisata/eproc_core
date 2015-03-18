@@ -352,7 +352,10 @@ attr_task(_StoreArgs, AttrModule, AttrTask) ->
 %%
 %%  Get instance data.
 %%
-get_instance(_StoreArgs, {filter, ResFrom, ResCount, Filters}, Query) ->
+get_instance(StoreArgs, {filter, {ResFrom, ResCount}, Filters}, Query) ->
+    get_instance(StoreArgs, {filter, {ResFrom, ResCount, last_trn}, Filters}, Query);
+
+get_instance(_StoreArgs, {filter, {ResFrom, ResCount, SortedBy}, Filters}, Query) ->
     FoldFun = fun
         (_, {[], _})        -> {[], []};
         (Fun, {Inst, Filt}) -> Fun(Inst, Filt)
@@ -364,17 +367,46 @@ get_instance(_StoreArgs, {filter, ResFrom, ResCount, Filters}, Query) ->
         fun resolve_instance_match_filter/2,
         fun resolve_instance_age_filters/2
     ],
-    {InstancesPreQ, _} = lists:foldl(FoldFun, {undefined, parse_instance_filters(Filters)}, FunList),
+    {InstancesPreSort, _} = lists:foldl(FoldFun, {undefined, parse_instance_filters(Filters)}, FunList),
+    % TODO: this function can be used in other modules too. Move it to eproc_store.erl?
+    SortFun = case SortedBy of
+        id ->
+            fun(#instance{inst_id = ID1}, #instance{inst_id = ID2}) ->
+                ID1 =< ID2
+            end;
+        name ->
+            fun(#instance{name = Name1}, #instance{name = Name2}) ->
+                Name1 =< Name2
+            end;
+        last_trn ->
+            fun(#instance{} = Instance1, #instance{} = Instance2) ->
+                instance_last_trn(Instance1) >= instance_last_trn(Instance2)
+            end;
+        created ->
+            fun(#instance{created = Cr1}, #instance{created = Cr2}) ->
+                Cr1 >= Cr2
+            end;
+        module ->
+            fun(#instance{module = Module1}, #instance{module = Module2}) ->
+                Module1 =< Module2
+            end;
+        status ->
+            fun(#instance{status = Status1}, #instance{status = Status2}) ->
+                Status1 =< Status2
+            end;
+        age ->
+            Now = os:timestamp(),
+            fun(#instance{} = Instance1, #instance{} = Instance2) ->
+                instance_age_us(Instance1, Now) >= instance_age_us(Instance2, Now)
+            end
+    end,
+    InstancesSortedPreQ = lists:sort(SortFun, InstancesPreSort),
     MapFun = fun (InstancePreQ) ->
         {ok, InstanceRez} = read_instance_data(InstancePreQ, Query),
         InstanceRez
     end,
-    Instances = lists:map(MapFun, InstancesPreQ),
-    SortFun = fun(#instance{created = Cr1}, #instance{created = Cr2}) ->
-        Cr1 =< Cr2
-    end,
-    InstSorted = lists:sort(SortFun, Instances),
-    {ok, sublist(InstSorted, ResFrom, ResCount)};
+    Instances = lists:map(MapFun, InstancesSortedPreQ),
+    {ok, {erlang:length(Instances), true, sublist(Instances, ResFrom, ResCount)}};
 
 get_instance(_StoreArgs, {list, FsmRefs}, Query) when is_list(FsmRefs) ->
     ReadFun = fun
@@ -829,17 +861,36 @@ parse_instance_filter({created, undefined, Till}) ->
 parse_instance_filter({created, From, Till}) ->
     [parse_instance_filter({created, From, undefined}), parse_instance_filter({created, undefined, Till})];
 
-parse_instance_filter({tags, _}) ->
+parse_instance_filter({tag, _}) ->
     pre_filter;
 
-parse_instance_filter({module, Module}) ->
-    {'==', '$1', Module};
+parse_instance_filter({module, ModuleOrList}) ->
+    MapFun = fun(Module) ->
+        {'==', '$1', Module}
+    end,
+    parse_instance_filter({single_or_list, ModuleOrList, MapFun});
 
-parse_instance_filter({status, Status}) ->
-    {'==', '$2', Status};
+parse_instance_filter({status, StatusOrList}) ->
+    MapFun = fun(Status) ->
+        {'==', '$2', Status}
+    end,
+    parse_instance_filter({single_or_list, StatusOrList, MapFun});
 
 parse_instance_filter({age, _Age}) ->
-    post_filter.
+    post_filter;
+
+parse_instance_filter({single_or_list, [], _}) ->
+    [];
+
+parse_instance_filter({single_or_list, Values, MapFun}) when is_list(Values) ->
+    FilterList = lists:map(MapFun, Values),
+    case FilterList of
+        [Filter] -> Filter;
+        [Filter | Filters] -> erlang:list_to_tuple(['orelse', Filter | Filters])
+    end;
+
+parse_instance_filter({single_or_list, Value, MapFun}) ->
+    parse_instance_filter({single_or_list, [Value], MapFun}).
 
 
 %%
@@ -851,7 +902,6 @@ parse_instance_filter({age, _Age}) ->
 %%          A triple {PreFilters, MatchSpec, PostFilters};
 %%          A pair {MatchSpec, PostFilters};
 %%          A list of PostFilters.
-%%      Query parameter from get_instance/3.
 %% The return value is a pair {Inst, Filters}, where:
 %%      Inst is undefined if database wasn't querried or [#instance{}];
 %%      Inst is [], if no instance satisfy all the original filters;
@@ -866,81 +916,47 @@ parse_instance_filter({age, _Age}) ->
 %%
 
 %%
-%% Resolves id filter. At most one such filter is expected.
-%% Takes undefined, returns undefined or a list with single instance.
+%% Resolves id filter. At most one such filter is expected, although several instance IDs can be provided in it.
+%% Takes undefined, returns undefined or a list of instances.
 %%
-resolve_instance_id_filter(undefined, {[{id,InstId}|PreFilters], MFs, PFs}) ->
-    case read_instance({inst,InstId}, full) of                         % DB query
-        {ok, Inst}  -> {[Inst], {PreFilters, MFs, PFs}};
-        {error, _}  -> {[], {PreFilters, MFs, PFs}}
-    end;
-
-resolve_instance_id_filter(undefined, Filters) ->
-    {undefined, Filters}.
+resolve_instance_id_filter(Instances, Filters) ->
+    QueryFun = fun(InstId) -> read_instance({inst,InstId}, full) end,
+    % FilterFun is defined for completeness only, but is never called
+    FilterFun = fun(#instance{inst_id = InstId}, InstIds) -> lists:member(InstId, InstIds) end,
+    resolve_pre_filter(Instances, Filters, id, QueryFun, FilterFun).
 
 
 %%
 %% Resolves name filter. At most one such filter is expected.
-%% Takes undefined or a list with single instance, returns undefined or a list with single instance.
+%% Takes undefined or an instance list, returns undefined or an instance list.
 %%
-resolve_instance_name_filter(undefined, {[{name, Name} | PreFilters], MFs, PFs}) ->
-    case read_instance({name, Name}, full) of
-        {ok, Inst}  -> {[Inst], {PreFilters, MFs, PFs}};
-        {error, _}  -> {[],     {PreFilters, MFs, PFs}}
-    end;
-
-resolve_instance_name_filter([Instance = #instance{name = Name}], {[{name, Name} | PreFilters], MFs, PFs}) ->
-    {[Instance], {PreFilters, MFs, PFs}};
-
-resolve_instance_name_filter([#instance{}], {[{name, _} | PreFilters], MFs, PFs}) ->
-    {[], {PreFilters, MFs, PFs}};
-
 resolve_instance_name_filter(Instances, Filters) ->
-    {Instances, Filters}.
+    QueryFun = fun(Name) -> read_instance({name, Name}, full) end,
+    FilterFun = fun(#instance{name = Name}, Names) -> lists:member(Name, Names) end,
+    resolve_pre_filter(Instances, Filters, name, QueryFun, FilterFun).
 
 
 %%
 %% Resolves tags filters.
-%% Takes undefined or a list with single instance.
+%% Takes undefined or a list of instances.
 %%
 resolve_instance_tags_filters(Instances, {PreFilters, MFs, PFs}) ->
-    FoldFun = fun
-        (_, [])         -> [];
-        (Filter, Insts) -> resolve_instance_tags_filter(Insts, Filter)
-    end,
-    {lists:foldl(FoldFun, Instances, PreFilters), {MFs, PFs}}.
-
-
-%%
-%% Resolves each tag of a single tags filters.
-%% It is called by resolve_instance_tags_filters/3 instead of get_instance/3.
-%% The first parameter is undefined or a list of instances.
-%% The second parameter is a single tags filter (rather than all the not parsed filters).
-%% The return value is an instance list.
-%%
-resolve_instance_tags_filter(Instances, {tags, []}) ->
-    Instances;
-
-resolve_instance_tags_filter(undefined, {tags, [{TagName, TagType} | RemTags]}) ->
-    % TODO: call eproc_meta:get_instances/2 ?
-    InstIds = case TagType of
-        undefined -> lists:flatten(ets:match(?TAG_TBL, #meta_tag{tag = TagName,            inst_id = '$1', _ = '_'}));
-        TT        -> lists:flatten(ets:match(?TAG_TBL, #meta_tag{tag = TagName, type = TT, inst_id = '$1', _ = '_'}))
-    end,
-    FilterMapFun = fun(InstId) ->
-        case read_instance({inst, InstId}, full) of
-            {ok, Inst}  -> {true, Inst};
-            {error, _}  -> false
+    MapFun = fun(Tag) ->
+        {TagName, TagType} = case Tag of
+            {TN, TT}-> {TN, TT};
+            TN      -> {TN, undefined}
+        end,
+        case TagType of
+            undefined ->
+                ets:match(?TAG_TBL, #meta_tag{tag = TagName,                 inst_id = '$1', _ = '_'});
+            _ ->
+                ets:match(?TAG_TBL, #meta_tag{tag = TagName, type = TagType, inst_id = '$1', _ = '_'})
         end
     end,
-    case lists:filtermap(FilterMapFun, InstIds) of
-        []          -> [];
-        Instances   -> resolve_instance_tags_filter(Instances, {tags, RemTags})
-    end;
-
-resolve_instance_tags_filter(Instances, {tags, Tags}) when is_list(Instances) ->
-    % TODO: move functionality to eproc_meta?
-    FilterFun = fun(#instance{curr_state = #inst_state{attrs_active = Attributes}}) ->
+    GetIdsFun = fun(Tags) -> lists:flatten(lists:map(MapFun, Tags)) end,
+    QueryFun = fun(InstId) -> read_instance({inst, InstId}, full) end,
+    % TODO: move checking if instance containts some tag to eproc_meta?
+    FilterFun = fun(#instance{curr_state = #inst_state{attrs_active = Attributes}}, Tags) ->
         AttrFilterFun = fun
             % TODO: Filtering is done according to name field of attribute instance.
             %       The same case is in eproc_webapi_rest_inst:instancef_add_tags/2
@@ -951,20 +967,95 @@ resolve_instance_tags_filter(Instances, {tags, Tags}) when is_list(Instances) ->
         end,
         AttributesFiltered = lists:filtermap(AttrFilterFun, Attributes),
         FoldFun = fun
-            (_, false)                  ->
-                false;
-            ({TagName, undefined}, true) ->
-                TagFoldFun = fun
-                    (_, true)               -> true;
-                    ({tag, Name, _}, false) -> Name == TagName
+            (_, true) ->
+                true;
+            (Tag, false) ->
+                {TagName, TagType} = case Tag of
+                    {TN, TT}-> {TN, TT};
+                    TN      -> {TN, undefined}
                 end,
-                lists:foldl(TagFoldFun, false, AttributesFiltered);
-            ({TagName,TagType}, true)   ->
-                lists:member({tag,TagName,TagType}, AttributesFiltered)
+                case TagType of
+                    undefined ->
+                        TagFoldFun = fun
+                            (_, true)               -> true;
+                            ({tag, Name, _}, false) -> Name == TagName
+                        end,
+                        lists:foldl(TagFoldFun, false, AttributesFiltered);
+                    _ ->
+                        lists:member({tag,TagName,TagType}, AttributesFiltered)
+                end
         end,
-        lists:foldl(FoldFun, true, Tags)
+        lists:foldl(FoldFun, false, Tags)
     end,
-    lists:filter(FilterFun, Instances).
+    FoldFun = fun({tag, Tags}, Insts) -> resolve_pre_filter(Insts, Tags, {GetIdsFun, QueryFun}, FilterFun) end,
+    {lists:foldl(FoldFun, Instances, PreFilters), {MFs, PFs}}.
+
+%%
+%% Resolves some prefilter.
+%% If the first prefilter isn't the one, which has to be resolved, then does nothing.
+%% Othervise resolves the first prefilter and returns a tuple {Instances, Filters}, where:
+%%      Instances is a list of instances after applying the first prefilter;
+%%      Filters - a tuple of Filters without the resolved filter.
+%% Parameters:
+%%      Instances - list of instances before filtering; if undefined, then the database haven't been queried yet.
+%%      Filters - a tuple of Filters = {PreFilters, MatchSpec, PostFilters}.
+%%          The first element of PreFilters list is resolved in this call.
+%%      FilterName - name of the filter to be resolved. The first prefilter is resolved, if it is FilterName.
+%%      QueryFuns - functions for querying the database, in case it hasn't been done (if Instances == undefined).
+%%          QueryFuns is either {GetIDsFun :: fun/1, QueryFun :: fun/1} or QueryFun :: fun/1, where:
+%%              GetIDsFun is passed a list of filter values and should return a list of ids for database query.
+%%                  If GetIDsFun isn't provided, it is assumed that filter value is a list of ids.
+%%              QueryFun is passed a single id and should return either {ok, #instance{}} or {error, Reason}.
+%%      FilterFun - fun/2 to be used if the database have been queried (if Instances is [#instance{}]).
+%%          The parameters are:
+%%              #instance{} - an instance to be checked.
+%%              List of filter values.
+%%          The function must return true, if the instance passes at least one filter in the list of filters.
+%%          and false otherwise.
+%% If the database hasn't been querried, GetIDsFun is called, duplicate IDs are removed from the resulting list
+%%  and QueryFun is called for each ID to get a list of instances.
+%%  If some IDs cannot be retrieved from the database, they are ignored.
+%% If the database has been querried, FilterFun is called for every instance of Instances.
+%%  FilterFun is passed a filter value list of the filter, which is being resolved.
+%%  Only the instances, for which FilterFun returns true are returned in a list.
+%%
+resolve_pre_filter(Instances, {[{FilterName, FilterValue} | PreFilters], MFs, PFs}, FilterName, QueryFuns, FilterFun) ->
+    {resolve_pre_filter(Instances, FilterValue, QueryFuns, FilterFun), {PreFilters, MFs, PFs}};
+resolve_pre_filter(Instances, Filters, _, _, _) ->
+    {Instances, Filters}.
+
+
+%%
+%% Resolves a filter value list (second parameter).
+%% If filter value is not a list, makes a list of single filter value and resolves the list.
+%% Otherwise, see documentation of resolve_pre_filter/5.
+%%
+resolve_pre_filter(_Instances, [], _QueryFuns, _FilterFun) ->
+    [];
+
+resolve_pre_filter(undefined, FilterValues, QueryFuns, _) when is_list(FilterValues) ->
+    {Ids, QueryFun} = case QueryFuns of
+        {GetIdsFun, QF} -> {GetIdsFun(FilterValues), QF};
+        QF -> {FilterValues, QF}
+    end,
+    UniqueIds = remove_duplicates(Ids),
+    FilterMapFun = fun(Id) ->
+        case QueryFun(Id) of
+            {ok, Inst}  -> {true, Inst};
+            {error, _}  -> false
+        end
+    end,
+    lists:filtermap(FilterMapFun, UniqueIds);
+
+resolve_pre_filter([], _, _, _) ->
+    [];
+
+resolve_pre_filter(Instances, FilterValues, _, FilterFun) when is_list(FilterValues) ->
+    ListFilterFun = fun(FilterValue) -> FilterFun(FilterValue, FilterValues) end,
+    lists:filter(ListFilterFun, Instances);
+
+resolve_pre_filter(Instances, FilterValue, QFun, FFun) ->
+    resolve_pre_filter(Instances, [FilterValue], QFun, FFun).
 
 
 %%
@@ -994,13 +1085,34 @@ resolve_instance_age_filters(Instances, PostFilters) ->
     end,
     AgeFilter = lists:foldl(FoldFun, 0, PostFilters) * 1000,
     Now = os:timestamp(),
-    FilterFun = fun
-        (#instance{created = Created, terminated = undefined}) ->
-            eproc_timer:timestamp_diff_us(Now, Created) >= AgeFilter;
-        (#instance{created = Created, terminated = Terminated}) ->
-            eproc_timer:timestamp_diff_us(Terminated, Created) >= AgeFilter
-    end,
+    FilterFun = fun(#instance{} = Instance) -> instance_age_us(Instance, Now) >= AgeFilter end,
     {lists:filter(FilterFun, Instances), []}.
+
+
+%%
+%% Returns the age of the instance in microseconds.
+%% Now timestamp() can be passed as the second parameter
+%%  to simulate the age calculation of several instances at the same time.
+%% TODO: make it more general. Which module is appropriate for this function? eproc_timer?
+%% TODO: case without Now timestamp() not used, however it would be useful to export it.
+%%
+%instance_age_us(#instance{} = Instance) ->
+%    instance_age_us(Instance, os:timestamp()).
+
+instance_age_us(#instance{created = Created, terminated = undefined}, Now) ->
+    eproc_timer:timestamp_diff_us(Now, Created);
+
+instance_age_us(#instance{created = Created, terminated = Terminated}, _) ->
+    eproc_timer:timestamp_diff_us(Terminated, Created).
+
+
+%%
+%% Returns last transition timestamp() of the instance or undefined, it is not available.
+%% TODO: make it more general.
+%%
+instance_last_trn(#instance{curr_state = undefined})                            -> undefined;
+instance_last_trn(#instance{curr_state = #inst_state{stt_id = 0}})              -> undefined;
+instance_last_trn(#instance{curr_state = #inst_state{timestamp = Timestamp}})   -> Timestamp.
 
 
 %% =============================================================================
@@ -1133,3 +1245,14 @@ sublist(List, From, Count) ->
     lists:sublist(List, From, Count).
 
 
+%%
+%% Returns a list, which is obtained from List by keeping only the first occurence of each element.
+%%
+remove_duplicates(List) ->
+    lists:reverse(remove_duplicates(List, [])).
+
+remove_duplicates([], Rezult) ->
+    Rezult;
+
+remove_duplicates([Elem | List], Rezult) ->
+    remove_duplicates([X || X <- List, X =/= Elem], [Elem | Rezult]).

@@ -224,7 +224,7 @@
 %%  The returned result is an intersection (`AND`) of all filter clauses.
 %%  The result will have union (`OR`) of all filter values, specified in a single filter clause.
 %%
-%%  Whe performing filtering of the instances, result paging is supported including row sorting.
+%%  When performing filtering of the instances, result paging is supported including row sorting.
 %%  The defaut sorting is by `last_trn`.
 %%
 %%  The parameter Query can have several values:
@@ -235,7 +235,7 @@
 %%  :   Returns FSM header information with the current state attached.
 %%  `recent`
 %%  :   Returns FSM header information with some recent state attached.
-%%      The recent state can be retrieved easied, altrough can be suitable
+%%      The recent state can be retrieved easier, although can be suitable
 %%      in some cases, like showing a list of instances with current state names.
 %%
 -callback get_instance(
