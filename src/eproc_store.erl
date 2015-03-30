@@ -300,17 +300,33 @@
 
 
 %%
-%%  Get particular message by message id or message copy id.
+%%  Get particular message by message id, message copy id, list of them of by filter.
 %%  The returned message should contain message id instead of message copy id.
 %%  Partial message destination should be resolved when returing the message.
 %%
+%%  Filtering and query by list is similar to get_instance/3 callback. The default
+%%  sorting is by date.
+%%
 -callback get_message(
         StoreArgs   :: term(),
-        MsgId       :: msg_id() | msg_cid(),
+        MsgId       :: msg_id() | msg_cid() | {list, [msg_id() | msg_cid()]} | {filter, Paging, [FilterClause]},
         Query       :: all
     ) ->
-        {ok, #message{}} |
-        {error, Reason :: term()}.
+        {ok, #message{} | [#message{}] | {TotalCount, TotalExact, [#message{}]}} |
+        {error, Reason :: term()}
+    when
+        FilterClause ::
+            {id,        MIdFilter | [MIdFilter]} |
+            {date,      From :: timestamp() | undefined, Till :: timestamp() | undefined} |
+            {peer,      [PeerFilter]},
+        MIdFilter   :: InstId :: inst_id(),
+        PeerFilter  :: {Role :: (send | recv | any), event_src()},
+        Paging      :: {ResFrom, ResCount} | {ResFrom, ResCount, SortedBy}, % SortedBy=last_trn by default
+        ResFrom     :: integer() | undefined,
+        ResCount    :: integer() | undefined,
+        SortedBy    :: date | sender | receiver,
+        TotalCount  :: integer() | undefined,
+        TotalExact  :: boolean().
 
 
 %%
