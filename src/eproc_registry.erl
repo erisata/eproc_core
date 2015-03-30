@@ -34,7 +34,7 @@
 -module(eproc_registry).
 -compile([{parse_transform, lager_transform}]).
 -export([supervisor_child_specs/1, ref/0, ref/2]).
--export([make_new_fsm_ref/3, make_fsm_ref/2, register_fsm/3]).
+-export([make_new_fsm_ref/3, make_fsm_ref/2, register_fsm/3, whereis_fsm/2]).
 -export_type([ref/0, registry_fsm_ref/0]).
 -include("eproc.hrl").
 
@@ -229,6 +229,21 @@ register_fsm(_Registry, _InstId, []) ->
 register_fsm(Registry, InstId, Refs) ->
     {ok, {RegistryMod, RegistryArgs}} = resolve_ref(Registry),
     RegistryMod:register_fsm(RegistryArgs, InstId, Refs).
+
+
+%%
+%%  Get FSM runtime process PID by FSM Reference in the
+%%  specified registry.
+%%
+-spec whereis_fsm(
+        Registry    :: registry_ref(),
+        FsmRef      :: fsm_ref()
+    ) ->
+        Pid :: pid() | undefined.
+
+whereis_fsm(Registry, FsmRef) ->
+    {ok, {RegistryMod, RegistryArgs}} = resolve_ref(Registry),
+    RegistryMod:whereis_name({fsm, RegistryArgs, FsmRef}).
 
 
 

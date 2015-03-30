@@ -23,6 +23,7 @@
     test_simple_unnamed/1,
     test_simple_named/1,
     test_suspend_resume/1,
+    test_update/1,
     test_kill/1,
     test_rtdata/1,
     test_timers/1,
@@ -40,6 +41,7 @@ all() -> [
     test_simple_unnamed,
     test_simple_named,
     test_suspend_resume,
+    test_update,
     test_kill,
     test_rtdata,
     test_timers,
@@ -133,6 +135,29 @@ test_suspend_resume(_Config) ->
     {ok, Seq} = eproc_fsm:resume(Seq, [{state, {set, [incrementing], {state, 100}, []}}]),
     true      = eproc_fsm__seq:exists(Seq),
     {ok, 100} = eproc_fsm__seq:get(Seq),
+    %% Terminate FSM.
+    ok        = eproc_fsm__seq:close(Seq),
+    false     = eproc_fsm__seq:exists(Seq),
+    ok.
+
+
+%%
+%%  Test, if FSM state update works.
+%%
+test_update(_Config) ->
+    {ok, Seq} = eproc_fsm__seq:new(),
+    {ok, 1}   = eproc_fsm__seq:next(Seq),
+    %% Update running process
+    true      = eproc_fsm__seq:exists(Seq),
+    {ok, Seq} = eproc_fsm:update(Seq, undefined, {state, 100}, undefined, []),
+    true      = eproc_fsm__seq:exists(Seq),
+    {ok, 100} = eproc_fsm__seq:get(Seq),
+    %% Update suspended process
+    {ok, Seq} = eproc_fsm:suspend(Seq, []),
+    false     = eproc_fsm__seq:exists(Seq),
+    {ok, Seq} = eproc_fsm:update(Seq, undefined, {state, 200}, undefined, []),
+    true      = eproc_fsm__seq:exists(Seq),
+    {ok, 200} = eproc_fsm__seq:get(Seq),
     %% Terminate FSM.
     ok        = eproc_fsm__seq:close(Seq),
     false     = eproc_fsm__seq:exists(Seq),

@@ -103,3 +103,17 @@ register_fsm_test() ->
     ok = meck:unload(eproc_reg_gproc).
 
 
+%%
+%%  Check if eproc_registry:whereis_fsm/2 works.
+%%
+whereis_fsm_test() ->
+    {ok, Registry} = eproc_registry:ref(eproc_reg_gproc, []),
+    ok = meck:new(eproc_reg_gproc, []),
+    ok = meck:expect(eproc_reg_gproc, whereis_name, fun
+        ({fsm, [], {inst, 123}}) -> pid123
+    end),
+    ?assertEqual(pid123, eproc_registry:whereis_fsm(Registry, {inst, 123})),
+    ?assert(meck:validate(eproc_reg_gproc)),
+    ok = meck:unload(eproc_reg_gproc).
+
+

@@ -154,7 +154,7 @@
     send_create_event/4, sync_send_create_event/4,
     send_event/3, send_event/2,
     sync_send_event/3, sync_send_event/2,
-    kill/2, suspend/2, resume/2,
+    kill/2, suspend/2, resume/2, update/5,
     is_online/2, is_online/1
 ]).
 
@@ -1147,7 +1147,7 @@ kill(FsmRef, Options) ->
 %%  This function depends on `eproc_registry`.
 %%
 -spec suspend(
-        FsmRef  :: fsm_ref() | otp_ref(),
+        FsmRef  :: fsm_ref(),
         Options :: list()
     ) ->
         {ok, ResolvedFsmRef :: fsm_ref()} |
@@ -1297,6 +1297,82 @@ resume(FsmRef, Options) ->
                 {error, Reason} ->
                     {error, Reason}
             end
+    end.
+
+
+%%
+%%  Updates FSM internal state explicitly. This funcion should only be used
+%%  as a tool for an administrator (in a script, or from some GUI) to fix
+%%  broken processes. This function suspends the FSM and then tries to resume
+%%  it with new state. Additionally, it waits till the FSM will be terminates
+%%  before attempting to resume it. This function will work as resume/2 for
+%%  already suspended processes with `{state, {set, NewStateName, NewStateData, UpdateScript}}` option.
+%%
+%%  Parameters:
+%%
+%%  `FsmRef`
+%%  :   References particular FSM instance. The reference must be either
+%%      `{inst, _}` or `{name, _}`. Erlang process ids or names are not
+%%      supported here. See `send_event/3` for more details.
+%%  `NewStateName`
+%%  :   New state name, or undefined.
+%%  `NewStateData`
+%%  :   New state data, or undefined.
+%%  `UpdateScript`
+%%  :   Script, to be executed when resuming the FSM.
+%%  `Options`
+%%  :   Any of the Common FSM Options can be provided here as well
+%%      as all options, supported by `suspend/2` and `resume/2` functions.
+%%      Only `store`, `registry` and `user` common options will be used
+%%      here, other options will be ignored. Options, specific to
+%%      this function are listed bellow.
+%%
+%%  Options, specific to this function:
+%%
+%%  `{timeout, Timeout}`
+%%  :   Stands for a timeout in ms to wait for FSM to suspend.
+%%
+-spec update(
+        FsmRef          :: fsm_ref(),
+        NewStateName    :: state_name() | undefined,
+        NewStateData    :: state_data() | undefined,
+        UpdateScript    :: script() | undefined,
+        Options         :: list()
+    ) ->
+        {ok, ResolvedFsmRef :: fsm_ref()} |
+        {error, Reason :: term()}.
+
+update(FsmRef, NewStateName, NewStateData, UpdateScript, Options) ->
+    Registry = proplists:get_value(registry, Options, undefined),
+    Timeout  = proplists:get_value(timeout,  Options, 5000),
+    FsmPID = eproc_registry:whereis_fsm(Registry, FsmRef),
+    MonitorRef = case FsmPID of
+        undefined -> undefined;
+        _         -> erlang:monitor(process, FsmPID)
+    end,
+    case suspend(FsmRef, Options) of
+        {ok, SuspendedFsmRef} ->
+            WaitResult = case MonitorRef of
+                undefined ->
+                    ok;
+                _ ->
+                    receive
+                        {'DOWN', MonitorRef, process, FsmPID, _Info} ->
+                            ok
+                    after Timeout ->
+                        lager:error("Timeout while waiting for FSM ~p to suspend.", [FsmRef]),
+                        {error, timeout}
+                    end
+            end,
+            case WaitResult of
+                ok ->
+                    UpdateOpt = {state, {set, NewStateName, NewStateData, UpdateScript}},
+                    resume(SuspendedFsmRef, [UpdateOpt, Options]);
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 
