@@ -1304,7 +1304,7 @@ resume(FsmRef, Options) ->
 %%  Updates FSM internal state explicitly. This funcion should only be used
 %%  as a tool for an administrator (in a script, or from some GUI) to fix
 %%  broken processes. This function suspends the FSM and then tries to resume
-%%  it with new state. Additionally, it waits till the FSM will be terminates
+%%  it with new state. Additionally, it waits till the FSM will be terminated
 %%  before attempting to resume it. This function will work as resume/2 for
 %%  already suspended processes with `{state, {set, NewStateName, NewStateData, UpdateScript}}` option.
 %%
@@ -1367,7 +1367,7 @@ update(FsmRef, NewStateName, NewStateData, UpdateScript, Options) ->
             case WaitResult of
                 ok ->
                     UpdateOpt = {state, {set, NewStateName, NewStateData, UpdateScript}},
-                    resume(SuspendedFsmRef, [UpdateOpt, Options]);
+                    resume(SuspendedFsmRef, [UpdateOpt | Options]);
                 {error, Reason} ->
                     {error, Reason}
             end;
@@ -1377,7 +1377,7 @@ update(FsmRef, NewStateName, NewStateData, UpdateScript, Options) ->
 
 
 %%
-%%  Checks is process is online. This function makes a synchronous call to
+%%  Checks if process is online. This function makes a synchronous call to
 %%  the FSM process, so it can be used for sinchronizing with the FSM.
 %%  E.g. for waiting for asynchronous initialization to complete.
 %%
