@@ -665,7 +665,7 @@ write_instance_suspended(Instance = #instance{interrupt = undefined}, Reason) ->
     true = ets:insert(?INST_TBL, NewInstance),
     ok;
 
-write_instance_suspended(Instance = #instance{interrupt = #interrupt{}}, Reason) ->
+write_instance_suspended(Instance = #instance{interrupt = #interrupt{}}, _Reason) ->
     NewInstance = Instance#instance{
         status = suspended
     },
