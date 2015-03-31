@@ -269,6 +269,9 @@ set_instance_suspended(_StoreArgs, FsmRef, Reason) ->
                     {error, terminated};
                 {false, suspended} ->
                     {ok, InstId};
+                {false, resuming} ->
+                    ok = write_instance_suspended(Instance, Reason),
+                    {ok, InstId};
                 {false, running} ->
                     ok = write_instance_suspended(Instance, Reason),
                     {ok, InstId}
