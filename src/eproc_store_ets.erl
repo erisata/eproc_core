@@ -356,57 +356,26 @@ get_instance(StoreArgs, {filter, {ResFrom, ResCount}, Filters}, Query) ->
     get_instance(StoreArgs, {filter, {ResFrom, ResCount, last_trn}, Filters}, Query);
 
 get_instance(_StoreArgs, {filter, {ResFrom, ResCount, SortedBy}, Filters}, Query) ->
-    FoldFun = fun
-        (_, {[], _})        -> {[], []};
-        (Fun, {Inst, Filt}) -> Fun(Inst, Filt)
-    end,
-    FunList = [
+    FilterFuns = [
         fun resolve_instance_id_filter/2,
         fun resolve_instance_name_filter/2,
         fun resolve_instance_tags_filters/2,
         fun resolve_instance_match_filter/2,
         fun resolve_instance_age_filters/2
     ],
-    {InstancesPreSort, _} = lists:foldl(FoldFun, {undefined, parse_instance_filters(Filters)}, FunList),
-    % TODO: this function can be used in other modules too. Move it to eproc_store.erl?
-    SortFun = case SortedBy of
-        id ->
-            fun(#instance{inst_id = ID1}, #instance{inst_id = ID2}) ->
-                ID1 =< ID2
-            end;
-        name ->
-            fun(#instance{name = Name1}, #instance{name = Name2}) ->
-                Name1 =< Name2
-            end;
-        last_trn ->
-            fun(#instance{} = Instance1, #instance{} = Instance2) ->
-                instance_last_trn(Instance1) >= instance_last_trn(Instance2)
-            end;
-        created ->
-            fun(#instance{created = Cr1}, #instance{created = Cr2}) ->
-                Cr1 >= Cr2
-            end;
-        module ->
-            fun(#instance{module = Module1}, #instance{module = Module2}) ->
-                Module1 =< Module2
-            end;
-        status ->
-            fun(#instance{status = Status1}, #instance{status = Status2}) ->
-                Status1 =< Status2
-            end;
-        age ->
-            Now = os:timestamp(),
-            fun(#instance{} = Instance1, #instance{} = Instance2) ->
-                instance_age_us(Instance1, Now) >= instance_age_us(Instance2, Now)
-            end
+    FilterApplyFun = fun
+        (_,   {[],    _    }) -> {[], []};
+        (Fun, {Insts, Filts}) -> Fun(Insts, Filts)
     end,
-    InstancesSortedPreQ = lists:sort(SortFun, InstancesPreSort),
-    MapFun = fun (InstancePreQ) ->
+    ParsedFilters = parse_instance_filters(Filters),
+    {InstancesPreSort, _} = lists:foldl(FilterApplyFun, {undefined, ParsedFilters}, FilterFuns),
+    InstancesSortedPreQ = eproc_store:instance_sort(InstancesPreSort, SortedBy),
+    ReadInstDataFun = fun (InstancePreQ) ->
         {ok, InstanceRez} = read_instance_data(InstancePreQ, Query),
         InstanceRez
     end,
-    Instances = lists:map(MapFun, InstancesSortedPreQ),
-    {ok, {erlang:length(Instances), true, sublist(Instances, ResFrom, ResCount)}};
+    Instances = lists:map(ReadInstDataFun, InstancesSortedPreQ),
+    {ok, {erlang:length(Instances), true, eproc_store:sublist_opt(Instances, ResFrom, ResCount)}};
 
 get_instance(_StoreArgs, {list, FsmRefs}, Query) when is_list(FsmRefs) ->
     ReadFun = fun
@@ -692,6 +661,13 @@ write_instance_suspended(Instance = #instance{interrupt = undefined}, Reason) ->
     NewInstance = Instance#instance{
         status    = suspended,
         interrupt = Interrupt
+    },
+    true = ets:insert(?INST_TBL, NewInstance),
+    ok;
+
+write_instance_suspended(Instance = #instance{interrupt = #interrupt{}}, Reason) ->
+    NewInstance = Instance#instance{
+        status = suspended
     },
     true = ets:insert(?INST_TBL, NewInstance),
     ok.
@@ -1038,7 +1014,7 @@ resolve_pre_filter(undefined, FilterValues, QueryFuns, _) when is_list(FilterVal
         {GetIdsFun, QF} -> {GetIdsFun(FilterValues), QF};
         QF -> {FilterValues, QF}
     end,
-    UniqueIds = remove_duplicates(Ids),
+    UniqueIds = lists:usort(Ids),
     FilterMapFun = fun(Id) ->
         case QueryFun(Id) of
             {ok, Inst}  -> {true, Inst};
@@ -1085,34 +1061,9 @@ resolve_instance_age_filters(Instances, PostFilters) ->
     end,
     AgeFilter = lists:foldl(FoldFun, 0, PostFilters) * 1000,
     Now = os:timestamp(),
-    FilterFun = fun(#instance{} = Instance) -> instance_age_us(Instance, Now) >= AgeFilter end,
+    FilterFun = fun(#instance{} = Instance) -> eproc_store:instance_age_us(Instance, Now) >= AgeFilter end,
     {lists:filter(FilterFun, Instances), []}.
 
-
-%%
-%% Returns the age of the instance in microseconds.
-%% Now timestamp() can be passed as the second parameter
-%%  to simulate the age calculation of several instances at the same time.
-%% TODO: make it more general. Which module is appropriate for this function? eproc_timer?
-%% TODO: case without Now timestamp() not used, however it would be useful to export it.
-%%
-%instance_age_us(#instance{} = Instance) ->
-%    instance_age_us(Instance, os:timestamp()).
-
-instance_age_us(#instance{created = Created, terminated = undefined}, Now) ->
-    eproc_timer:timestamp_diff_us(Now, Created);
-
-instance_age_us(#instance{created = Created, terminated = Terminated}, _) ->
-    eproc_timer:timestamp_diff_us(Terminated, Created).
-
-
-%%
-%% Returns last transition timestamp() of the instance or undefined, it is not available.
-%% TODO: make it more general.
-%%
-instance_last_trn(#instance{curr_state = undefined})                            -> undefined;
-instance_last_trn(#instance{curr_state = #inst_state{stt_id = 0}})              -> undefined;
-instance_last_trn(#instance{curr_state = #inst_state{timestamp = Timestamp}})   -> Timestamp.
 
 
 %% =============================================================================
@@ -1203,7 +1154,7 @@ handle_attr_custom_meta_task({get_instances, {tags, Tags}}) ->
     end,
     [FirstSet | OtherSets] = lists:map(QueryByTagFun, Tags),
     IntersectionFun = fun (IID) ->
-        all_lists_contain(IID, OtherSets)
+        eproc_store:member_in_all(IID, OtherSets)
     end,
     Intersection = lists:filter(IntersectionFun, lists:usort(FirstSet)),
     {ok, Intersection}.
@@ -1221,38 +1172,5 @@ handle_attr_custom_meta_terminated(_InstId) ->
 %%  Helper functions.
 %% =============================================================================
 
-%%
-%%  Checks, if all lists contain the specified element.
-%%
-all_lists_contain(_Element, []) ->
-    true;
-
-all_lists_contain(Element, [List | Other]) ->
-    case lists:member(Element, List) of
-        false -> false;
-        true -> all_lists_contain(Element, Other)
-    end.
 
 
-%%
-%%  sublist(L, F, C) returns C elements of list L starting with F-th element of the list.
-%%  L should be list, F - positive integer, C positive integer or 0.
-%%
-sublist(List, From, _Count) when From > erlang:length(List) ->
-    [];
-
-sublist(List, From, Count) ->
-    lists:sublist(List, From, Count).
-
-
-%%
-%% Returns a list, which is obtained from List by keeping only the first occurence of each element.
-%%
-remove_duplicates(List) ->
-    lists:reverse(remove_duplicates(List, [])).
-
-remove_duplicates([], Rezult) ->
-    Rezult;
-
-remove_duplicates([Elem | List], Rezult) ->
-    remove_duplicates([X || X <- List, X =/= Elem], [Elem | Rezult]).

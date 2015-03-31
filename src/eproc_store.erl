@@ -48,7 +48,12 @@
     is_instance_terminated/1,
     apply_transition/3,
     make_resume_attempt/3,
-    determine_transition_action/2
+    determine_transition_action/2,
+    instance_age_us/2,
+    instance_last_trn_time/1,
+    instance_sort/2,
+    sublist_opt/3,
+    member_in_all/2
 ]).
 -export_type([ref/0]).
 -include("eproc.hrl").
@@ -619,6 +624,96 @@ determine_transition_action(Transition = #transition{inst_status = Status}, OldS
             terminate;
         {true, _, _, _} ->
             {error, terminated}
+    end.
+
+
+%%
+%%  Returns the age of the instance in microseconds.
+%%  The current time can be passed as the second parameter to simulate
+%%  the age calculation of several instances at the same time.
+%%
+-spec instance_age_us(#instance{}, os:timestamp()) -> integer().
+
+instance_age_us(#instance{created = Created, terminated = undefined}, Now) ->
+    eproc_timer:timestamp_diff_us(Now, Created);
+
+instance_age_us(#instance{created = Created, terminated = Terminated}, _) ->
+    eproc_timer:timestamp_diff_us(Terminated, Created).
+
+
+%%
+%%  Returns last transition timestamp() of the instance or undefined,
+%%  it is not available.
+%%
+-spec instance_last_trn_time(#instance{}) -> os:timestamp() | undefined.
+
+instance_last_trn_time(#instance{curr_state = undefined})                           -> undefined;
+instance_last_trn_time(#instance{curr_state = #inst_state{stt_id = 0}})             -> undefined;
+instance_last_trn_time(#instance{curr_state = #inst_state{timestamp = Timestamp}})  -> Timestamp.
+
+
+%%
+%%  Sort instances by specified criteria.
+%%
+-spec instance_sort([#instance{}], SortBy) -> [#instance{}]
+    when SortBy :: id | name | last_trn | created | module | status | age.
+
+instance_sort(Instances, SortBy) ->
+    SortFun = case SortBy of
+        id ->
+            fun(#instance{inst_id = ID1}, #instance{inst_id = ID2}) ->
+                ID1 =< ID2
+            end;
+        name ->
+            fun(#instance{name = Name1}, #instance{name = Name2}) ->
+                Name1 =< Name2
+            end;
+        last_trn ->
+            fun(#instance{} = Instance1, #instance{} = Instance2) ->
+                instance_last_trn_time(Instance1) >= instance_last_trn_time(Instance2)
+            end;
+        created ->
+            fun(#instance{created = Cr1}, #instance{created = Cr2}) ->
+                Cr1 >= Cr2
+            end;
+        module ->
+            fun(#instance{module = Module1}, #instance{module = Module2}) ->
+                Module1 =< Module2
+            end;
+        status ->
+            fun(#instance{status = Status1}, #instance{status = Status2}) ->
+                Status1 =< Status2
+            end;
+        age ->
+            Now = os:timestamp(),
+            fun(#instance{} = Instance1, #instance{} = Instance2) ->
+                instance_age_us(Instance1, Now) >= instance_age_us(Instance2, Now)
+            end
+    end,
+    lists:sort(SortFun, Instances).
+
+
+%%
+%%  sublist_opt(L, F, C) returns C elements of list L starting with F-th element of the list.
+%%  L should be list, F - positive integer, C positive integer or 0.
+%%
+sublist_opt(List, From, _Count) when From > erlang:length(List) ->
+    [];
+
+sublist_opt(List, From, Count) ->
+    lists:sublist(List, From, Count).
+
+
+%%
+%%  Checks, if all lists contain the specified element.
+%%
+member_in_all(_Element, []) ->
+    true;
+
+member_in_all(Element, [List | Other]) ->
+    case lists:member(Element, List) of
+        false -> false;
+        true -> member_in_all(Element, Other)
     end.
 
 
