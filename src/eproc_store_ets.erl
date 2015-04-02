@@ -474,22 +474,76 @@ get_state(_StoreArgs, FsmRef, {list, From, Count}, all) ->
 %%
 %%
 %%
-get_message(_StoreArgs, MsgId, all) ->
-    {InstId, TrnNr, MsgNr} = case MsgId of
-        {I, T, M}    -> {I, T, M};
-        {I, T, M, _} -> {I, T, M}
+get_message(StoreArgs, {filter, {ResFrom, ResCount}, Filters}, Query) ->
+    get_message(StoreArgs, {filter, {ResFrom, ResCount, date}, Filters}, Query);
+
+get_message(_StoreArgs, {filter, {ResFrom, ResCount, SortedBy}, Filters}, _Query) ->
+    {MatchSpec, [IdFilters]} = get_message_match_spec(Filters, [id]),
+    QueryFun = fun get_single_message/1,
+    FilterFun = fun(#message{msg_id = MsgId}, MsgIds) ->
+        case MsgId of
+            {InstId, TrnNr, MsgNr} -> {InstId, TrnNr, MsgNr};
+            {InstId, TrnNr, MsgNr, sent} -> {InstId, TrnNr, MsgNr};
+            {InstId, TrnNr, MsgNr, recv} -> {InstId, TrnNr, MsgNr}
+        end,
+        lists:member({InstId, TrnNr, MsgNr}, MsgIds) orelse
+        lists:member({InstId, TrnNr, MsgNr, sent}, MsgIds) orelse
+        lists:member({InstId, TrnNr, MsgNr, recv}, MsgIds)
     end,
-    case read_message({InstId, TrnNr, MsgNr, recv}) of
-        {error, not_found} ->
-            case read_message({InstId, TrnNr, MsgNr, sent}) of
-                {error, not_found} ->
-                    {error, not_found};
-                {ok, Message} ->
-                    {ok, Message#message{msg_id = {I, T, M}}}
+    ResolveIdFilterFun = fun({id, FilterValue}, Messages) ->
+        resolve_pre_filter(Messages, FilterValue, QueryFun, FilterFun)
+    end,
+    Messages1 = lists:foldl(ResolveIdFilterFun, undefined, IdFilters),
+    MsgCidToIdFun = fun(Message = #message{msg_id = Cid}) ->
+        case Cid of
+            {InstId, TrnNr, MsgNr}       -> ok;
+            {InstId, TrnNr, MsgNr, sent} -> ok;
+            {InstId, TrnNr, MsgNr, recv} -> ok
+        end,
+        Message#message{msg_id = {InstId, TrnNr, MsgNr}}
+    end,
+    Messages2 = case Messages1 of
+        undefined ->
+            % TODO: may be it would be better to add comparator fun to usort,
+            %       which would tell that {I,T,M,sent} and {I,T,M,recv} messages are equal,
+            %       even though not every case will filtered by such comparison?
+            Messages1_3 = case lists:usort(ets:select(?MSG_TBL, MatchSpec)) of  % DB query
+                [] ->
+                    [];
+                [MessageFirst | Messages1_1] ->
+                    RemoveDuplicatesFun = fun
+                        (#message{msg_id = {I, T, M, sent}}, {Message2 = #message{msg_id = {I, T, M, recv}}, Messages}) ->
+                            {Message2, Messages};
+                        (Message1, {Message2, Messages}) ->
+                            {Message1, [Message2 | Messages]}
+                    end,
+                    {MessageLast, Messages1_2} = lists:foldl(RemoveDuplicatesFun, {MessageFirst, []}, Messages1_1),
+                    [MessageLast | Messages1_2]
+            end,
+            lists:map(MsgCidToIdFun, Messages1_3);
+        MsgList ->
+            ets:match_spec_run(MsgList, ets:match_spec_compile(MatchSpec))
+    end,
+    Messages3 = eproc_store:message_sort(Messages2, SortedBy),
+    {ok, {erlang:length(Messages3), true, eproc_store:sublist_opt(Messages3, ResFrom, ResCount)}};
+
+get_message(_StoreArgs, {list, MsgIds}, _Query) ->
+    ReadFun = fun
+        (MsgId, {ok, Messages}) ->
+            case get_single_message(MsgId) of
+                {ok, Message}   -> {ok, [Message | Messages]};
+                {error, Reason} -> {error, Reason}
             end;
-        {ok, Message} ->
-            {ok, Message#message{msg_id = {I, T, M}}}
-    end.
+        (_MsgId, {error, Reason}) ->
+            {error, Reason}
+    end,
+    case lists:foldl(ReadFun, {ok, []}, MsgIds) of
+        {ok, Messages}  -> {ok, lists:reverse(Messages)};
+        {error, Reason} -> {error, Reason}
+    end;
+
+get_message(_StoreArgs, MsgId, _Query) ->
+    get_single_message(MsgId).
 
 
 %%
@@ -1068,6 +1122,139 @@ resolve_instance_age_filters(Instances, PostFilters) ->
     {lists:filter(FilterFun, Instances), []}.
 
 
+%% =============================================================================
+%%  get_message/3 helper functions
+%% =============================================================================
+
+%%
+%% Takes message ID or message copy ID as a single parameter, queries the database and returns message with that ID.
+%% It is assumed that messages with IDs {IID, TNr, MNr}, {IID, TNr, MNr, sent} and {IID, TNr, MNr, recv} are the same.
+%% For querying the database, message copy ID {IID, TNr, MNr, recv} takes priority.
+%% If message with given ID is not fuound, function returns {error, not_found}.
+%%
+get_single_message({InstId, TrnNr, MsgNr}) ->
+    case read_message({InstId, TrnNr, MsgNr, recv}) of
+        {error, not_found} ->
+            case read_message({InstId, TrnNr, MsgNr, sent}) of
+                {error, not_found} ->
+                    {error, not_found};
+                {ok, Message} ->
+                    {ok, Message#message{msg_id = {InstId, TrnNr, MsgNr}}}
+            end;
+        {ok, Message} ->
+            {ok, Message#message{msg_id = {InstId, TrnNr, MsgNr}}}
+    end;
+
+get_single_message({InstId, TrnNr, MsgNr, sent}) ->
+    get_single_message({InstId, TrnNr, MsgNr});
+
+get_single_message({InstId, TrnNr, MsgNr, recv}) ->
+    get_single_message({InstId, TrnNr, MsgNr});
+
+get_single_message(_) ->
+    {error, not_found}.
+
+
+%%
+%% Returns ignored filters and match specification for filters that were not ignored.
+%% Parameters:
+%%  Filters - list of filters to analyze ([FilterClause] as defined in eproc_store:get_message/3).
+%%  FilterNamesToIgnore - list of filter ids (e.g., id, date, peer), which should not be included in returned match specification.
+%% Returns a pair {MatchSpec, IgnoredFilters}, where
+%%  MatchSpec is a match specification as defined in "ERTS User's Guide".
+%%  IgnoredFilters is a list of filters, that were ignored as requested by parameter FilterNamesToIgnore.
+%%      The resulting list contains exactly the same number of elements as FilterNamesToIgnore
+%%      and every element is a list of ignored filters, named as corresponding element of FilterNamesToIgnore.
+%%
+get_message_match_spec(Filters, FilterNamesToIgnore) ->
+    AddIgnoredMessageFilter = fun(Filter = {FilterName, _}, IgnoredFilters) ->
+        PlaceFilterFun = fun({Name, AlreadyIgnoredFilters}) ->
+            case Name of
+                FilterName  -> {FilterName, [Filter | AlreadyIgnoredFilters]};
+                N           -> {N, AlreadyIgnoredFilters}
+            end
+        end,
+        lists:map(PlaceFilterFun, IgnoredFilters)
+    end,
+    ParseFiltersFun = fun(Filter, {MatchGuards, IgnoredFilters}) ->
+        FilterName = erlang:element(1, Filter),
+        case lists:member(FilterName, FilterNamesToIgnore) of
+            true ->
+                {MatchGuards, AddIgnoredMessageFilter(Filter, IgnoredFilters)};
+            false ->
+                {[get_message_match_guard(Filter) | MatchGuards], IgnoredFilters}
+        end
+    end,
+    PrepareIgnoredFiltersFun = fun(FilterNameToIgnore) -> {FilterNameToIgnore, []} end,
+    IgnoredFiltersInit = lists:map(PrepareIgnoredFiltersFun, FilterNamesToIgnore),
+    {MatchGuardsRez, IgnoredFiltersRez} = lists:foldl(ParseFiltersFun, {[], IgnoredFiltersInit}, Filters),
+    {FilterNamesToIgnore, IgnoredFiltersList} = lists:unzip(IgnoredFiltersRez),
+    {[{
+        #message{msg_id = '$1', sender = '$2', receiver = '$3', date = '$5', _ = '_'},
+        lists:flatten(MatchGuardsRez),
+        ['$_']
+    }], IgnoredFiltersList}.
+
+
+%%
+%% Takes filter as a parameter and returns its corresponding match condition (guard) expression
+%%  for match specification or list of such expressions.
+%% If no guard should be returned, returns [].
+%% This function specific filters are:
+%%  {single_or_list, Values, MapFun} - used, in filters {FilterName, FilterValue | [FilterValues]}
+%%      Values - either a single filter value or a list of filter values.
+%%      MapFun - function, which can be passed a single filter value and returns a match guard (or a list of match guards).
+%%  {single_peer, Peer} - used as a MapFun case for filter {peer, Peer | Peers}.
+%%
+get_message_match_guard({id, MsgIds}) ->
+    FilterToGuardFun = fun(MsgId) ->
+        case MsgId of
+            {InstId, TrnNr, MsgNr} -> ok;
+            {InstId, TrnNr, MsgNr, sent} -> ok;
+            {InstId, TrnNr, MsgNr, recv} -> ok
+        end,
+        {'orelse',
+            {'==', '$1', {const, {InstId, TrnNr, MsgNr, sent}}},
+            {'==', '$1', {const, {InstId, TrnNr, MsgNr, recv}}}
+        }
+    end,
+    get_message_match_guard({single_or_list, MsgIds, FilterToGuardFun});
+
+get_message_match_guard({date, From, undefined}) ->
+    {'>=', '$5', {From}};
+
+get_message_match_guard({date, undefined, Till}) ->
+    {'=<', '$5', {Till}};
+
+get_message_match_guard({date, From, Till}) ->
+    [get_message_match_guard({date, From, undefined}), get_message_match_guard({date, undefined, Till})];
+
+get_message_match_guard({peer, Peers}) ->
+    FilterToGuardFun = fun(Peer) -> get_message_match_guard({single_peer, Peer}) end,
+    get_message_match_guard({single_or_list, Peers, FilterToGuardFun});
+
+get_message_match_guard({single_peer, {sent, EventSrc}}) ->
+    {'==', '$2', {const, EventSrc}};
+
+get_message_match_guard({single_peer, {recv, EventSrc}}) ->
+    {'==', '$3', {const, EventSrc}};
+
+get_message_match_guard({single_peer, {any, EventSrc}}) ->
+    Send = get_message_match_guard({single_peer, {sent, EventSrc}}),
+    Recv = get_message_match_guard({single_peer, {recv, EventSrc}}),
+    {'orelse', Send, Recv};
+
+get_message_match_guard({single_or_list, [], _}) ->
+    [];
+
+get_message_match_guard({single_or_list, Values, FilterToGuardFun}) when is_list(Values) ->
+    case lists:map(FilterToGuardFun, Values) of
+        [Filter] -> Filter;
+        [Filter | Filters] -> erlang:list_to_tuple(['orelse', Filter | Filters])
+    end;
+
+get_message_match_guard({single_or_list, Value, MapFun}) ->
+    parse_instance_filter({single_or_list, [Value], MapFun}).
 
 %% =============================================================================
 %%  Specific attribute support: eproc_router

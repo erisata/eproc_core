@@ -52,6 +52,7 @@
     instance_age_us/2,
     instance_last_trn_time/1,
     instance_sort/2,
+    message_sort/2,
     sublist_opt/3,
     member_in_all/2
 ]).
@@ -322,14 +323,16 @@
     when
         FilterClause ::
             {id,        MIdFilter | [MIdFilter]} |
+        %    {inst_id,   IIdFilter | [IIdFilter]} | %% TODO?
             {date,      From :: timestamp() | undefined, Till :: timestamp() | undefined} |
-            {peer,      [PeerFilter]},
-        MIdFilter   :: InstId :: inst_id(),
+            {peer,      PeerFilter | [PeerFilter]},
+        MIdFilter   :: msg_id() | msg_cid() ,
+        %IIdFilter   :: InstId :: inst_id(),
         PeerFilter  :: {Role :: (send | recv | any), event_src()},
-        Paging      :: {ResFrom, ResCount} | {ResFrom, ResCount, SortedBy}, % SortedBy=last_trn by default
+        Paging      :: {ResFrom, ResCount} | {ResFrom, ResCount, SortedBy}, % SortedBy=date by default
         ResFrom     :: integer() | undefined,
         ResCount    :: integer() | undefined,
-        SortedBy    :: date | sender | receiver,
+        SortedBy    :: id | date | sender | receiver,
         TotalCount  :: integer() | undefined,
         TotalExact  :: boolean().
 
@@ -691,6 +694,34 @@ instance_sort(Instances, SortBy) ->
             end
     end,
     lists:sort(SortFun, Instances).
+
+
+%%
+%%  Sort messages by specified criteria.
+%%
+-spec message_sort([#message{}], SortBy) -> [#message{}]
+    when SortBy :: id | date | sender | receiver.
+
+message_sort(Messages, SortBy) ->
+    SortFun = case SortBy of
+        id ->
+            fun(#message{msg_id = ID1}, #message{msg_id = ID2}) ->
+                ID1 =< ID2
+            end;
+        date ->
+            fun(#message{date = Date1}, #message{date = Date2}) ->
+                Date1 >= Date2
+            end;
+        sender ->
+            fun(#message{sender = Sender1}, #message{sender = Sender2}) ->
+                Sender1 =< Sender2
+            end;
+        receiver ->
+            fun(#message{receiver = Receiver1}, #message{receiver = Receiver2}) ->
+                Receiver1 =< Receiver2
+            end
+    end,
+    lists:sort(SortFun, Messages).
 
 
 %%
