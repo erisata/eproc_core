@@ -52,14 +52,27 @@
     instance_age_us/2,
     instance_last_trn_time/1,
     instance_sort/2,
+    instance_filter_values/1,
+    instance_filter_by_type/2,
+    instance_filter_to_ms/2,
     message_sort/2,
     sublist_opt/3,
-    member_in_all/2
+    make_list/1,
+    member_in_all/2,
+    intersect_lists/1
 ]).
 -export_type([ref/0]).
 -include("eproc.hrl").
 
 -opaque ref() :: {Callback :: module(), Args :: term()}.
+
+-define(INST_MSVAR_ID, '$1').
+-define(INST_MSVAR_NAME, '$2').
+-define(INST_MSVAR_MODULE, '$3').
+-define(INST_MSVAR_STATUS, '$4').
+-define(INST_MSVAR_CREATED, '$5').
+-define(INST_MSVAR_CURR_STATE, '$6').
+-define(INST_MSVAR_TERMINATED, '$7').
 
 
 %% =============================================================================
@@ -697,6 +710,214 @@ instance_sort(Instances, SortBy) ->
 
 
 %%
+%%  Returns intersection of several clauses of the same type.
+%%
+-spec instance_filter_values([{atom(), term() | [term()]}]) -> [term()].
+
+instance_filter_values(Clauses) ->
+    ListOfValueLists = [ make_list(ValueOrList) || {_ClauseType, ValueOrList} <- Clauses ],
+    intersect_lists(ListOfValueLists).
+
+
+%%
+%%  Collects and groups instance filter clauses of specified types.
+%%  The function also returns all other (not grouped) instance filter clauses.
+%%
+-spec instance_filter_by_type(list(), [atom()]) -> {ok, [[term()]], [term()]}.
+
+instance_filter_by_type(InstanceFilters, GroupTypes) ->
+    GroupFun = fun (FilterClause, {Groups, Other}) ->
+        FilterName = erlang:element(1, FilterClause),
+        case lists:keyfind(FilterName, 1, Groups) of
+            {FilterName, GroupClauses} ->
+                NewGroupClauses = [FilterClause | GroupClauses],
+                NewGroups = lists:keyreplace(FilterName, 1, Groups, {FilterName, NewGroupClauses}),
+                {NewGroups, Other};
+            false ->
+                {Groups, [FilterClause | Other]}
+        end
+    end,
+    GroupedInitial = [ {T, []} || T <- GroupTypes ],
+    {Grouped, Other} = lists:foldl(GroupFun, {GroupedInitial, []}, InstanceFilters),
+    {ok, [ Clauses || {_, Clauses} <- Grouped ], Other}.
+
+
+%%
+%%  This function takes a list of instance filter clauses and converts it
+%%  to a match specification for `#instance{}` records. This function also
+%%  collects and groups filter clauses of specified types. The `SkipFilters`
+%%  parameter can be used to ignore clauses of some types, when creating
+%%  the match specification.
+%%
+-spec instance_filter_to_ms(list(), [atom()]) -> {ok, ets:match_spec()}.
+
+instance_filter_to_ms(InstanceFilters, SkipFilters) ->
+    %
+    % Normalize filter clauses (group ages).
+    {ok, AgeClauses, OtherClauses} = instance_filter_by_type(InstanceFilters, [age]),
+    NormalizedFilters = case AgeClauses of
+        [] ->
+            InstanceFilters;
+        [_SingleAgeClause] ->
+            InstanceFilters;
+        _MultipleAgeClauses ->
+            AgesMS = [ eproc_timer:duration_to_ms(Age) || {age, Age} <- AgeClauses ],
+            [{age, {lists:max(AgesMS), ms}} | OtherClauses]
+    end,
+    %
+    % Create guards.
+    MakeGuardFun = fun(FilterClause, Guards) ->
+        FilterName = erlang:element(1, FilterClause),
+        case lists:member(FilterName, SkipFilters) of
+            true ->
+                Guards;
+            false ->
+                ClauseGuards = instance_filter_to_guard(FilterClause),
+                [ClauseGuards | Guards]
+        end
+    end,
+    Guards = lists:foldr(MakeGuardFun, [], NormalizedFilters),
+    %
+    % Create match spec.
+    MatchFunction = {
+        #instance{
+            inst_id = ?INST_MSVAR_ID,
+            name = ?INST_MSVAR_NAME,
+            module = ?INST_MSVAR_MODULE,
+            status = ?INST_MSVAR_STATUS,
+            created = ?INST_MSVAR_CREATED,
+            curr_state = ?INST_MSVAR_CURR_STATE,
+            terminated = ?INST_MSVAR_TERMINATED,
+            _ = '_'
+        },
+        lists:flatten(Guards),
+        ['$_']
+    },
+    MatchSpec = [MatchFunction],
+    {ok, MatchSpec}.
+
+
+%%
+%%  Creates match spec guards for the specified instance filter clause.
+%%
+instance_filter_to_guard({id, InstIdOrList}) ->
+    MakeGuardFun = fun (InstId) ->
+        {'==', ?INST_MSVAR_ID, {const, InstId}}
+    end,
+    make_orelse_guard(make_list(InstIdOrList), MakeGuardFun);
+
+instance_filter_to_guard({name, NameOrList}) ->
+    MakeGuardFun = fun (Name) ->
+        {'==', ?INST_MSVAR_NAME, {const, Name}}
+    end,
+    make_orelse_guard(make_list(NameOrList), MakeGuardFun);
+
+instance_filter_to_guard({last_trn, undefined, undefined}) ->
+    [];
+
+instance_filter_to_guard({last_trn, From, undefined}) ->
+    [
+        {'>=',  {element, #inst_state.timestamp, ?INST_MSVAR_CURR_STATE}, {const, From}},
+        {'=/=', {element, #inst_state.stt_id,    ?INST_MSVAR_CURR_STATE}, {const, 0}}
+    ];
+
+instance_filter_to_guard({last_trn, undefined, Till}) ->
+    [
+        {'=<', {element, #inst_state.timestamp, ?INST_MSVAR_CURR_STATE}, {const, Till}}
+    ];
+
+instance_filter_to_guard({last_trn, From, Till}) ->
+    [
+        instance_filter_to_guard({last_trn, From, undefined}),
+        instance_filter_to_guard({last_trn, undefined, Till})
+    ];
+
+instance_filter_to_guard({created, undefined, undefined}) ->
+    [];
+
+instance_filter_to_guard({created, From, undefined}) ->
+    [
+        {'>=', ?INST_MSVAR_CREATED, {const, From}}
+    ];
+
+instance_filter_to_guard({created, undefined, Till}) ->
+    [
+        {'=<', ?INST_MSVAR_CREATED, {const, Till}}
+    ];
+
+instance_filter_to_guard({created, From, Till}) ->
+    [
+        instance_filter_to_guard({created, From, undefined}),
+        instance_filter_to_guard({created, undefined, Till})
+    ];
+
+instance_filter_to_guard({tag, Tags}) ->
+    erlang:error(tags_guard_not_supported_in_matchspec, Tags);
+
+instance_filter_to_guard({module, ModuleOrList}) ->
+    MakeGuardFun = fun (Module) ->
+        {'==', ?INST_MSVAR_MODULE, {const, Module}}
+    end,
+    make_orelse_guard(make_list(ModuleOrList), MakeGuardFun);
+
+instance_filter_to_guard({status, StatusOrList}) ->
+    MakeGuardFun = fun (Status) ->
+        {'==', ?INST_MSVAR_STATUS, {const, Status}}
+    end,
+    make_orelse_guard(make_list(StatusOrList), MakeGuardFun);
+
+instance_filter_to_guard({age, MinAge}) ->
+    Now = os:timestamp(),
+    NowUS = eproc_timer:timestamp_diff_us(Now, {0, 0, 0}),
+    MinAgeUS = eproc_timer:duration_to_ms(MinAge) * 1000,
+    %
+    % This part mirrors parts of  'eproc_timer:timestamp_diff_us/2' and
+    % represents expression `T1 = (T1M * ?MEGA + T1S) * ?MEGA + T1U`.
+    TimestampUS = fun (VarRef) ->
+        {'+',
+            {'*',
+                {'+',
+                    {'*',
+                        {element, 1, VarRef},
+                        1000000
+                    },
+                    {element, 2, VarRef}
+                },
+                1000000
+            },
+            {element, 3, VarRef}
+        }
+    end,
+    TStampDiffUS = fun (Date2US, Date1US) ->
+        {'-', Date2US, Date1US}
+    end,
+    %
+    % This part mirrors contents of `eproc_store:instance_age_us/2`.
+    Guard = {'orelse',
+        {'andalso',
+            {'=:=', {const, undefined}, ?INST_MSVAR_TERMINATED},
+            {'=<', {const, MinAgeUS}, TStampDiffUS({const, NowUS}, TimestampUS(?INST_MSVAR_CREATED))}
+        },
+        {'=<', {const, MinAgeUS}, TStampDiffUS(TimestampUS(?INST_MSVAR_TERMINATED), TimestampUS(?INST_MSVAR_CREATED))}
+    },
+    [Guard].
+
+
+%%
+%%  Make OR guards, if multiple values supplied.
+%%
+make_orelse_guard([], _MakeGuardFun) ->
+    [];
+
+make_orelse_guard([Value], MakeGuardFun) ->
+    [MakeGuardFun(Value)];
+
+make_orelse_guard(Values, MakeGuardFun) when is_list(Values)->
+    GuardList = lists:map(MakeGuardFun, Values),
+    erlang:list_to_tuple(['orelse' | GuardList]).
+
+
+%%
 %%  Sort messages by specified criteria.
 %%
 -spec message_sort([#message{}], SortBy) -> [#message{}]
@@ -736,6 +957,16 @@ sublist_opt(List, From, Count) ->
 
 
 %%
+%%  Converts list or single element to a list.
+%%
+make_list(List) when is_list(List) ->
+    List;
+
+make_list(Single) ->
+    [Single].
+
+
+%%
 %%  Checks, if all lists contain the specified element.
 %%
 member_in_all(_Element, []) ->
@@ -746,6 +977,23 @@ member_in_all(Element, [List | Other]) ->
         false -> false;
         true -> member_in_all(Element, Other)
     end.
+
+
+%%
+%%  Returns an intersection of lists.
+%%  This function returns unique members, and threats lists as sets.
+%%
+intersect_lists([]) ->
+    [];
+
+intersect_lists([List]) ->
+    List;
+
+intersect_lists([List | Other]) ->
+    MemberInOther = fun (E) ->
+        member_in_all(E, Other)
+    end,
+    lists:filter(MemberInOther, lists:usort(List)).
 
 
 

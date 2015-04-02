@@ -293,6 +293,7 @@ eproc_store_core_test_get_instance_filter(Config) ->
     {ok, IID3} = eproc_store:add_instance(Store, Inst#instance{module = another_fsm, created = OldDate1, terminated = OldDate3, status = killed}),
     {ok, IID4} = eproc_store:add_instance(Store, Inst#instance{module = some_other_fsm}),
     {ok, IID5} = eproc_store:add_instance(Store, Inst#instance{created = os:timestamp(), name = other_name, status = resuming}),
+    InstRefs = [ {inst, IID} || IID <- [IID1, IID2, IID3, IID4, IID5] ],
     % Add transitions for testing
     AddTrnFun(IID1, 1, OldDate1, []),
     AddTrnFun(IID1, 2, os:timestamp(), []),
@@ -307,6 +308,7 @@ eproc_store_core_test_get_instance_filter(Config) ->
         #attr_action{module = eproc_meta, attr_nr = 1, needs_store = true, action = {create, {tag,TagName2,TagType2}, [], {data, TagName2, TagType2}}}
     ]),
     % Get reference instances
+    {ok, _} = eproc_store:get_instance(Store, {list, InstRefs}, current), %% To synchronize state on weak consistency stores.
     {ok, Inst1} = eproc_store:get_instance(Store, {inst, IID1}, header),
     {ok, Inst2} = eproc_store:get_instance(Store, {inst, IID2}, header),
     {ok, Inst3} = eproc_store:get_instance(Store, {inst, IID3}, header),
