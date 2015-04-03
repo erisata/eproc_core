@@ -360,13 +360,13 @@ get_instance(StoreArgs, {filter, {ResFrom, ResCount}, Filters}, Query) ->
 
 get_instance(_StoreArgs, {filter, {ResFrom, ResCount, SortedBy}, Filters}, Query) ->
     {ok, MatchSpec} = eproc_store:instance_filter_to_ms(Filters, [tag]),
-    {ok, Grouped, _Other} = eproc_store:instance_filter_by_type(Filters, [id, name, tag]),
+    {ok, Grouped, _Other} = eproc_store:group_filter_by_type(Filters, [id, name, tag]),
     [IdClauses, NameClauses, TagClauses] = Grouped,
     FilterFuns = [
-        fun (Insts) -> resolve_instance_id_filter   (Insts, IdClauses  ) end,
-        fun (Insts) -> resolve_instance_name_filter (Insts, NameClauses) end,
-        fun (Insts) -> resolve_instance_tag_filters (Insts, TagClauses ) end,
-        fun (Insts) -> resolve_instance_match_filter(Insts, MatchSpec  ) end
+        fun (Insts) -> resolve_instance_id_filter  (Insts, IdClauses           ) end,
+        fun (Insts) -> resolve_instance_name_filter(Insts, NameClauses         ) end,
+        fun (Insts) -> resolve_instance_tag_filters(Insts, TagClauses          ) end,
+        fun (Insts) -> resolve_match_filter        (Insts, ?INST_TBL, MatchSpec) end
     ],
     FilterApplyFun = fun
         (_Fun, [])    -> [];
@@ -479,59 +479,25 @@ get_message(StoreArgs, {filter, {ResFrom, ResCount}, Filters}, Query) ->
     get_message(StoreArgs, {filter, {ResFrom, ResCount, date}, Filters}, Query);
 
 get_message(_StoreArgs, {filter, {ResFrom, ResCount, SortedBy}, Filters}, _Query) ->
-    {MatchSpec, [IdFilters]} = get_message_match_spec(Filters, [id]),
-    QueryFun = fun get_single_message/1,
-    FilterFun = fun(#message{msg_id = MsgId}, MsgIds) ->
-        case MsgId of
-            {InstId, TrnNr, MsgNr} -> {InstId, TrnNr, MsgNr};
-            {InstId, TrnNr, MsgNr, sent} -> {InstId, TrnNr, MsgNr};
-            {InstId, TrnNr, MsgNr, recv} -> {InstId, TrnNr, MsgNr}
-        end,
-        lists:member({InstId, TrnNr, MsgNr}, MsgIds) orelse
-        lists:member({InstId, TrnNr, MsgNr, sent}, MsgIds) orelse
-        lists:member({InstId, TrnNr, MsgNr, recv}, MsgIds)
+    {ok, MatchSpec} = eproc_store:message_filter_to_ms(Filters, []),
+    {ok, [IdFilters], _Others} = eproc_store:group_filter_by_type(Filters, [id]),
+    FilterFuns = [
+        fun (Messages) -> resolve_message_id_filter   (Messages, IdFilters) end,
+        fun (Messages) -> resolve_message_match_filter(Messages, MatchSpec) end
+    ],
+    FilterApplyFun = fun
+        (_Fun, [])    -> [];
+        (Fun,  Insts) -> Fun(Insts)
     end,
-    ResolveIdFilterFun = fun({id, FilterValue}, Messages) ->
-        resolve_pre_filter(Messages, FilterValue, QueryFun, FilterFun)
-    end,
-    Messages1 = lists:foldl(ResolveIdFilterFun, undefined, IdFilters),
-    MsgCidToIdFun = fun(Message = #message{msg_id = Cid}) ->
-        case Cid of
-            {InstId, TrnNr, MsgNr}       -> ok;
-            {InstId, TrnNr, MsgNr, sent} -> ok;
-            {InstId, TrnNr, MsgNr, recv} -> ok
-        end,
-        Message#message{msg_id = {InstId, TrnNr, MsgNr}}
-    end,
-    Messages2 = case Messages1 of
-        undefined ->
-            % TODO: may be it would be better to add comparator fun to usort,
-            %       which would tell that {I,T,M,sent} and {I,T,M,recv} messages are equal,
-            %       even though not every case will filtered by such comparison?
-            Messages1_3 = case lists:usort(ets:select(?MSG_TBL, MatchSpec)) of  % DB query
-                [] ->
-                    [];
-                [MessageFirst | Messages1_1] ->
-                    RemoveDuplicatesFun = fun
-                        (#message{msg_id = {I, T, M, sent}}, {Message2 = #message{msg_id = {I, T, M, recv}}, Messages}) ->
-                            {Message2, Messages};
-                        (Message1, {Message2, Messages}) ->
-                            {Message1, [Message2 | Messages]}
-                    end,
-                    {MessageLast, Messages1_2} = lists:foldl(RemoveDuplicatesFun, {MessageFirst, []}, Messages1_1),
-                    [MessageLast | Messages1_2]
-            end,
-            lists:map(MsgCidToIdFun, Messages1_3);
-        MsgList ->
-            ets:match_spec_run(MsgList, ets:match_spec_compile(MatchSpec))
-    end,
-    Messages3 = eproc_store:message_sort(Messages2, SortedBy),
-    {ok, {erlang:length(Messages3), true, eproc_store:sublist_opt(Messages3, ResFrom, ResCount)}};
+    MessagesFiltered = lists:foldl(FilterApplyFun, undefined, FilterFuns),
+    MessagesPreSort = lists:map(fun eproc_store:normalise_message/1, MessagesFiltered),
+    MessagesSorted = eproc_store:message_sort(MessagesPreSort, SortedBy),
+    {ok, {erlang:length(MessagesSorted), true, eproc_store:sublist_opt(MessagesSorted, ResFrom, ResCount)}};
 
 get_message(_StoreArgs, {list, MsgIds}, _Query) ->
     ReadFun = fun
         (MsgId, {ok, Messages}) ->
-            case get_single_message(MsgId) of
+            case read_message_normalised(MsgId) of
                 {ok, Message}   -> {ok, [Message | Messages]};
                 {error, Reason} -> {error, Reason}
             end;
@@ -544,7 +510,7 @@ get_message(_StoreArgs, {list, MsgIds}, _Query) ->
     end;
 
 get_message(_StoreArgs, MsgId, _Query) ->
-    get_single_message(MsgId).
+    read_message_normalised(MsgId).
 
 
 %%
@@ -683,6 +649,64 @@ read_message(MsgCid) ->
         []        -> {error, not_found};
         [Message] -> {ok, Message}
     end.
+
+%%
+%% Takes message ID or message copy ID as a single parameter, queries the database and returns message with that ID.
+%% It is assumed that messages with IDs {IID, TNr, MNr}, {IID, TNr, MNr, sent} and {IID, TNr, MNr, recv} are the same.
+%% For querying the database, message copy ID {IID, TNr, MNr, recv} takes priority.
+%% If message with given ID is not fuound, function returns {error, not_found}.
+%%
+%% Reads a single message by message id or message copy id.
+%%
+read_message_any_id(MsgId) ->
+    NormalisedMsgId = eproc_store:normalise_message_id(MsgId),
+    read_message_id(NormalisedMsgId).
+
+
+%%
+%% Reads a single message by message id.
+%% Returns {ok, #message{}}.
+%% If message with given ID is not found, function returns {error, not_found}.
+%% For querying the database, received message takes priority over sent one.
+%%
+read_message_id({InstId, TrnNr, MsgNr}) ->
+    case read_message({InstId, TrnNr, MsgNr, recv}) of
+        {error, not_found} ->
+            case read_message({InstId, TrnNr, MsgNr, sent}) of
+                {error, not_found} ->
+                    {error, not_found};
+                {ok, Message} ->
+                    {ok, Message}
+            end;
+        {ok, Message} ->
+            {ok, Message}
+    end.
+
+
+%%
+%% Reads a single message by message id or message copy id.
+%% In #message{} record of the returned tuple message copy id is replaced by
+%% message id.
+%%
+read_message_normalised(MsgId) ->
+    case read_message_any_id(MsgId) of
+        {ok, Message}   -> {ok, eproc_store:normalise_message(Message)};
+        {error, Reason} -> {error, Reason}
+    end.
+
+
+%%
+%% Reads a list of message by message id and ignores all the errors.
+%% Returns a list of messages, which were found.
+%%
+read_message_list_ids(MsgIds) ->
+    ReadInstFun = fun(MsgId) ->
+        case read_message_id(MsgId) of
+            {ok, Message}   -> {true, Message};
+            {error, _}      -> false
+        end
+    end,
+    lists:filtermap(ReadInstFun, MsgIds).
 
 
 %%
@@ -852,7 +876,7 @@ resolve_instance_id_filter(Instances, []) ->
     Instances;
 
 resolve_instance_id_filter(undefined, FilterClauses) ->
-    InstIds = eproc_store:instance_filter_values(FilterClauses),
+    InstIds = eproc_store:intersect_filter_values(FilterClauses),
     read_instance_list_opt(inst, InstIds);
 
 resolve_instance_id_filter(Instances, _FilterClauses) ->
@@ -868,7 +892,7 @@ resolve_instance_name_filter(Instances, []) ->
     Instances;
 
 resolve_instance_name_filter(undefined, FilterClauses) ->
-    Names = eproc_store:instance_filter_values(FilterClauses),
+    Names = eproc_store:intersect_filter_values(FilterClauses),
     read_instance_list_opt(name, Names);
 
 resolve_instance_name_filter(Instances, _FilterClauses) ->
@@ -919,203 +943,70 @@ resolve_instance_tag_to_inst_ids(FilterClauses) ->
 
 
 %%
-%%  Resolves match filters.
-%%  MatchFilter parameter is a match spec.
+%%  Resolves match filters. Takes Match specification as parameter.
 %%  Never returns undefined.
 %%
-resolve_instance_match_filter(undefined, MatcSpec) ->
-    ets:select(?INST_TBL, MatcSpec);
+resolve_match_filter(undefined, Table, MatchSpec) ->
+    ets:select(Table, MatchSpec);
 
-resolve_instance_match_filter(Instances, MatchSpec) ->
-    ets:match_spec_run(Instances, ets:match_spec_compile(MatchSpec)).
+resolve_match_filter(Objects, _Table, MatchSpec) ->
+    ets:match_spec_run(Objects, ets:match_spec_compile(MatchSpec)).
+
+
+%%
+%%  Resolves message match filters.
+%%  Additionally removes equivalent messages from the returned list, if needed.
+%%  Equivalent are messages with following copy ids: {I, T, M, sent} and {I, T, M, recv}.
+%%  In case of collision, received message is kept.
+%%
+resolve_message_match_filter(Messages, MatchSpec) ->
+    MessagesFiltered = resolve_match_filter(Messages, ?MSG_TBL, MatchSpec),
+    case Messages of
+        undefined ->
+            % TODO: may be it would be better to add comparator fun to usort,
+            %       which would tell that {I,T,M,sent} and {I,T,M,recv} messages are equal,
+            %       even though not every case will filtered by such comparison?
+            case lists:usort(MessagesFiltered) of
+                [] ->
+                    [];
+                [MessageFirst | MessagesOther] ->
+                    RemoveDuplicatesFun = fun
+                        (#message{msg_id = {I, T, M, sent}}, {Message2 = #message{msg_id = {I, T, M, recv}}, MessagesCollected}) ->
+                            {Message2, MessagesCollected};
+                        (Message1, {Message2, MessagesCollected}) ->
+                            {Message1, [Message2 | MessagesCollected]}
+                    end,
+                    {MessageLast, MessageList} = lists:foldl(RemoveDuplicatesFun, {MessageFirst, []}, MessagesOther),
+                    [MessageLast | MessageList]
+            end;
+        _ ->
+            MessagesFiltered
+    end.
 
 
 %% =============================================================================
 %%  get_message/3 helper functions
 %% =============================================================================
 
-%%
-%% Takes message ID or message copy ID as a single parameter, queries the database and returns message with that ID.
-%% It is assumed that messages with IDs {IID, TNr, MNr}, {IID, TNr, MNr, sent} and {IID, TNr, MNr, recv} are the same.
-%% For querying the database, message copy ID {IID, TNr, MNr, recv} takes priority.
-%% If message with given ID is not fuound, function returns {error, not_found}.
-%%
-get_single_message({InstId, TrnNr, MsgNr}) ->
-    case read_message({InstId, TrnNr, MsgNr, recv}) of
-        {error, not_found} ->
-            case read_message({InstId, TrnNr, MsgNr, sent}) of
-                {error, not_found} ->
-                    {error, not_found};
-                {ok, Message} ->
-                    {ok, Message#message{msg_id = {InstId, TrnNr, MsgNr}}}
-            end;
-        {ok, Message} ->
-            {ok, Message#message{msg_id = {InstId, TrnNr, MsgNr}}}
-    end;
-
-get_single_message({InstId, TrnNr, MsgNr, sent}) ->
-    get_single_message({InstId, TrnNr, MsgNr});
-
-get_single_message({InstId, TrnNr, MsgNr, recv}) ->
-    get_single_message({InstId, TrnNr, MsgNr});
-
-get_single_message(_) ->
-    {error, not_found}.
 
 
 %%
-%% Returns ignored filters and match specification for filters that were not ignored.
-%% Parameters:
-%%  Filters - list of filters to analyze ([FilterClause] as defined in eproc_store:get_message/3).
-%%  FilterNamesToIgnore - list of filter ids (e.g., id, date, peer), which should not be included in returned match specification.
-%% Returns a pair {MatchSpec, IgnoredFilters}, where
-%%  MatchSpec is a match specification as defined in "ERTS User's Guide".
-%%  IgnoredFilters is a list of filters, that were ignored as requested by parameter FilterNamesToIgnore.
-%%      The resulting list contains exactly the same number of elements as FilterNamesToIgnore
-%%      and every element is a list of ignored filters, named as corresponding element of FilterNamesToIgnore.
+%%  Resolves message id filter. At most one such filter is expected,
+%%  although several message IDs can be provided in it. The function
+%%  takes undefined, returns undefined or a list of messages. Message
+%%  filtering is not performed here and should be handled in the match
+%%  spec filtering.
 %%
-get_message_match_spec(Filters, FilterNamesToIgnore) ->
-    AddIgnoredMessageFilter = fun(Filter = {FilterName, _}, IgnoredFilters) ->
-        PlaceFilterFun = fun({Name, AlreadyIgnoredFilters}) ->
-            case Name of
-                FilterName  -> {FilterName, [Filter | AlreadyIgnoredFilters]};
-                N           -> {N, AlreadyIgnoredFilters}
-            end
-        end,
-        lists:map(PlaceFilterFun, IgnoredFilters)
-    end,
-    ParseFiltersFun = fun(Filter, {MatchGuards, IgnoredFilters}) ->
-        FilterName = erlang:element(1, Filter),
-        case lists:member(FilterName, FilterNamesToIgnore) of
-            true ->
-                {MatchGuards, AddIgnoredMessageFilter(Filter, IgnoredFilters)};
-            false ->
-                {[get_message_match_guard(Filter) | MatchGuards], IgnoredFilters}
-        end
-    end,
-    PrepareIgnoredFiltersFun = fun(FilterNameToIgnore) -> {FilterNameToIgnore, []} end,
-    IgnoredFiltersInit = lists:map(PrepareIgnoredFiltersFun, FilterNamesToIgnore),
-    {MatchGuardsRez, IgnoredFiltersRez} = lists:foldl(ParseFiltersFun, {[], IgnoredFiltersInit}, Filters),
-    {FilterNamesToIgnore, IgnoredFiltersList} = lists:unzip(IgnoredFiltersRez),
-    {[{
-        #message{msg_id = '$1', sender = '$2', receiver = '$3', date = '$5', _ = '_'},
-        lists:flatten(MatchGuardsRez),
-        ['$_']
-    }], IgnoredFiltersList}.
+resolve_message_id_filter(Messages, []) ->
+    Messages;
 
+resolve_message_id_filter(undefined, FilterClauses) ->
+    NormalisedFilterClauses = lists:map(fun eproc_store:normalise_message_id_filter/1, FilterClauses),
+    MsgIds = eproc_store:intersect_filter_values(NormalisedFilterClauses),
+    read_message_list_ids(MsgIds);
 
-%%
-%% Takes filter as a parameter and returns its corresponding match condition (guard) expression
-%%  for match specification or list of such expressions.
-%% If no guard should be returned, returns [].
-%% This function specific filters are:
-%%  {single_or_list, Values, MapFun} - used, in filters {FilterName, FilterValue | [FilterValues]}
-%%      Values - either a single filter value or a list of filter values.
-%%      MapFun - function, which can be passed a single filter value and returns a match guard (or a list of match guards).
-%%  {single_peer, Peer} - used as a MapFun case for filter {peer, Peer | Peers}.
-%%
-get_message_match_guard({id, MsgIds}) ->
-    FilterToGuardFun = fun(MsgId) ->
-        case MsgId of
-            {InstId, TrnNr, MsgNr} -> ok;
-            {InstId, TrnNr, MsgNr, sent} -> ok;
-            {InstId, TrnNr, MsgNr, recv} -> ok
-        end,
-        {'orelse',
-            {'==', '$1', {const, {InstId, TrnNr, MsgNr, sent}}},
-            {'==', '$1', {const, {InstId, TrnNr, MsgNr, recv}}}
-        }
-    end,
-    get_message_match_guard({single_or_list, MsgIds, FilterToGuardFun});
-
-get_message_match_guard({date, From, undefined}) ->
-    {'>=', '$5', {From}};
-
-get_message_match_guard({date, undefined, Till}) ->
-    {'=<', '$5', {Till}};
-
-get_message_match_guard({date, From, Till}) ->
-    [get_message_match_guard({date, From, undefined}), get_message_match_guard({date, undefined, Till})];
-
-get_message_match_guard({peer, Peers}) ->
-    FilterToGuardFun = fun(Peer) -> get_message_match_guard({single_peer, Peer}) end,
-    get_message_match_guard({single_or_list, Peers, FilterToGuardFun});
-
-get_message_match_guard({single_peer, {sent, EventSrc}}) ->
-    {'==', '$2', {const, EventSrc}};
-
-get_message_match_guard({single_peer, {recv, EventSrc}}) ->
-    {'==', '$3', {const, EventSrc}};
-
-get_message_match_guard({single_peer, {any, EventSrc}}) ->
-    Send = get_message_match_guard({single_peer, {sent, EventSrc}}),
-    Recv = get_message_match_guard({single_peer, {recv, EventSrc}}),
-    {'orelse', Send, Recv};
-
-get_message_match_guard({single_or_list, [], _}) ->
-    [];
-
-get_message_match_guard({single_or_list, Values, FilterToGuardFun}) when is_list(Values) ->
-    case lists:map(FilterToGuardFun, Values) of
-        [Filter] -> Filter;
-        [Filter | Filters] -> erlang:list_to_tuple(['orelse', Filter | Filters])
-    end;
-
-get_message_match_guard({single_or_list, Value, MapFun}) ->
-    get_message_match_guard({single_or_list, [Value], MapFun}).
-
-
-%%
-%% Resolves a filter value list (second parameter).
-%% If filter value is not a list, makes a list of single filter value and resolves the list.
-%% Returns a list of instances after applying the filter;
-%% Parameters:
-%%      Instances - list of instances before filtering; if undefined, then the database haven't been queried yet.
-%%      FilterValue - a list of filter values to be used.
-%%      QueryFuns - functions for querying the database, in case it hasn't been done (if Instances == undefined).
-%%          QueryFuns is either {GetIDsFun :: fun/1, QueryFun :: fun/1} or QueryFun :: fun/1, where:
-%%              GetIDsFun is passed a list of filter values and should return a list of ids for database query.
-%%                  If GetIDsFun isn't provided, it is assumed that filter value is a list of ids.
-%%              QueryFun is passed a single id and should return either {ok, #instance{}} or {error, Reason}.
-%%      FilterFun - fun/2 to be used if the database have been queried (if Instances is [#instance{}]).
-%%          The parameters are:
-%%              #instance{} - an instance to be checked.
-%%              List of filter values.
-%%          The function must return true, if the instance passes at least one filter in the list of filters.
-%%          and false otherwise.
-%% If the database hasn't been querried, GetIDsFun is called, duplicate IDs are removed from the resulting list
-%%  and QueryFun is called for each ID to get a list of instances.
-%%  If some IDs cannot be retrieved from the database, they are ignored.
-%% If the database has been querried, FilterFun is called for every instance of Instances.
-%%  FilterFun is passed a filter value list of the filter, which is being resolved.
-%%  Only the instances, for which FilterFun returns true are returned in a list.
-%%
-resolve_pre_filter(_Instances, [], _QueryFuns, _FilterFun) ->
-    [];
-
-resolve_pre_filter(undefined, FilterValues, QueryFuns, _) when is_list(FilterValues) ->
-    {Ids, QueryFun} = case QueryFuns of
-        {GetIdsFun, QF} -> {GetIdsFun(FilterValues), QF};
-        QF -> {FilterValues, QF}
-    end,
-    UniqueIds = lists:usort(Ids),
-    FilterMapFun = fun(Id) ->
-        case QueryFun(Id) of
-            {ok, Inst}  -> {true, Inst};
-            {error, _}  -> false
-        end
-    end,
-    lists:filtermap(FilterMapFun, UniqueIds);
-
-resolve_pre_filter([], _, _, _) ->
-    [];
-
-resolve_pre_filter(Instances, FilterValues, _, FilterFun) when is_list(FilterValues) ->
-    ListFilterFun = fun(FilterValue) -> FilterFun(FilterValue, FilterValues) end,
-    lists:filter(ListFilterFun, Instances);
-
-resolve_pre_filter(Instances, FilterValue, QFun, FFun) ->
-    resolve_pre_filter(Instances, [FilterValue], QFun, FFun).
+resolve_message_id_filter(Messages, _FilterClauses) ->
+    Messages.  % Leave filtering for match_spec.
 
 
 %% =============================================================================
