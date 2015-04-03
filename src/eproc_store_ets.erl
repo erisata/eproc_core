@@ -855,6 +855,19 @@ handle_attr_actions(Instance, Transition = #transition{attr_actions = AttrAction
     ok.
 
 
+%%
+%%  Resolves match filters. Takes name of ets table (`Table`) and match
+%%  specification (`MatchSpec`) as parameter. If first parameter is undefined,
+%%  queries the specified table. Otherwise, filters the list passed as a first
+%%  parameter with provided match specification.
+%%  Never returns undefined.
+%%
+resolve_match_filter(undefined, Table, MatchSpec) ->
+    ets:select(Table, MatchSpec);
+
+resolve_match_filter(Objects, _Table, MatchSpec) ->
+    ets:match_spec_run(Objects, ets:match_spec_compile(MatchSpec)).
+
 
 %% =============================================================================
 %%  Instance filtering functions, used in `get_instance/3`.
@@ -942,15 +955,32 @@ resolve_instance_tag_to_inst_ids(FilterClauses) ->
     eproc_store:intersect_lists(lists:map(GetInstIdsByClauseFun, FilterClauses)).
 
 
+%% =============================================================================
+%%  Message filtering functions, used in `get_message/3`.
+%%  All these functions take a list of messages or undefined as the
+%%  first parameter. The functions performs filtering, if the list is
+%%  passed to it, and performs query, if message list is undefined.
 %%
-%%  Resolves match filters. Takes Match specification as parameter.
-%%  Never returns undefined.
-%%
-resolve_match_filter(undefined, Table, MatchSpec) ->
-    ets:select(Table, MatchSpec);
+%%  Second parameter is a list of filter clauses of the corresponding type.
+%% =============================================================================
 
-resolve_match_filter(Objects, _Table, MatchSpec) ->
-    ets:match_spec_run(Objects, ets:match_spec_compile(MatchSpec)).
+%%
+%%  Resolves message id filter. At most one such filter is expected,
+%%  although several message IDs can be provided in it. The function
+%%  takes undefined, returns undefined or a list of messages. Message
+%%  filtering is not performed here and should be handled in the match
+%%  spec filtering.
+%%
+resolve_message_id_filter(Messages, []) ->
+    Messages;
+
+resolve_message_id_filter(undefined, FilterClauses) ->
+    NormalisedFilterClauses = lists:map(fun eproc_store:normalise_message_id_filter/1, FilterClauses),
+    MsgIds = eproc_store:intersect_filter_values(NormalisedFilterClauses),
+    read_message_list_ids(MsgIds);
+
+resolve_message_id_filter(Messages, _FilterClauses) ->
+    Messages.  % Leave filtering for match_spec.
 
 
 %%
@@ -982,31 +1012,6 @@ resolve_message_match_filter(Messages, MatchSpec) ->
         _ ->
             MessagesFiltered
     end.
-
-
-%% =============================================================================
-%%  get_message/3 helper functions
-%% =============================================================================
-
-
-
-%%
-%%  Resolves message id filter. At most one such filter is expected,
-%%  although several message IDs can be provided in it. The function
-%%  takes undefined, returns undefined or a list of messages. Message
-%%  filtering is not performed here and should be handled in the match
-%%  spec filtering.
-%%
-resolve_message_id_filter(Messages, []) ->
-    Messages;
-
-resolve_message_id_filter(undefined, FilterClauses) ->
-    NormalisedFilterClauses = lists:map(fun eproc_store:normalise_message_id_filter/1, FilterClauses),
-    MsgIds = eproc_store:intersect_filter_values(NormalisedFilterClauses),
-    read_message_list_ids(MsgIds);
-
-resolve_message_id_filter(Messages, _FilterClauses) ->
-    Messages.  % Leave filtering for match_spec.
 
 
 %% =============================================================================
