@@ -49,12 +49,24 @@
     apply_transition/3,
     make_resume_attempt/3,
     determine_transition_action/2,
+    intersect_filter_values/1,
+    group_filter_by_type/2,
+    general_filter_to_ms/5
+]).
+-export([
     instance_age_us/2,
     instance_last_trn_time/1,
     instance_sort/2,
-    instance_filter_values/1,
-    instance_filter_by_type/2,
-    instance_filter_to_ms/2,
+    instance_filter_to_ms/2
+]).
+-export([
+    normalise_message_id/1,
+    normalise_message/1,
+    normalise_message_id_filter/1,
+    message_sort/2,
+    message_filter_to_ms/2
+]).
+-export([
     sublist_opt/3,
     make_list/1,
     member_in_all/2,
@@ -72,6 +84,11 @@
 -define(INST_MSVAR_CREATED, '$5').
 -define(INST_MSVAR_CURR_STATE, '$6').
 -define(INST_MSVAR_TERMINATED, '$7').
+
+-define(MSG_MSVAR_ID, '$1').
+-define(MSG_MSVAR_SENDER, '$2').
+-define(MSG_MSVAR_RECEIVER, '$3').
+-define(MSG_MSVAR_DATE, '$5').
 
 
 %% =============================================================================
@@ -335,14 +352,16 @@
     when
         FilterClause ::
             {id,        MIdFilter | [MIdFilter]} |
+        %    {inst_id,   IIdFilter | [IIdFilter]} | %% TODO?
             {date,      From :: timestamp() | undefined, Till :: timestamp() | undefined} |
-            {peer,      [PeerFilter]},
-        MIdFilter   :: InstId :: inst_id(),
+            {peer,      PeerFilter | [PeerFilter]},
+        MIdFilter   :: msg_id() | msg_cid() ,
+        %IIdFilter   :: InstId :: inst_id(),
         PeerFilter  :: {Role :: (send | recv | any), event_src()},
-        Paging      :: {ResFrom, ResCount} | {ResFrom, ResCount, SortedBy}, % SortedBy=last_trn by default
+        Paging      :: {ResFrom, ResCount} | {ResFrom, ResCount, SortedBy}, % SortedBy=date by default
         ResFrom     :: integer() | undefined,
         ResCount    :: integer() | undefined,
-        SortedBy    :: date | sender | receiver,
+        SortedBy    :: id | date | sender | receiver,
         TotalCount  :: integer() | undefined,
         TotalExact  :: boolean().
 
@@ -641,6 +660,107 @@ determine_transition_action(Transition = #transition{inst_status = Status}, OldS
 
 
 %%
+%%  Returns intersection of several clauses (of the same type).
+%%
+-spec intersect_filter_values([{atom(), term() | [term()]}]) -> [term()].
+
+intersect_filter_values(Clauses) ->
+    ListOfValueLists = [ make_list(ValueOrList) || {_ClauseType, ValueOrList} <- Clauses ],
+    intersect_lists(ListOfValueLists).
+
+
+%%
+%%  Collects and groups filter clauses of specified types.
+%%  It is assumed that filter is a tuple, and its first element is atom, which is filter type.
+%%  The function also returns all other (not grouped) instance filter clauses.
+%%
+-spec group_filter_by_type(list(), [atom()]) -> {ok, [[term()]], [term()]}.
+
+group_filter_by_type(Filters, GroupTypes) ->
+    GroupFun = fun (FilterClause, {Groups, Other}) ->
+        FilterName = erlang:element(1, FilterClause),
+        case lists:keyfind(FilterName, 1, Groups) of
+            {FilterName, GroupClauses} ->
+                NewGroupClauses = [FilterClause | GroupClauses],
+                NewGroups = lists:keyreplace(FilterName, 1, Groups, {FilterName, NewGroupClauses}),
+                {NewGroups, Other};
+            false ->
+                {Groups, [FilterClause | Other]}
+        end
+    end,
+    GroupedInitial = [ {T, []} || T <- GroupTypes ],
+    {Grouped, Other} = lists:foldl(GroupFun, {GroupedInitial, []}, Filters),
+    {ok, [ Clauses || {_, Clauses} <- Grouped ], Other}.
+
+
+%%
+%%  This function takes a list of filter clauses (`Filters`) and converts it
+%%  to a match specification. The `SkipFilters` parameter can be used to
+%%  ignore clauses of some types, when creating the match specification. This
+%%  function can produce match specification for different objects as defined
+%%  by parameters:
+%%      `MatchHead` - head part of match specification,
+%%      `FilterToGuardFun` - function, which takes a single filter clause and
+%%      returns a list of filter guard expressions for that clause.
+%%      `MatchBody` - body part of match specification.
+%%
+-spec general_filter_to_ms(Filters, SkipFilters, MatchHead, FilterToGuardFun, MatchBody) -> {ok, ets:match_spec()}
+    when
+        Filters :: list(Filter),
+        Filter :: tuple(),
+        SkipFilters :: [atom()],
+        MatchHead :: term(),
+        FilterToGuardFun :: fun((Filter) -> list(tuple())),
+        MatchBody :: list().
+
+general_filter_to_ms(Filters, SkipFilters, MatchHead, FilterToGuardFun, MatchBody) ->
+    MakeGuardFun = fun(FilterClause, Guards) ->
+        FilterName = erlang:element(1, FilterClause),
+        case lists:member(FilterName, SkipFilters) of
+            true ->
+                Guards;
+            false ->
+                ClauseGuards = FilterToGuardFun(FilterClause),
+                [ClauseGuards | Guards]
+        end
+    end,
+    Guards = lists:foldr(MakeGuardFun, [], Filters),
+    MatchFunction = {MatchHead, lists:flatten(Guards), MatchBody},
+    MatchSpec = [MatchFunction],
+    {ok, MatchSpec}.
+
+
+%%
+%%  Makes OR guards, if multiple guard expressions are supplied.
+%%  If some OR guards are supplied in the list, unpacks their condition expressions.
+%%
+make_orelse_guard([], _MakeGuardFun) ->
+    [];
+
+make_orelse_guard([Value], MakeGuardFun) ->
+    [MakeGuardFun(Value)];
+
+make_orelse_guard(Values, MakeGuardFun) when is_list(Values)->
+    MakeGuardOptimisedFun = fun(Filter) ->
+        Guard = MakeGuardFun(Filter),
+        GuardType = erlang:element(1, Guard),
+        case GuardType of
+            'orelse' ->
+                ['orelse' | Conditions] = erlang:tuple_to_list(Guard),
+                Conditions;
+            _ ->
+                Guard
+        end
+    end,
+    GuardList = lists:map(MakeGuardOptimisedFun, Values),
+    [erlang:list_to_tuple(['orelse' | lists:flatten(GuardList)])].
+
+
+%% =============================================================================
+%%  Instance related functions for `eproc_store` implementations
+%% =============================================================================
+
+%%
 %%  Returns the age of the instance in microseconds.
 %%  The current time can be passed as the second parameter to simulate
 %%  the age calculation of several instances at the same time.
@@ -707,42 +827,9 @@ instance_sort(Instances, SortBy) ->
 
 
 %%
-%%  Returns intersection of several clauses of the same type.
-%%
--spec instance_filter_values([{atom(), term() | [term()]}]) -> [term()].
-
-instance_filter_values(Clauses) ->
-    ListOfValueLists = [ make_list(ValueOrList) || {_ClauseType, ValueOrList} <- Clauses ],
-    intersect_lists(ListOfValueLists).
-
-
-%%
-%%  Collects and groups instance filter clauses of specified types.
-%%  The function also returns all other (not grouped) instance filter clauses.
-%%
--spec instance_filter_by_type(list(), [atom()]) -> {ok, [[term()]], [term()]}.
-
-instance_filter_by_type(InstanceFilters, GroupTypes) ->
-    GroupFun = fun (FilterClause, {Groups, Other}) ->
-        FilterName = erlang:element(1, FilterClause),
-        case lists:keyfind(FilterName, 1, Groups) of
-            {FilterName, GroupClauses} ->
-                NewGroupClauses = [FilterClause | GroupClauses],
-                NewGroups = lists:keyreplace(FilterName, 1, Groups, {FilterName, NewGroupClauses}),
-                {NewGroups, Other};
-            false ->
-                {Groups, [FilterClause | Other]}
-        end
-    end,
-    GroupedInitial = [ {T, []} || T <- GroupTypes ],
-    {Grouped, Other} = lists:foldl(GroupFun, {GroupedInitial, []}, InstanceFilters),
-    {ok, [ Clauses || {_, Clauses} <- Grouped ], Other}.
-
-
-%%
 %%  This function takes a list of instance filter clauses and converts it
 %%  to a match specification for `#instance{}` records. This function also
-%%  collects and groups filter clauses of specified types. The `SkipFilters`
+%%  normalizes age clause to improve performance. The `SkipFilters`
 %%  parameter can be used to ignore clauses of some types, when creating
 %%  the match specification.
 %%
@@ -751,7 +838,7 @@ instance_filter_by_type(InstanceFilters, GroupTypes) ->
 instance_filter_to_ms(InstanceFilters, SkipFilters) ->
     %
     % Normalize filter clauses (group ages).
-    {ok, AgeClauses, OtherClauses} = instance_filter_by_type(InstanceFilters, [age]),
+    {ok, AgeClauses, OtherClauses} = group_filter_by_type(InstanceFilters, [age]),
     NormalizedFilters = case AgeClauses of
         [] ->
             InstanceFilters;
@@ -761,41 +848,28 @@ instance_filter_to_ms(InstanceFilters, SkipFilters) ->
             AgesMS = [ eproc_timer:duration_to_ms(Age) || {age, Age} <- AgeClauses ],
             [{age, {lists:max(AgesMS), ms}} | OtherClauses]
     end,
-    %
-    % Create guards.
-    MakeGuardFun = fun(FilterClause, Guards) ->
-        FilterName = erlang:element(1, FilterClause),
-        case lists:member(FilterName, SkipFilters) of
-            true ->
-                Guards;
-            false ->
-                ClauseGuards = instance_filter_to_guard(FilterClause),
-                [ClauseGuards | Guards]
-        end
+    GoodSkipFilters = case lists:member(tag, SkipFilters) of
+        true -> SkipFilters;
+        false -> [tag | SkipFilters]
     end,
-    Guards = lists:foldr(MakeGuardFun, [], NormalizedFilters),
-    %
-    % Create match spec.
-    MatchFunction = {
-        #instance{
-            inst_id = ?INST_MSVAR_ID,
-            name = ?INST_MSVAR_NAME,
-            module = ?INST_MSVAR_MODULE,
-            status = ?INST_MSVAR_STATUS,
-            created = ?INST_MSVAR_CREATED,
-            curr_state = ?INST_MSVAR_CURR_STATE,
-            terminated = ?INST_MSVAR_TERMINATED,
-            _ = '_'
-        },
-        lists:flatten(Guards),
-        ['$_']
+    MatchHead = #instance{
+        inst_id = ?INST_MSVAR_ID,
+        name = ?INST_MSVAR_NAME,
+        module = ?INST_MSVAR_MODULE,
+        status = ?INST_MSVAR_STATUS,
+        created = ?INST_MSVAR_CREATED,
+        curr_state = ?INST_MSVAR_CURR_STATE,
+        terminated = ?INST_MSVAR_TERMINATED,
+        _ = '_'
     },
-    MatchSpec = [MatchFunction],
-    {ok, MatchSpec}.
+    MatchBody = ['$_'],
+    general_filter_to_ms(NormalizedFilters, GoodSkipFilters, MatchHead, fun instance_filter_to_guard/1, MatchBody).
 
 
 %%
-%%  Creates match spec guards for the specified instance filter clause.
+%% Takes instance filter clause as a parameter and returns a list of its
+%% corresponding match condition (guard) expressions for match specification.
+%% If no guard should be returned, returns [].
 %%
 instance_filter_to_guard({id, InstIdOrList}) ->
     MakeGuardFun = fun (InstId) ->
@@ -900,19 +974,150 @@ instance_filter_to_guard({age, MinAge}) ->
     [Guard].
 
 
+%% =============================================================================
+%%  Message related functions for `eproc_store` implementations
+%% =============================================================================
+
 %%
-%%  Make OR guards, if multiple values supplied.
+%% Makes message id out of message id or message copy id.
 %%
-make_orelse_guard([], _MakeGuardFun) ->
+-spec normalise_message_id(msg_id() | msg_cid()) -> msg_id().
+
+normalise_message_id({InstId, TrnNr, MsgNr, sent})  -> {InstId, TrnNr, MsgNr};
+normalise_message_id({InstId, TrnNr, MsgNr, recv})  -> {InstId, TrnNr, MsgNr};
+normalise_message_id({InstId, TrnNr, MsgNr})        -> {InstId, TrnNr, MsgNr}.
+
+
+%%
+%% Replaces message id or message copy id by message id in #message{} record.
+%%
+normalise_message(Message = #message{msg_id = MsgId}) ->
+    Message#message{msg_id = normalise_message_id(MsgId)}.
+
+
+%%
+%% Replaces message id or message copy id by message id in a single message
+%% filter clause.
+%%
+normalise_message_id_filter({id, Values}) when is_list(Values) ->
+    {id, lists:map(fun normalise_message_id/1, Values)};
+
+normalise_message_id_filter({id, SingleValue}) ->
+    {id, normalise_message_id(SingleValue)}.
+
+
+%%
+%%  Sort messages by specified criteria.
+%%
+-spec message_sort([#message{}], SortBy) -> [#message{}]
+    when SortBy :: id | date | sender | receiver.
+
+message_sort(Messages, SortBy) ->
+    SortFun = case SortBy of
+        id ->
+            fun(#message{msg_id = ID1}, #message{msg_id = ID2}) ->
+                ID1 =< ID2
+            end;
+        date ->
+            fun(#message{date = Date1}, #message{date = Date2}) ->
+                Date1 >= Date2
+            end;
+        sender ->
+            fun(#message{sender = Sender1}, #message{sender = Sender2}) ->
+                Sender1 =< Sender2
+            end;
+        receiver ->
+            fun(#message{receiver = Receiver1}, #message{receiver = Receiver2}) ->
+                Receiver1 =< Receiver2
+            end
+    end,
+    lists:sort(SortFun, Messages).
+
+
+%%
+%%  This function takes a list of message filter clauses and converts it
+%%  to a match specification for `#message{}` records. The `SkipFilters`
+%%  parameter can be used to ignore clauses of some types, when creating
+%%  the match specification.
+%%
+-spec message_filter_to_ms(list(), [atom()]) -> {ok, ets:match_spec()}.
+
+message_filter_to_ms(MessageFilters, SkipFilters) ->
+    MatchHead = #message{
+        msg_id = ?MSG_MSVAR_ID,
+        sender = ?MSG_MSVAR_SENDER,
+        receiver = ?MSG_MSVAR_RECEIVER,
+        date = ?MSG_MSVAR_DATE,
+        _ = '_'
+    },
+    MatchBody = ['$_'],
+    general_filter_to_ms(MessageFilters, SkipFilters, MatchHead, fun message_filter_to_guard/1, MatchBody).
+
+
+%%
+%% Takes message filter clause as a parameter and returns a list of its
+%% corresponding match condition (guard) expressions for match specification.
+%% If no guard should be returned, returns [].
+%%
+message_filter_to_guard({id, MsgIdOrList}) ->
+    MakeGuardFun = fun(MsgId) ->
+        case MsgId of
+            {InstId, TrnNr, MsgNr} -> ok;
+            {InstId, TrnNr, MsgNr, sent} -> ok;
+            {InstId, TrnNr, MsgNr, recv} -> ok
+        end,
+        {'orelse',
+            {'==', ?MSG_MSVAR_ID, {const, {InstId, TrnNr, MsgNr, sent}}},
+            {'==', ?MSG_MSVAR_ID, {const, {InstId, TrnNr, MsgNr, recv}}}
+        }
+    end,
+    make_orelse_guard(make_list(MsgIdOrList), MakeGuardFun);
+
+
+message_filter_to_guard({date, undefined, undefined}) ->
     [];
 
-make_orelse_guard([Value], MakeGuardFun) ->
-    [MakeGuardFun(Value)];
+message_filter_to_guard({date, From, undefined}) ->
+    [
+        {'>=', ?MSG_MSVAR_DATE, {const, From}}
+    ];
 
-make_orelse_guard(Values, MakeGuardFun) when is_list(Values)->
-    GuardList = lists:map(MakeGuardFun, Values),
-    erlang:list_to_tuple(['orelse' | GuardList]).
+message_filter_to_guard({date, undefined, Till}) ->
+    [
+        {'=<', ?MSG_MSVAR_DATE, {const, Till}}
+    ];
 
+message_filter_to_guard({date, From, Till}) ->
+    [
+        message_filter_to_guard({date, From, undefined}),
+        message_filter_to_guard({date, undefined, Till})
+    ];
+
+message_filter_to_guard({peer, PeerOrList}) ->
+    make_orelse_guard(make_list(PeerOrList), fun message_peer_filter_to_guard/1).
+
+
+%%
+%% Takes a single message peer filter clause value as a parameter and returns
+%% a list of its corresponding match condition (guard) expressions for match
+%% specification. Helper function to message_filter_to_guard/1.
+%%
+message_peer_filter_to_guard({sent, EventSrc}) ->
+    {'==', ?MSG_MSVAR_SENDER, {const, EventSrc}};
+
+message_peer_filter_to_guard({recv, EventSrc}) ->
+    {'==', ?MSG_MSVAR_RECEIVER, {const, EventSrc}};
+
+message_peer_filter_to_guard({any, EventSrc}) ->
+    {'orelse',
+        message_peer_filter_to_guard({sent, EventSrc}),
+        message_peer_filter_to_guard({recv, EventSrc})
+    }.
+
+
+%% =============================================================================
+%%  Other more general public functions
+%% =============================================================================
 
 %%
 %%  sublist_opt(L, F, C) returns C elements of list L starting with F-th element of the list.

@@ -353,7 +353,7 @@ eproc_store_core_test_get_instance_filter(Config) ->
     Req = fun(List) ->
         [Elem || Elem <- List, Elem == Inst1 orelse Elem == Inst2 orelse Elem == Inst3 orelse Elem == Inst4 orelse Elem == Inst5]
     end,
-    true = length(Res01) =< Count,                  % Checks if the constant enough for all the queries
+    true = length(Res01) < Count,                  % Checks if the constant enough for all the queries
     [I1,I2,I3] = Res00,
     [_,_,I1,I2,I3|_] = Res01,
     ?assertThat(Res01, contains_member(Inst1)),
@@ -557,6 +557,9 @@ eproc_store_core_test_add_transition(Config) ->
     {ok, IID1} = eproc_store:add_instance(Store, Inst),
     %%
     %%  Add ordinary transition
+    MsgId11 = {IID1, 1, 0, recv},
+    MsgId12 = {IID1, 1, 1, sent},
+    MsgId13 = {IID1, 1, 2, recv},
     Trn1 = #transition{
         trn_id = 1,
         sname = [s1],
@@ -565,17 +568,17 @@ eproc_store_core_test_add_transition(Config) ->
         duration = 13,
         trn_node = undefined,
         trigger_type = event,
-        trigger_msg = #msg_ref{cid = 1011, peer = {connector, some}},
-        trigger_resp = #msg_ref{cid = 1012, peer = {connector, some}},
-        trn_messages = [#msg_ref{cid = 1013, peer = {connector, some}}],
+        trigger_msg = #msg_ref{cid = MsgId11, peer = {connector, some}},
+        trigger_resp = #msg_ref{cid = MsgId12, peer = {connector, some}},
+        trn_messages = [#msg_ref{cid = MsgId13, peer = {connector, some}}],
         attr_last_nr = 1,
         attr_actions = [#attr_action{module = m, attr_nr = 1, action = {create, undefined, [], some}}],
         inst_status = running,
         interrupts = undefined
     },
-    Msg11 = #message{msg_id = 1011, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m11},
-    Msg12 = #message{msg_id = 1012, sender = {connector, some}, receiver = {inst, IID1}, resp_to = 1011,      date = os:timestamp(), body = m12},
-    Msg13 = #message{msg_id = 1013, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m13},
+    Msg11 = #message{msg_id = MsgId11, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m11},
+    Msg12 = #message{msg_id = MsgId12, sender = {connector, some}, receiver = {inst, IID1}, resp_to = MsgId11,    date = os:timestamp(), body = m12},
+    Msg13 = #message{msg_id = MsgId13, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m13},
     {ok, IID1, 1} = eproc_store:add_transition(Store, IID1, Trn1, [Msg11, Msg12, Msg13]),
     {ok, #instance{status = running, interrupt = undefined, curr_state = #inst_state{
         stt_id = 1, sname = [s1], sdata = d1, timestamp = {_, _, _},
@@ -583,16 +586,17 @@ eproc_store_core_test_add_transition(Config) ->
     }}} = eproc_store:get_instance(Store, {inst, IID1}, current),
     %%
     %%  Add another ordinary transition
+    MsgId2 = {IID1, 2, 0, recv},
     Trn2 = Trn1#transition{
         trn_id = 2,
         sname = [s2],
         sdata = d2,
-        trigger_msg = #msg_ref{cid = 1021, peer = {connector, some}},
+        trigger_msg = #msg_ref{cid = MsgId2, peer = {connector, some}},
         trigger_resp = undefined,
         trn_messages = [],
         attr_actions = []
     },
-    Msg21 = #message{msg_id = 1021, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m21},
+    Msg21 = #message{msg_id = MsgId2, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m21},
     {ok, IID1, 2} = eproc_store:add_transition(Store, IID1, Trn2, [Msg21]),
     {ok, #instance{status = running, interrupt = undefined, curr_state = #inst_state{
         stt_id = 2, sname = [s2], sdata = d2, timestamp = {_, _, _},
@@ -600,18 +604,19 @@ eproc_store_core_test_add_transition(Config) ->
     }}} = eproc_store:get_instance(Store, {inst, IID1}, current),
     %%
     %%  Suspend by transition.
+    MsgId3 = {IID1, 3, 0, recv},
     Trn3 = Trn1#transition{
         trn_id = 3,
         sname = [s3],
         sdata = d3,
-        trigger_msg = #msg_ref{cid = 1031, peer = {connector, some}},
+        trigger_msg = #msg_ref{cid = MsgId3, peer = {connector, some}},
         trigger_resp = undefined,
         trn_messages = [],
         attr_actions = [],
         inst_status = suspended,
         interrupts = [#interrupt{reason = {fault, some_reason}}]
     },
-    Msg31 = #message{msg_id = 1031, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m31},
+    Msg31 = #message{msg_id = MsgId3, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m31},
     {ok, IID1, 3} = eproc_store:add_transition(Store, IID1, Trn3, [Msg31]),
     {ok, #instance{status = suspended,
         curr_state = #inst_state{
@@ -631,18 +636,19 @@ eproc_store_core_test_add_transition(Config) ->
     {ok, IID1, _}  = eproc_store:set_instance_resuming(Store, {inst, IID1}, unchanged, #user_action{}),
     {ok, IID1, _}  = eproc_store:set_instance_resuming(Store, {inst, IID1}, unchanged, #user_action{}),
     {ok, IID1, _}  = eproc_store:set_instance_resuming(Store, {inst, IID1}, unchanged, #user_action{}),
+    MsgId4 = {IID1, 4, 0, recv},
     Trn4 = Trn1#transition{
         trn_id = 4,
         sname = [s4],
         sdata = d4,
-        trigger_msg = #msg_ref{cid = 1041, peer = {connector, some}},
+        trigger_msg = #msg_ref{cid = MsgId4, peer = {connector, some}},
         trigger_resp = undefined,
         trn_messages = [],
         attr_actions = [],
         inst_status = running,
         interrupts = undefined
     },
-    Msg41 = #message{msg_id = 1041, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m41},
+    Msg41 = #message{msg_id = MsgId4, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m41},
     {ok, IID1, 4} = eproc_store:add_transition(Store, IID1, Trn4, [Msg41]),
     {ok, #instance{status = running, interrupt = undefined, curr_state = #inst_state{
         stt_id = 4, sname = [s4], sdata = d4, timestamp = {_, _, _},
@@ -650,18 +656,19 @@ eproc_store_core_test_add_transition(Config) ->
     }}} = eproc_store:get_instance(Store, {inst, IID1}, current),
     %%
     %%  Terminate FSM.
+    MsgId5 = {IID1, 5, 0, recv},
     Trn5 = Trn1#transition{
         trn_id = 5,
         sname = [s5],
         sdata = d5,
-        trigger_msg = #msg_ref{cid = 1051, peer = {connector, some}},
+        trigger_msg = #msg_ref{cid = MsgId5, peer = {connector, some}},
         trigger_resp = undefined,
         trn_messages = [],
         attr_actions = [],
         inst_status = completed,
         interrupts = undefined
     },
-    Msg51 = #message{msg_id = 1051, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m51},
+    Msg51 = #message{msg_id = MsgId5, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m51},
     {ok, IID1, 5} = eproc_store:add_transition(Store, IID1, Trn5, [Msg51]),
     {ok, #instance{status = completed, interrupt = undefined, curr_state = #inst_state{
         stt_id = 5, sname = [s5], sdata = d5, timestamp = {_, _, _},
@@ -669,18 +676,19 @@ eproc_store_core_test_add_transition(Config) ->
     }}} = eproc_store:get_instance(Store, {inst, IID1}, current),
     %%
     %%  Add transition to the terminated FSM.
+    MsgId6 = {IID1, 6, 0, recv},
     Trn6 = Trn1#transition{
         trn_id = 6,
         sname = [s6],
         sdata = d6,
-        trigger_msg = #msg_ref{cid = 1061, peer = {connector, some}},
+        trigger_msg = #msg_ref{cid = MsgId6, peer = {connector, some}},
         trigger_resp = undefined,
         trn_messages = [],
         attr_actions = [],
         inst_status = running,
         interrupts = undefined
     },
-    Msg61 = #message{msg_id = 1061, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m61},
+    Msg61 = #message{msg_id = MsgId6, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m61},
     {error, terminated} = eproc_store:add_transition(Store, IID1, Trn6, [Msg61]),
     {ok, #instance{status = completed, interrupt = undefined, curr_state = #inst_state{
         stt_id = 5, sname = [s5], sdata = d5, timestamp = {_, _, _},
@@ -699,16 +707,24 @@ eproc_store_core_test_add_transition(Config) ->
 %%
 eproc_store_core_test_resolve_msg_dst(Config) ->
     Store = store(Config),
+    %%  Some constants.
+    Now = os:timestamp(),
+    OldDate1 = eproc_timer:timestamp_before({3,day}, Now),
+    OldDate2 = eproc_timer:timestamp_before({2,day}, Now),
+    OldDate3 = eproc_timer:timestamp_before({1,day}, Now),
+    OldDate4 = eproc_timer:timestamp_before({12,hour}, Now),
     %%  Add instances.
     Inst = inst_value(),
     {ok, IID1} = eproc_store:add_instance(Store, Inst),
     {ok, IID2} = eproc_store:add_instance(Store, Inst),
+    {ok, IID3} = eproc_store:add_instance(Store, Inst),
     {ok, NodeRef} = eproc_store:get_node(Store),
     %%  Add transitions.
-    Msg1r = #message{msg_id = {IID1, 1, 0, recv}, sender = {ext, some},  receiver = {inst, IID1},      resp_to = undefined, date = os:timestamp(), body = m1},
-    Msg2s = #message{msg_id = {IID1, 1, 2, sent}, sender = {inst, IID1}, receiver = {inst, undefined}, resp_to = undefined, date = os:timestamp(), body = m2},
-    Msg2r = #message{msg_id = {IID1, 1, 2, recv}, sender = {inst, IID1}, receiver = {inst, IID2},      resp_to = undefined, date = os:timestamp(), body = m2},
-    Msg3r = #message{msg_id = {IID1, 1, 3, recv}, sender = {inst, IID1}, receiver = {inst, IID2},      resp_to = undefined, date = os:timestamp(), body = m3},
+    Msg1r = #message{msg_id = {IID1, 1, 0, recv}, sender = {ext, some},  receiver = {inst, IID1},      resp_to = undefined, date = OldDate1,       body = m1},
+    Msg2s = #message{msg_id = {IID1, 1, 2, sent}, sender = {inst, IID1}, receiver = {inst, undefined}, resp_to = undefined, date = OldDate3,       body = m2},
+    Msg2r = #message{msg_id = {IID1, 1, 2, recv}, sender = {inst, IID1}, receiver = {inst, IID2},      resp_to = undefined, date = OldDate3,       body = m2},
+    Msg3r = #message{msg_id = {IID1, 1, 3, recv}, sender = {inst, IID1}, receiver = {inst, IID2},      resp_to = undefined, date = Now,            body = m3},
+    Msg4r = #message{msg_id = {IID2, 1, 1, recv}, sender = {inst, IID2}, receiver = {inst, IID3},      resp_to = undefined, date = os:timestamp(), body = m4},
     Trn1 = #transition{
         trn_id = 1,
         sname = [s1],
@@ -735,6 +751,11 @@ eproc_store_core_test_resolve_msg_dst(Config) ->
         trigger_msg = #msg_ref{cid = {IID1, 1, 3, recv}, peer = {inst, IID1}},
         trn_messages = []
     },
+    Trn4 = Trn1#transition{
+        trn_id = 1,
+        trigger_msg = #msg_ref{cid = {IID2, 1, 1, recv}, peer = {inst, IID2}},
+        trn_messages = []
+    },
     Trn1Fix = Trn1#transition{
         trn_node = NodeRef,
         trn_messages = [#msg_ref{cid = {IID1, 1, 2, sent}, peer = {inst, IID2}}],
@@ -747,9 +768,12 @@ eproc_store_core_test_resolve_msg_dst(Config) ->
     {ok, IID1, 1} = eproc_store:add_transition(Store, IID1, Trn1, [Msg1r, Msg2s]),
     {ok, IID2, 1} = eproc_store:add_transition(Store, IID2, Trn2, [Msg2r]),
     {ok, IID2, 2} = eproc_store:add_transition(Store, IID2, Trn3, [Msg3r]),
+    {ok, IID3, 1} = eproc_store:add_transition(Store, IID3, Trn4, [Msg4r]),
     %%  Get the stored data.
     Msg1 = Msg1r#message{msg_id = {IID1, 1, 0}},
     Msg2 = Msg2r#message{msg_id = {IID1, 1, 2}}, %% Receiver = {inst, IID2}
+    Msg3 = Msg3r#message{msg_id = {IID1, 1, 3}},
+    Msg4 = Msg4r#message{msg_id = {IID2, 1, 1}},
     ?assertThat(eproc_store:get_message(Store, {IID1, 1, 0      }, all), is({ok, Msg1})),
     ?assertThat(eproc_store:get_message(Store, {IID1, 1, 0, sent}, all), is({ok, Msg1})),
     ?assertThat(eproc_store:get_message(Store, {IID1, 1, 0, recv}, all), is({ok, Msg1})),
@@ -768,6 +792,144 @@ eproc_store_core_test_resolve_msg_dst(Config) ->
     ?assertThat(Trns1b, has_length(0)),
     ?assertThat(Trns2a, has_length(2)),
     ?assertThat(Trns2b, has_length(1)),
+    %% Test get_message list
+    ?assertThat(eproc_store:get_message(Store, {list, []}, all), is({ok, []})),
+    ?assertThat(eproc_store:get_message(Store, {list, [{IID1, 1, 0      }]}, all), is({ok, [Msg1]})),
+    ?assertThat(eproc_store:get_message(Store, {list, [{IID1, 1, 0, sent}]}, all), is({ok, [Msg1]})),
+    ?assertThat(eproc_store:get_message(Store, {list, [{IID1, 1, 0, recv}]}, all), is({ok, [Msg1]})),
+    ?assertThat(eproc_store:get_message(Store, {list, [{IID1, 1, 0, sent}, {IID1, 1, 0      }]}, all), is({ok, [Msg1, Msg1]})),
+    ?assertThat(eproc_store:get_message(Store, {list, [{IID1, 1, 0      }, {IID1, 1, 2, recv}]}, all), is({ok, [Msg1, Msg2]})),
+    ?assertThat(eproc_store:get_message(Store, {list, [{IID1, 1, 3, recv}, {IID1, 1, 0, sent}, {IID1, 1, 2}]}, all), is({ok, [Msg3, Msg1, Msg2]})),
+    % Performing sucessful simple get_message filter tests
+    From = 1,
+    Count = 99,
+    {ok, {_, _, Res00}} = eproc_store:get_message(Store, {filter, {From+1, 3}, []}, all),
+    {ok, {_, _, Res01}} = eproc_store:get_message(Store, {filter, {From, Count}, []}, all),
+    {ok, {_, _, Res02}} = eproc_store:get_message(Store, {filter, {From, Count}, [{id, {IID1, 1, 3, recv}}]}, all),
+    {ok, {_, _, Res02}} = eproc_store:get_message(Store, {filter, {From, Count}, [{id, {IID1, 1, 3, sent}}]}, all),
+    {ok, {_, _, Res02}} = eproc_store:get_message(Store, {filter, {From, Count}, [{id, {IID1, 1, 3      }}]}, all),
+    {ok, {_, _, Res03}} = eproc_store:get_message(Store, {filter, {From, Count}, [{id, [{IID1, 1, 2, recv}, {IID2, 1, 1, sent}]}]}, all),
+    {ok, {_, _, Res04}} = eproc_store:get_message(Store, {filter, {From, Count}, [{id, [{IID1, 1, 2, sent}, {non, existent, id}, {IID2, 1, 1}]}]}, all),
+    {ok, {_, _, Res05}} = eproc_store:get_message(Store, {filter, {From, Count}, [{date, undefined, OldDate4}]}, all),
+    {ok, {_, _, Res06}} = eproc_store:get_message(Store, {filter, {From, Count}, [{date, OldDate2, undefined}]}, all),
+    {ok, {_, _, Res07}} = eproc_store:get_message(Store, {filter, {From, Count}, [{date, OldDate2, OldDate4}]}, all),
+    {ok, {_, _, Res08}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, {sent, {inst, IID1}}}]}, all),
+    {ok, {_, _, Res09}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, {recv, {inst, IID1}}}]}, all),
+    {ok, {_, _, Res10}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, {any,  {inst, IID1}}}]}, all),
+    {ok, {_, _, Res11}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, [{any, {inst, IID1}}]}]}, all),
+    {ok, {_, _, Res12}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, [{sent, {inst, IID2}}, {sent, {inst, IID3}}]}]}, all),
+    {ok, {_, _, Res13}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, [{recv, {inst, IID2}}, {recv, {inst, IID3}}]}]}, all),
+    {ok, {_, _, Res14}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, [{any,  {inst, IID2}}, {any,  {inst, IID3}}]}]}, all),
+    {ok, {_, _, Res15}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, [{sent, {inst, IID1}}, {recv, {inst, IID3}}]}]}, all),
+    %Evaluating results
+    Req = fun(List) ->
+        [Elem || Elem <- List, Elem == Msg1 orelse Elem == Msg2 orelse Elem == Msg3 orelse Elem == Msg4]
+    end,
+    true = length(Res01) < Count,                  % Checks if the constant enough for all the queries
+    [M1,M2,M3] = Res00,
+    [_,M1,M2,M3|_] = Res01,
+    ?assertThat(Req(Res02), is([Msg3])),
+    ?assertThat(Res03, contains_member(Msg2)),
+    ?assertThat(Res03, contains_member(Msg4)),
+    ?assertThat(Req(Res03), has_length(2)),
+    ?assertThat(Res04, contains_member(Msg2)),
+    ?assertThat(Res04, contains_member(Msg4)),
+    ?assertThat(Req(Res04), has_length(2)),
+    ?assertThat(Res05, contains_member(Msg1)),
+    ?assertThat(Res05, contains_member(Msg2)),
+    ?assertThat(Req(Res05), has_length(2)),
+    ?assertThat(Res06, contains_member(Msg2)),
+    ?assertThat(Res06, contains_member(Msg3)),
+    ?assertThat(Res06, contains_member(Msg4)),
+    ?assertThat(Req(Res06), has_length(3)),
+    ?assertThat(Req(Res07), is([Msg2])),
+    ?assertThat(Res08, contains_member(Msg2)),
+    ?assertThat(Res08, contains_member(Msg3)),
+    ?assertThat(Req(Res08), has_length(2)),
+    ?assertThat(Req(Res09), is([Msg1])),
+    ?assertThat(Res10, contains_member(Msg1)),
+    ?assertThat(Res10, contains_member(Msg2)),
+    ?assertThat(Res10, contains_member(Msg3)),
+    ?assertThat(Req(Res10), has_length(3)),
+    ?assertThat(Res11, contains_member(Msg1)),
+    ?assertThat(Res11, contains_member(Msg2)),
+    ?assertThat(Res11, contains_member(Msg3)),
+    ?assertThat(Req(Res11), has_length(3)),
+    ?assertThat(Req(Res12), is([Msg4])),
+    ?assertThat(Res13, contains_member(Msg2)),
+    ?assertThat(Res13, contains_member(Msg3)),
+    ?assertThat(Res13, contains_member(Msg4)),
+    ?assertThat(Req(Res13), has_length(3)),
+    ?assertThat(Res14, contains_member(Msg2)),
+    ?assertThat(Res14, contains_member(Msg3)),
+    ?assertThat(Res14, contains_member(Msg4)),
+    ?assertThat(Req(Res14), has_length(3)),
+    ?assertThat(Res15, contains_member(Msg2)),
+    ?assertThat(Res15, contains_member(Msg3)),
+    ?assertThat(Res15, contains_member(Msg4)),
+    ?assertThat(Req(Res15), has_length(3)),
+    % Performing sucessful compound tests
+    {ok, {_, _, Res50}} = eproc_store:get_message(Store, {filter, {From, Count}, [{id, {IID1, 1, 2, recv}}, {id, {IID1, 1, 2, sent}}]}, all),
+    {ok, {_, _, Res51}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, {sent, {inst,IID1}}}, {date, undefined, OldDate4}]}, all),
+    {ok, {_, _, Res52}} = eproc_store:get_message(Store, {filter, {From, Count}, [{date, undefined, OldDate4}, {peer, {sent, {inst,IID1}}}]}, all),
+    {ok, {_, _, Res53}} = eproc_store:get_message(Store, {filter, {From, Count}, [{id, [{IID1, 1, 2}, {IID1, 1, 3}]}, {date, OldDate4, undefined}]}, all),
+    {ok, {_, _, Res54}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, [{sent, {inst,IID2}},{recv, {inst,IID2}}]}, {peer, {any, {inst,IID3}}}]}, all),
+    %Evaluating results
+    ?assertThat(Req(Res50), is([Msg2])),
+    ?assertThat(Req(Res51), is([Msg2])),
+    ?assertThat(Req(Res52), is([Msg2])),
+    ?assertThat(Req(Res53), is([Msg3])),
+    ?assertThat(Req(Res54), is([Msg4])),
+    % Performing empty list tests
+    {ok, {_, _, []}} = eproc_store:get_message(Store, {filter, {From, Count}, [{id, {non, existent, id}}]}, all),
+    {ok, {_, _, []}} = eproc_store:get_message(Store, {filter, {From, Count}, [{id, {IID1, 1, 2}}, {id, {IID1, 1, 3, sent}}]}, all),
+    {ok, {_, _, []}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, {sent, {inst,IID2}}}, {date, undefined, OldDate4}]}, all),
+    {ok, {_, _, []}} = eproc_store:get_message(Store, {filter, {From, Count}, [{id, [{IID1, 1, 2}, {IID1, 1, 3}]}, {date, undefined, OldDate2}]}, all),
+    {ok, {_, _, []}} = eproc_store:get_message(Store, {filter, {From, Count}, [{date, undefined, OldDate2}, {id, [{IID1, 1, 2}, {IID1, 1, 3}]}]}, all),
+    % Performing sort tests
+    {ok, {_, _, Res90}} = eproc_store:get_message(Store, {filter, {From, Count, id}, []}, all),
+    {ok, {_, _, Res01}} = eproc_store:get_message(Store, {filter, {From, Count, date}, []}, all),
+    {ok, {_, _, Res91}} = eproc_store:get_message(Store, {filter, {From, Count, sender}, []}, all),
+    {ok, {_, _, Res92}} = eproc_store:get_message(Store, {filter, {From, Count, receiver}, []}, all),
+    % Evaluating results
+    case IID1 < IID2 of
+        true ->
+            ?assertThat(Req(Res90), is([Msg1, Msg2, Msg3, Msg4])),
+            [Msg1, RestRes911, RestRes912, Msg4] = Req(Res91),
+            RestRes91 = [RestRes911, RestRes912],
+            ?assertThat(RestRes91, contains_member(Msg2)),
+            ?assertThat(RestRes91, contains_member(Msg3));
+        false ->
+            ?assertThat(Req(Res90), is([Msg4, Msg1, Msg2, Msg3])),
+            [Msg1, Msg4 | RestRes91] = Req(Res91),
+            ?assertThat(RestRes91, contains_member(Msg2)),
+            ?assertThat(RestRes91, contains_member(Msg3)),
+            ?assertThat(RestRes91, has_length(2))
+    end,
+    ?assertThat(Req(Res01), is([Msg4, Msg3, Msg2, Msg1])),
+    RestRes92 = case lists:usort([IID1, IID2, IID3]) of
+        [IID1, IID2, IID3] ->
+            [Msg1, RestRes921, RestRes922, Msg4] = Req(Res92),
+            [RestRes921, RestRes922];
+        [IID1, IID3, IID2] ->
+            [Msg1, Msg4 | RestRes92_] = Req(Res92),
+            RestRes92_;
+        [IID2, IID1, IID3] ->
+            [RestRes921, RestRes922, Msg1, Msg4] = Req(Res92),
+            [RestRes921, RestRes922];
+        [IID2, IID3, IID1] ->
+            [RestRes921, RestRes922, Msg4, Msg1] = Req(Res92),
+            [RestRes921, RestRes922];
+        [IID3, IID1, IID2] ->
+            [Msg4, Msg1 | RestRes92_] = Req(Res92),
+            RestRes92_;
+        [IID3, IID2, IID1] ->
+            [Msg4, RestRes921, RestRes922, Msg1] = Req(Res92),
+            [RestRes921, RestRes922]
+    end,
+    ?assertThat(RestRes92, contains_member(Msg2)),
+    ?assertThat(RestRes92, contains_member(Msg3)),
+    ?assertThat(RestRes92, has_length(2)),
     ok.
 
 
@@ -891,11 +1053,12 @@ eproc_store_core_test_attrs(Config) ->
     %%
     %%  Add attribute that needs no store.
     %%
+    MsgId1 = {IID1, 1, 0, recv},
     Trn1 = #transition{
         trn_id = 1, sname = [s1], sdata = d1,
         timestamp = os:timestamp(), duration = 13, trigger_type = event,
         trn_node = undefined,
-        trigger_msg = #msg_ref{cid = 1011, peer = {connector, some}},
+        trigger_msg = #msg_ref{cid = MsgId1, peer = {connector, some}},
         trigger_resp = undefined,
         trn_messages = [],
         attr_last_nr = 1,
@@ -904,7 +1067,7 @@ eproc_store_core_test_attrs(Config) ->
         ],
         inst_status = running,interrupts = undefined
     },
-    Msg11 = #message{msg_id = 1011, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m11},
+    Msg11 = #message{msg_id = MsgId1, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m11},
     {ok, IID1, 1} = eproc_store:add_transition(Store, IID1, Trn1, [Msg11]),
     {ok, #instance{status = running, interrupt = undefined, curr_state = #inst_state{
         stt_id = 1, sname = [s1], sdata = d1, timestamp = {_, _, _},
@@ -924,18 +1087,19 @@ eproc_store_core_test_attrs(Config) ->
     %%
     %%  Add another ordinary transition
     %%
+    MsgId2 = {IID1, 2, 0, recv},
     Trn2 = Trn1#transition{
         trn_id = 2,
         sname = [s2],
         sdata = d2,
-        trigger_msg = #msg_ref{cid = 1021, peer = {connector, some}},
+        trigger_msg = #msg_ref{cid = MsgId2, peer = {connector, some}},
         trigger_resp = undefined,
         trn_messages = [],
         attr_actions = [
             #attr_action{module = m2, attr_nr = 2, needs_store = true, action = {create, n11, [], some}}
         ]
     },
-    Msg21 = #message{msg_id = 1021, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m21},
+    Msg21 = #message{msg_id = MsgId2, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m21},
     ok = try eproc_store:add_transition(Store, IID1, Trn2, [Msg21]) of
         {ok, IID1, _} -> error
     catch
@@ -978,11 +1142,12 @@ eproc_store_router_test_attrs(Config) ->
     %%
     %%  Add the key attributes.
     %%
+    MsgId1 = {IID, 1, 0, recv},
     Trn1 = #transition{
         trn_id = 1, sname = [s1], sdata = d1,
         timestamp = os:timestamp(), duration = 13, trigger_type = event,
         trn_node = undefined,
-        trigger_msg = #msg_ref{cid = 1011, peer = {connector, some}},
+        trigger_msg = #msg_ref{cid = MsgId1, peer = {connector, some}},
         trigger_resp = undefined,
         trn_messages = [],
         attr_last_nr = 1,
@@ -992,16 +1157,17 @@ eproc_store_router_test_attrs(Config) ->
         ],
         inst_status = running, interrupts = undefined
     },
-    Msg11 = #message{msg_id = 1011, sender = {connector, some}, receiver = {inst, IID}, resp_to = undefined, date = os:timestamp(), body = m11},
+    Msg11 = #message{msg_id = MsgId1, sender = {connector, some}, receiver = {inst, IID}, resp_to = undefined, date = os:timestamp(), body = m11},
     {ok, IID, 1} = eproc_store:add_transition(Store, IID, Trn1, [Msg11]),
     ?assertThat(eproc_router:lookup(Key1, RouterOpts), is({ok, [IID]})),
     ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, [IID]})),
     %%
     %%  Remove one attr by scope.
     %%
+    MsgId2 = {IID, 2, 0, recv},
     Trn2 = Trn1#transition{
         trn_id = 2, sname = [s2], sdata = d2,
-        trigger_msg = #msg_ref{cid = 1021, peer = {connector, some}},
+        trigger_msg = #msg_ref{cid = MsgId2, peer = {connector, some}},
         trigger_resp = undefined,
         trn_messages = [],
         attr_last_nr = 2,
@@ -1010,7 +1176,7 @@ eproc_store_router_test_attrs(Config) ->
         ],
         inst_status = running, interrupts = undefined
     },
-    Msg21 = #message{msg_id = 1021, sender = {connector, some}, receiver = {inst, IID}, resp_to = undefined, date = os:timestamp(), body = m11},
+    Msg21 = #message{msg_id = MsgId2, sender = {connector, some}, receiver = {inst, IID}, resp_to = undefined, date = os:timestamp(), body = m11},
     {ok, IID, 2} = eproc_store:add_transition(Store, IID, Trn2, [Msg21]),
     ?assertThat(eproc_router:lookup(Key1, RouterOpts), is({ok, []})),
     ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, [IID]})),
