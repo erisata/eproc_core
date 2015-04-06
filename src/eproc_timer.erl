@@ -14,12 +14,14 @@
 %| limitations under the License.
 %\--------------------------------------------------------------------
 
-%%
-%%  This module can be used in callback modules for the `eproc_fsm`
-%%  to manage timers associated with the FSM.
-%%
-%%  TODO: should we use `https://github.com/choptastic/qdate` instead of `timestamp_*` functions?
-%%
+%%%
+%%% This module can be used in callback modules for the `eproc_fsm`
+%%% to manage timers associated with the FSM.
+%%%
+%%% To be done in this module (TODO):
+%%%
+%%%   * should we use `https://github.com/choptastic/qdate` instead of `timestamp_*` functions?
+%%%
 -module(eproc_timer).
 -behaviour(eproc_fsm_attr).
 -export([set/4, set/3, set/2, cancel/1]).
