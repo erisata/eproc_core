@@ -27,6 +27,9 @@ compile:
 compile-all:
 	$(REBAR) compile
 
+docs:
+	rebar doc
+
 check: test itest
 
 test: compile

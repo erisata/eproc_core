@@ -14,133 +14,136 @@
 %| limitations under the License.
 %\--------------------------------------------------------------------
 
-%%
-%%  Main behaviour to be implemented by a user of the `eproc`
-%%  =========================================================
-%%
-%%  This module designed by taking into account UML FSM definition
-%%  as well as the Erlang/OTP `gen_fsm`. The following is the list
-%%  of differences comparing it to `gen_fsm`:
-%%
-%%    * State name supports substates and orthogonal states.
-%%    * Callback `Module:handle_state/3` is used instead of `Module:StateName/2-3`.
-%%      This allows to have substates and orthogonal states.
-%%    * Has support for state entry and exit actions.
-%%      State entry action is convenient for setting up timers and keys.
-%%    * Has support for scopes. The scopes can be used to manage timers and keys.
-%%    * Supports automatic state persistence.
-%%
-%%  It is recomended to name version explicitly when defining state.
-%%  It can be done as follows:
-%%
-%%      -record(state, {
-%%          version = 1,
-%%          ...
-%%      }).
-%%
-%%
-%%  How `eproc_fsm` callbacks are invoked in different scenarios
-%%  ------------------------------------
-%%
-%%  New FSM created, started and an initial event received
-%%  :
-%%      On creation of the persistent FSM inialization in performed:
-%%
-%%        * `init(Args)`
-%%
-%%      then process is started, the following callbacks are used to
-%%      possibly upgrade and initialize process runtime state:
-%%
-%%        * `code_change(state, StateName, StateData, undefined)`
-%%        * `init(InitStateName, StateData)`
-%%
-%%      and then the first event is received and the following callbacks invoked:
-%%
-%%        * `handle_state(InitStateName, {event, Message} | {sync, From, Message}, StateData)`
-%%        * `handle_state(NewStateName, {entry, InitStateName}, StateData)`
-%%
-%%  FSM process terminated
-%%  :
-%%        * `terminate(Reason, StateName, StateData)`
-%%
-%%  FSM is restarted or resumed after being suspended
-%%  :
-%%        * `code_change(state, StateName, StateData, undefined)`
-%%        * `init(StateName, StateData)`
-%%
-%%  FSM upgraded in run-time
-%%  :
-%%        * `code_change(OldVsn, StateName, StateData, Extra)`
-%%
-%%  Event initiated a transition (`next_state`)
-%%  :
-%%        * `handle_state(StateName, {event, Message} | {sync, From, Message}, StateData)`
-%%        * `handle_state(StateName, {exit, NextStateName}, StateData)`
-%%        * `handle_state(NextStateName, {entry, StateName}, StateData)`
-%%
-%%  Event with no transition (`same_state`)
-%%  :
-%%        * `handle_state(StateName, {event, Message} | {sync, From, Message}, StateData)`
-%%
-%%  Event initiated a termination (`final_state`)
-%%  :
-%%        * `handle_state(StateName, {event, Message} | {sync, From, Message}, StateData)`
-%%        * `handle_state(StateName, {exit, FinalStateName}, StateData)`
-%%
-%%
-%%  Dependencies
-%%  ------------------------------------
-%%
-%%  This section lists modules, that can be used together with this module.
-%%  All of them are optional and are references using options. Some functions
-%%  require specific dependencies, but these functions are more for convenience.
-%%
-%%  `eproc_registry`
-%%  :   can be used as a process registry, a supervisor and a process loader.
-%%      This component is used via options: `start_spec` from the create options,
-%%      `register` from the start options and `registry` from the common options.
-%%      Functions `send_create_event/3` and `sync_send_create_event/4` can only
-%%      be called if FSM used with the registry.
-%%
-%%  `eproc_limits`
-%%  :   can be used to limit FSM restarts, transitions or sent messages.
-%%      This component is only used if start option `limit_*` are provided.
-%%
-%%
-%%  Common FSM options
-%%  ------------------------------------
-%%
-%%  The following are the options, that can be provided for most of the
-%%  functions in this module. Meaning of these options is the same in all cases.
-%%  Description of each function states, which of these options are used in that
-%%  function and other will be ignored.
-%%
-%%  `{store, StoreRef}`
-%%  :   a store to be used by the FSM. If this option not provided, a store
-%%      specified in the `eproc_core` application environment is used.
-%%
-%%  `{registry, StoreRef}`
-%%  :   a registry to be used by the instance. If this option not provided, a registry
-%%      specified in the `eproc_core` application environment is used. `eproc_core` can
-%%      have no registry specified. In that case the registry will not be used.
-%%
-%%  `{timeout, Timeout}`
-%%  :   Timeout for the function, 5000 (5 seconds) is the default.
-%%
-%%  `{user, (User :: (binary() | #user{})) | {User :: (binary() | #user{}), Comment :: binary()}`
-%%  :   indicates a user initiaten an action. This option is mainly
-%%      used for administrative actions: kill, suspend and resume.
-%%
-%%  TODO: Attachment support.
-%%  TODO: Implement FSM crash listener (`eproc_fsm_mgr`?).
-%%  TODO: Check if InstId can be non-integer.
-%%  TODO: Add support for transient processes, that are not registered to the store.
-%%  TODO: Add `ignore` handling for `handle_cast` and `handle_call`.
-%%  TODO: Implement persistent process linking. It could work as follows:
-%%          * Processes are activated only when all linked (related) processes are online.
-%%          * When becoming online, linked processes start to monitor each other.
-%%          * Subprocesses can be one of a ways to link processes.
-%%
+%%%
+%%% Main behaviour to be implemented by a user of the `eproc`
+%%% =========================================================
+%%%
+%%% This module designed by taking into account UML FSM definition
+%%% as well as the Erlang/OTP `gen_fsm`. The following is the list
+%%% of differences comparing it to `gen_fsm`:
+%%%
+%%%   * State name supports substates and orthogonal states.
+%%%   * Callback `Module:handle_state/3` is used instead of `Module:StateName/2-3`.
+%%%     This allows to have substates and orthogonal states.
+%%%   * Has support for state entry and exit actions.
+%%%     State entry action is convenient for setting up timers and keys.
+%%%   * Has support for scopes. The scopes can be used to manage timers and keys.
+%%%   * Supports automatic state persistence.
+%%%
+%%% It is recomended to name version explicitly when defining state.
+%%% It can be done as follows:
+%%%
+%%%     -record(state, {
+%%%         version = 1,
+%%%         ...
+%%%     }).
+%%%
+%%%
+%%% How `eproc_fsm` callbacks are invoked in different scenarios
+%%% ------------------------------------
+%%%
+%%% New FSM created, started and an initial event received
+%%% :
+%%%     On creation of the persistent FSM inialization in performed:
+%%%
+%%%       * `init(Args)`
+%%%
+%%%     then process is started, the following callbacks are used to
+%%%     possibly upgrade and initialize process runtime state:
+%%%
+%%%       * `code_change(state, StateName, StateData, undefined)`
+%%%       * `init(InitStateName, StateData)`
+%%%
+%%%     and then the first event is received and the following callbacks invoked:
+%%%
+%%%       * `handle_state(InitStateName, {event, Message} | {sync, From, Message}, StateData)`
+%%%       * `handle_state(NewStateName, {entry, InitStateName}, StateData)`
+%%%
+%%% FSM process terminated
+%%% :
+%%%       * `terminate(Reason, StateName, StateData)`
+%%%
+%%% FSM is restarted or resumed after being suspended
+%%% :
+%%%       * `code_change(state, StateName, StateData, undefined)`
+%%%       * `init(StateName, StateData)`
+%%%
+%%% FSM upgraded in run-time
+%%% :
+%%%       * `code_change(OldVsn, StateName, StateData, Extra)`
+%%%
+%%% Event initiated a transition (`next_state`)
+%%% :
+%%%       * `handle_state(StateName, {event, Message} | {sync, From, Message}, StateData)`
+%%%       * `handle_state(StateName, {exit, NextStateName}, StateData)`
+%%%       * `handle_state(NextStateName, {entry, StateName}, StateData)`
+%%%
+%%% Event with no transition (`same_state`)
+%%% :
+%%%       * `handle_state(StateName, {event, Message} | {sync, From, Message}, StateData)`
+%%%
+%%% Event initiated a termination (`final_state`)
+%%% :
+%%%       * `handle_state(StateName, {event, Message} | {sync, From, Message}, StateData)`
+%%%       * `handle_state(StateName, {exit, FinalStateName}, StateData)`
+%%%
+%%%
+%%% Dependencies
+%%% ------------------------------------
+%%%
+%%% This section lists modules, that can be used together with this module.
+%%% All of them are optional and are references using options. Some functions
+%%% require specific dependencies, but these functions are more for convenience.
+%%%
+%%% `eproc_registry`
+%%% :   can be used as a process registry, a supervisor and a process loader.
+%%%     This component is used via options: `start_spec` from the create options,
+%%%     `register` from the start options and `registry` from the common options.
+%%%     Functions `send_create_event/3` and `sync_send_create_event/4` can only
+%%%     be called if FSM used with the registry.
+%%%
+%%% `eproc_limits`
+%%% :   can be used to limit FSM restarts, transitions or sent messages.
+%%%     This component is only used if start option `limit_*` are provided.
+%%%
+%%%
+%%% Common FSM options
+%%% ------------------------------------
+%%%
+%%% The following are the options, that can be provided for most of the
+%%% functions in this module. Meaning of these options is the same in all cases.
+%%% Description of each function states, which of these options are used in that
+%%% function and other will be ignored.
+%%%
+%%% `{store, StoreRef}`
+%%% :   a store to be used by the FSM. If this option not provided, a store
+%%%     specified in the `eproc_core` application environment is used.
+%%%
+%%% `{registry, StoreRef}`
+%%% :   a registry to be used by the instance. If this option not provided, a registry
+%%%     specified in the `eproc_core` application environment is used. `eproc_core` can
+%%%     have no registry specified. In that case the registry will not be used.
+%%%
+%%% `{timeout, Timeout}`
+%%% :   Timeout for the function, 5000 (5 seconds) is the default.
+%%%
+%%% `{user, (User :: (binary() | #user{})) | {User :: (binary() | #user{}), Comment :: binary()}`
+%%% :   indicates a user initiaten an action. This option is mainly
+%%%     used for administrative actions: kill, suspend and resume.
+%%%
+%%%
+%%% To be done in this module (TODO):
+%%%
+%%%   * Attachment support.
+%%%   * Implement FSM crash listener (`eproc_fsm_mgr`?).
+%%%   * Check if InstId can be non-integer.
+%%%   * Add support for transient processes, that are not registered to the store.
+%%%   * Add `ignore` handling for `handle_cast` and `handle_call`.
+%%%   * Implement persistent process linking. It could work as follows:
+%%%         * Processes are activated only when all linked (related) processes are online.
+%%%         * When becoming online, linked processes start to monitor each other.
+%%%         * Subprocesses can be one of a ways to link processes.
+%%%
 -module(eproc_fsm).
 -behaviour(gen_server).
 -compile([{parse_transform, lager_transform}]).
@@ -484,7 +487,7 @@
 %%  or the state name as returned by the `init/2` callback.
 %%  Similarly, the entry action is not invoked for the final state.
 %%
-%%  TODO: Add `ignore` response to be able to ignore unknown messages, for example.
+%%  TODO> Add `ignore` response to be able to ignore unknown messages, for example.
 %%
 -callback handle_state(
         StateName   :: state_name(),
