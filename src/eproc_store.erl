@@ -735,7 +735,7 @@ general_filter_to_ms(Filters, SkipFilters, MatchHead, FilterToGuardFun, MatchBod
 %%  If some OR guards are supplied in the list, unpacks their condition expressions.
 %%
 make_orelse_guard([], _MakeGuardFun) ->
-    [];
+    [{'==','0','1'}];       % Empty disjunct is always false
 
 make_orelse_guard([Value], MakeGuardFun) ->
     [MakeGuardFun(Value)];
