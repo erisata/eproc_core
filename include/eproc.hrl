@@ -104,7 +104,8 @@
 %%
 -record(msg_ref, {
     cid         :: msg_cid(),                   %% ID of the message copy.
-    peer        :: event_src()                  %% Sender or receiver of the message.
+    peer        :: event_src(),                 %% Sender or receiver of the message.
+    type        :: binary()                     %% User defined type of the message.
 }).
 
 
@@ -117,6 +118,7 @@
     sender      :: event_src(),                 %% Source.
     receiver    :: event_src(),                 %% Destination.
     resp_to     :: msg_cid() | undefined,       %% Indicates a request message, if thats a response to it.
+    type        :: binary(),                    %% User defined type of the message.
     date        :: timestamp(),                 %% Time, when message was sent.
     body        :: term()                       %% Actual message.
 }).
@@ -157,6 +159,7 @@
     source          :: event_src(),             %% Party, initiated the trigger, event source, admin name.
     message         :: term(),                  %% Event message / body.
     msg_cid         :: undefined | msg_cid(),   %% Event message id, optional.
+    msg_type_fun    :: function(),              %% Function, deriving user defined message type.
     sync = false    :: boolean(),               %% True, if the trigger expects an immediate response.
     reply_fun       :: undefined | function(),  %% Function used to sent response if the trigger is sync.
     src_arg         :: boolean()                %% If set to true, event source will be passed to an FSM implementation.

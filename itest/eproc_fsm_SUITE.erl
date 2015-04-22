@@ -28,7 +28,8 @@
     test_rtdata/1,
     test_timers/1,
     test_router_integration/1,
-    test_metadata_integration/1
+    test_metadata_integration/1,
+    test_event_type/1
 ]).
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eproc_core/include/eproc.hrl").
@@ -46,7 +47,8 @@ all() -> [
     test_rtdata,
     test_timers,
     test_router_integration,
-    test_metadata_integration
+    test_metadata_integration,
+    test_event_type
     ].
 
 
@@ -61,7 +63,7 @@ init_per_suite(Config) ->
     application:set_env(eproc_core, registry, {eproc_reg_gproc, ref, []}),
     {ok, _} = application:ensure_all_started(gproc),
     {ok, _} = application:ensure_all_started(eproc_core),
-    {ok, Store} = eproc_registry:ref(),
+    {ok, Store} = eproc_store:ref(),
     {ok, Registry} = eproc_registry:ref(),
     [{store, Store}, {registry, Registry} | Config].
 
@@ -243,6 +245,21 @@ test_metadata_integration(_Config) ->
     {inst, IID} = Ref,
     {ok, [IID]} = eproc_meta:get_instances({tags, [{<<"123">>,      <<"cust_nr">>   }]}, []),
     {ok, [IID]} = eproc_meta:get_instances({tags, [{<<"rejected">>, <<"resolution">>}]}, []),
+    ok.
+
+
+%%
+%%  Test, if message types are derived correctly.
+%%
+test_event_type(Config) ->
+    Store = proplists:get_value(store, Config),
+    {ok, Seq} = eproc_fsm__seq:new(),
+    {ok, 1}   = eproc_fsm__seq:next(Seq),
+    {ok, 1}   = eproc_fsm__seq:get(Seq),
+    ok        = eproc_fsm__seq:close(Seq),
+    false     = eproc_fsm__seq:exists(Seq),
+    {ok, #transition{trigger_msg = #msg_ref{type = <<"next">>}}} = eproc_store:get_transition(Store, Seq, 2, all),
+    {ok, #transition{trigger_msg = #msg_ref{type = <<"what">>}}} = eproc_store:get_transition(Store, Seq, 3, all),
     ok.
 
 

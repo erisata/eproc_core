@@ -62,7 +62,8 @@
     start       :: timestamp(),
     delay       :: duration(),
     event_msg   :: term(),
-    event_cid   :: msg_cid()
+    event_cid   :: msg_cid(),
+    event_type  :: binary()
 }).
 
 %%
@@ -488,12 +489,13 @@ init(InstId, ActiveAttrs) ->
 %%
 %%  Attribute created.
 %%
-handle_created(InstId, #attribute{attr_id = AttrId}, {timer, After, Start, EventMsgCId, Event}, _Scope) ->
+handle_created(InstId, #attribute{attr_id = AttrId}, {timer, After, Start, EventMsgCId, EventMsgType, Event}, _Scope) ->
     Data = #data{
         start = Start,
         delay = After,
         event_msg = Event,
-        event_cid = EventMsgCId
+        event_cid = EventMsgCId,
+        event_type = EventMsgType
     },
     {ok, State} = start_timer(InstId, AttrId, Data),
     {create, Data, State, false};
@@ -505,13 +507,14 @@ handle_created(_InstId, _Attribute, {timer, remove}, _Scope) ->
 %%
 %%  Attribute updated by user.
 %%
-handle_updated(InstId, Attribute, AttrState, {timer, After, Start, EventMsgCId, Event}, _Scope) ->
+handle_updated(InstId, Attribute, AttrState, {timer, After, Start, EventMsgCId, EventMsgType, Event}, _Scope) ->
     #attribute{attr_id = AttrId} = Attribute,
     NewData = #data{
         start = Start,
         delay = After,
         event_msg = Event,
-        event_cid = EventMsgCId
+        event_cid = EventMsgCId,
+        event_type = EventMsgType
     },
     ok = stop_timer(AttrState),
     {ok, NewState} = start_timer(InstId, AttrId, NewData),
@@ -544,13 +547,14 @@ handle_event(InstId, Attribute, _State, long_delay) ->
 handle_event(_InstId, Attribute, _State, fired) ->
     #attribute{
         attr_id = AttrId,
-        data = #data{event_msg = Event, event_cid = EventMsgCId}
+        data = #data{event_msg = Event, event_cid = EventMsgCId, event_type = EventMsgType}
     } = Attribute,
     Trigger = #trigger_spec{
         type = timer,
         source = {attr, AttrId},
         message = Event,
         msg_cid = EventMsgCId,
+        msg_type_fun = fun (R, E) -> eproc_fsm:resolve_event_type_const(R, EventMsgType, E) end,
         sync = false,
         reply_fun = undefined,
         src_arg = false
@@ -571,8 +575,9 @@ set_timer(Name, After, Start, Event, Scope) ->
     {ok, InstId} = eproc_fsm:id(),
     Src = {inst, InstId},
     Dst = {timer, Name},
-    {ok, EventMsgCId} = eproc_fsm:register_sent_msg(Src, Dst, undefined, Event, Start),
-    ok = eproc_fsm_attr:action(?MODULE, Name, {timer, After, Start, EventMsgCId, Event}, Scope).
+    EventMsgType = eproc_fsm:resolve_event_type(timer, Event),
+    {ok, EventMsgCId} = eproc_fsm:register_sent_msg(Src, Dst, undefined, EventMsgType, Event, Start),
+    ok = eproc_fsm_attr:action(?MODULE, Name, {timer, After, Start, EventMsgCId, EventMsgType, Event}, Scope).
 
 
 %%

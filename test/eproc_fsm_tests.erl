@@ -1614,9 +1614,9 @@ register_outgoing_message_test() ->
             Src = {inst, IID},
             Dst = {some, out},
             Now = {1, 2, 3},
-            {ok, MID1} = eproc_fsm:register_sent_msg(Src, Dst, undefined, msg1, Now),
-            {ok, MID2} = eproc_fsm:register_sent_msg(Src, Dst, undefined, msg2, Now),
-            {ok, MID3} = eproc_fsm:register_resp_msg(Src, Dst, MID2, undefined, msg3, Now),
+            {ok, MID1} = eproc_fsm:register_sent_msg(Src, Dst, undefined, <<"msg1">>, msg1, Now),
+            {ok, MID2} = eproc_fsm:register_sent_msg(Src, Dst, undefined, <<"msg2">>, msg2, Now),
+            {ok, MID3} = eproc_fsm:register_resp_msg(Src, Dst, MID2, undefined, <<"msg3">>, msg3, Now),
             ?assertEqual({100, 2, 2, sent}, MID1),
             ?assertEqual({100, 2, 3, sent}, MID2),
             ?assertEqual({100, 2, 4, recv}, MID3),
@@ -1711,8 +1711,9 @@ register_incoming_message_test() ->
     ?assertEqual(true, eproc_fsm:is_online(PID)),
     {msg_regs, 200, 15, 22, Regs} = erlang:erase('eproc_fsm$msg_regs'),
     ?assertEqual(2, length(Regs)),
-    ?assertEqual(1, length([ ok || {msg_reg, {inst, 100},       {200, 15, 20, sent}, get, {_, _, _}, {100, 3, 1, recv}, res, {_, _, _}} <- Regs])),
-    ?assertEqual(1, length([ ok || {msg_reg, {inst, undefined}, {200, 15, 21, sent}, set, {_, _, _}, undefined, undefined, undefined}   <- Regs])),
+    io:format("XXX: ~p~n", [Regs]),
+    ?assertEqual(1, length([ ok || {msg_reg, {inst, 100},       {200, 15, 20, sent}, get, <<"get">>, {_, _, _}, {100, 3, 1, recv}, res, <<"res">>, {_, _, _}} <- Regs])),
+    ?assertEqual(1, length([ ok || {msg_reg, {inst, undefined}, {200, 15, 21, sent}, set, <<"set">>, {_, _, _}, undefined, undefined, undefined, undefined}   <- Regs])),
     ?assertEqual(3, meck:num_calls(eproc_store, add_transition, '_')),
     ?assert(meck:validate([eproc_store, eproc_fsm__mock])),
     ok = meck:unload([eproc_store, eproc_fsm__mock]),
@@ -1731,6 +1732,27 @@ resolve_start_spec_test_() -> [
         {start_link_mfa, {m, f, [a1, {inst, a}, a3]}},
         eproc_fsm:resolve_start_spec({inst, a}, {mfa, {m, f, [a1, '$fsm_ref', a3]}})
     )].
+
+
+%%
+%%  Check, if `resolve_event_type/2` works.
+%%
+resolve_event_type_test_() -> [
+        ?_assertEqual(<<"asd">>, eproc_fsm:resolve_event_type(event, asd)),
+        ?_assertEqual(<<"dsd">>, eproc_fsm:resolve_event_type(event, <<"dsd">>)),
+        ?_assertEqual(<<"fsa">>, eproc_fsm:resolve_event_type(event, {fsa, asd, [[]]})),
+        ?_assertEqual(<<"[a]">>, eproc_fsm:resolve_event_type(event, [a]))
+    ].
+
+
+%%
+%%  Check, if `resolve_event_type_const/3` works.
+%%
+resolve_event_type_const_test_() -> [
+        ?_assertEqual(<<"uuu">>, eproc_fsm:resolve_event_type_const(sync,  <<"uuu">>, asd)),
+        ?_assertEqual(<<"uuz">>, eproc_fsm:resolve_event_type_const(sync,  uuz,       asd)),
+        ?_assertEqual(<<"asd">>, eproc_fsm:resolve_event_type_const(reply, <<"uuu">>, asd))
+    ].
 
 
 % TODO: Test handling of crashes in callbacks in sync and async calls.
