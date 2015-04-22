@@ -573,7 +573,7 @@ eproc_store_core_test_add_transition(Config) ->
         duration = 13,
         trn_node = undefined,
         trigger_type = event,
-        trigger_msg = #msg_ref{cid = MsgId11, peer = {connector, some}},
+        trigger_msg = #msg_ref{cid = MsgId11, peer = {connector, some}, type = <<"some_type">>},
         trigger_resp = #msg_ref{cid = MsgId12, peer = {connector, some}},
         trn_messages = [#msg_ref{cid = MsgId13, peer = {connector, some}}],
         attr_last_nr = 1,
@@ -581,8 +581,8 @@ eproc_store_core_test_add_transition(Config) ->
         inst_status = running,
         interrupts = undefined
     },
-    Msg11 = #message{msg_id = MsgId11, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m11},
-    Msg12 = #message{msg_id = MsgId12, sender = {connector, some}, receiver = {inst, IID1}, resp_to = MsgId11,    date = os:timestamp(), body = m12},
+    Msg11 = #message{msg_id = MsgId11, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m11, type = <<"some_type">>},
+    Msg12 = #message{msg_id = MsgId12, sender = {connector, some}, receiver = {inst, IID1}, resp_to = MsgId11,   date = os:timestamp(), body = m12},
     Msg13 = #message{msg_id = MsgId13, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m13},
     {ok, IID1, 1} = eproc_store:add_transition(Store, IID1, Trn1, [Msg11, Msg12, Msg13]),
     {ok, #instance{status = running, interrupt = undefined, curr_state = #inst_state{
@@ -699,6 +699,10 @@ eproc_store_core_test_add_transition(Config) ->
         stt_id = 5, sname = [s5], sdata = d5, timestamp = {_, _, _},
         attr_last_nr = 1, attrs_active = [_]
     }}} = eproc_store:get_instance(Store, {inst, IID1}, current),
+    %%
+    %%  Check if message is returned correctly, including message type.
+    {ok, #message{type = <<"some_type">>}} = eproc_store:get_message(Store, MsgId11, all),
+    {ok, #transition{trigger_msg = #msg_ref{type = <<"some_type">>}}} = eproc_store:get_transition(Store, {inst, IID1}, 1, all),
     ok.
 
 

@@ -70,7 +70,7 @@ next(FsmRef) ->
     eproc_fsm:sync_send_event(resolve_ref(FsmRef), next).
 
 get(FsmRef) ->
-    eproc_fsm:sync_send_event(resolve_ref(FsmRef), get).
+    eproc_fsm:sync_send_event(resolve_ref(FsmRef), get, [{type, what}]).
 
 last(FsmRef) ->
     eproc_fsm:sync_send_event(resolve_ref(FsmRef), last).
