@@ -1102,16 +1102,16 @@ message_filter_to_guard({peer, PeerOrList}) ->
 %% a list of its corresponding match condition (guard) expressions for match
 %% specification. Helper function to message_filter_to_guard/1.
 %%
-message_peer_filter_to_guard({send, EventSrc}) ->
+message_peer_filter_to_guard({sender, EventSrc}) ->
     {'==', ?MSG_MSVAR_SENDER, {const, EventSrc}};
 
-message_peer_filter_to_guard({recv, EventSrc}) ->
+message_peer_filter_to_guard({receiver, EventSrc}) ->
     {'==', ?MSG_MSVAR_RECEIVER, {const, EventSrc}};
 
 message_peer_filter_to_guard({any, EventSrc}) ->
     {'orelse',
-        message_peer_filter_to_guard({send, EventSrc}),
-        message_peer_filter_to_guard({recv, EventSrc})
+        message_peer_filter_to_guard({sender, EventSrc}),
+        message_peer_filter_to_guard({receiver, EventSrc})
     }.
 
 

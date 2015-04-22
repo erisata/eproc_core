@@ -822,14 +822,14 @@ eproc_store_core_test_resolve_msg_dst(Config) ->
     {ok, {_, _, Res05}} = eproc_store:get_message(Store, {filter, {From, Count}, [{date, undefined, OldDate4}]}, all),
     {ok, {_, _, Res06}} = eproc_store:get_message(Store, {filter, {From, Count}, [{date, OldDate2, undefined}]}, all),
     {ok, {_, _, Res07}} = eproc_store:get_message(Store, {filter, {From, Count}, [{date, OldDate2, OldDate4}]}, all),
-    {ok, {_, _, Res08}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, {sent, {inst, IID1}}}]}, all),
-    {ok, {_, _, Res09}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, {recv, {inst, IID1}}}]}, all),
+    {ok, {_, _, Res08}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, {sender, {inst, IID1}}}]}, all),
+    {ok, {_, _, Res09}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, {receiver, {inst, IID1}}}]}, all),
     {ok, {_, _, Res10}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, {any,  {inst, IID1}}}]}, all),
     {ok, {_, _, Res11}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, [{any, {inst, IID1}}]}]}, all),
-    {ok, {_, _, Res12}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, [{sent, {inst, IID2}}, {sent, {inst, IID3}}]}]}, all),
-    {ok, {_, _, Res13}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, [{recv, {inst, IID2}}, {recv, {inst, IID3}}]}]}, all),
-    {ok, {_, _, Res14}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, [{any,  {inst, IID2}}, {any,  {inst, IID3}}]}]}, all),
-    {ok, {_, _, Res15}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, [{sent, {inst, IID1}}, {recv, {inst, IID3}}]}]}, all),
+    {ok, {_, _, Res12}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, [{sender,   {inst, IID2}}, {sender,   {inst, IID3}}]}]}, all),
+    {ok, {_, _, Res13}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, [{receiver, {inst, IID2}}, {receiver, {inst, IID3}}]}]}, all),
+    {ok, {_, _, Res14}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, [{any,      {inst, IID2}}, {any,      {inst, IID3}}]}]}, all),
+    {ok, {_, _, Res15}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, [{sender,   {inst, IID1}}, {receiver, {inst, IID3}}]}]}, all),
     %Evaluating results
     Req = fun(List) ->
         [Elem || Elem <- List, Elem == Msg1 orelse Elem == Msg2 orelse Elem == Msg3 orelse Elem == Msg4]
@@ -879,10 +879,10 @@ eproc_store_core_test_resolve_msg_dst(Config) ->
     ?assertThat(Req(Res15), has_length(3)),
     % Performing sucessful compound tests
     {ok, {_, _, Res50}} = eproc_store:get_message(Store, {filter, {From, Count}, [{id, {IID1, 1, 2, recv}}, {id, {IID1, 1, 2, sent}}]}, all),
-    {ok, {_, _, Res51}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, {sent, {inst,IID1}}}, {date, undefined, OldDate4}]}, all),
-    {ok, {_, _, Res52}} = eproc_store:get_message(Store, {filter, {From, Count}, [{date, undefined, OldDate4}, {peer, {sent, {inst,IID1}}}]}, all),
+    {ok, {_, _, Res51}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, {sender, {inst,IID1}}}, {date, undefined, OldDate4}]}, all),
+    {ok, {_, _, Res52}} = eproc_store:get_message(Store, {filter, {From, Count}, [{date, undefined, OldDate4}, {peer, {sender, {inst,IID1}}}]}, all),
     {ok, {_, _, Res53}} = eproc_store:get_message(Store, {filter, {From, Count}, [{id, [{IID1, 1, 2}, {IID1, 1, 3}]}, {date, OldDate4, undefined}]}, all),
-    {ok, {_, _, Res54}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, [{sent, {inst,IID2}},{recv, {inst,IID2}}]}, {peer, {any, {inst,IID3}}}]}, all),
+    {ok, {_, _, Res54}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, [{sender, {inst,IID2}},{receiver, {inst,IID2}}]}, {peer, {any, {inst,IID3}}}]}, all),
     %Evaluating results
     ?assertThat(Req(Res50), is([Msg2])),
     ?assertThat(Req(Res51), is([Msg2])),
@@ -892,7 +892,7 @@ eproc_store_core_test_resolve_msg_dst(Config) ->
     % Performing empty list tests
     {ok, {0, _, []}} = eproc_store:get_message(Store, {filter, {From, Count}, [{id, {non, existent, id}}]}, all),
     {ok, {0, _, []}} = eproc_store:get_message(Store, {filter, {From, Count}, [{id, {IID1, 1, 2}}, {id, {IID1, 1, 3, sent}}]}, all),
-    {ok, {0, _, []}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, {sent, {inst,IID2}}}, {date, undefined, OldDate4}]}, all),
+    {ok, {0, _, []}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, {sender, {inst,IID2}}}, {date, undefined, OldDate4}]}, all),
     {ok, {0, _, []}} = eproc_store:get_message(Store, {filter, {From, Count}, [{id, [{IID1, 1, 2}, {IID1, 1, 3}]}, {date, undefined, OldDate2}]}, all),
     {ok, {0, _, []}} = eproc_store:get_message(Store, {filter, {From, Count}, [{date, undefined, OldDate2}, {id, [{IID1, 1, 2}, {IID1, 1, 3}]}]}, all),
     {ok, {0, _, []}} = eproc_store:get_message(Store, {filter, {From, Count}, [{id, []}]}, all),
