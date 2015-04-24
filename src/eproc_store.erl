@@ -357,7 +357,7 @@
             {peer,      PeerFilter | [PeerFilter]},
         MIdFilter   :: msg_id() | msg_cid() ,
         %IIdFilter   :: InstId :: inst_id(),
-        PeerFilter  :: {Role :: (send | recv | any), event_src()},
+        PeerFilter  :: {Role :: (sender | receiver | any), event_src()},
         Paging      :: {ResFrom, ResCount} | {ResFrom, ResCount, SortedBy}, % SortedBy=date by default
         ResFrom     :: integer() | undefined,
         ResCount    :: integer() | undefined,
