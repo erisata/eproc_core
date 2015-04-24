@@ -556,6 +556,21 @@ resolve_msg_ref(MsgRef) ->
 
 
 %%
+%%  Resolve partially filled message, if possible.
+%%
+resolve_message(Message = #message{msg_id = {I, T, M, sent}, receiver = {inst, undefined}}) ->
+    case read_message({I, T, M, recv}) of
+        {ok, #message{receiver = NewReceiver}} ->
+            Message#message{receiver = NewReceiver};
+        {error, not_found} ->
+            Message
+    end;
+
+resolve_message(Message) ->
+    Message.
+
+
+%%
 %%  Reads instance record.
 %%
 read_instance(FsmRef, Query) ->
@@ -642,34 +657,19 @@ read_transitions(InstId, From, Count, ResolveMsgRefs) ->
 
 
 %%
-%%  Read single message by message copy id.
+%%  Read single message by message copy id or message id.
+%%  Returns `{ok, #message{}}`, if message is found and `{error, not_found}`,
+%%  if message with given ID is not found.
 %%
-read_message(MsgCid) ->
+%%  In the case of message id, received message takes priority over sent one.
+%%
+read_message({_InstId, _TrnNr, _MsgNr, _Copy} = MsgCid) ->
     case ets:lookup(?MSG_TBL, MsgCid) of
         []        -> {error, not_found};
         [Message] -> {ok, Message}
-    end.
+    end;
 
-%%
-%% Takes message ID or message copy ID as a single parameter, queries the database and returns message with that ID.
-%% It is assumed that messages with IDs {IID, TNr, MNr}, {IID, TNr, MNr, sent} and {IID, TNr, MNr, recv} are the same.
-%% For querying the database, message copy ID {IID, TNr, MNr, recv} takes priority.
-%% If message with given ID is not fuound, function returns {error, not_found}.
-%%
-%% Reads a single message by message id or message copy id.
-%%
-read_message_any_id(MsgId) ->
-    NormalisedMsgId = eproc_store:normalise_message_id(MsgId),
-    read_message_id(NormalisedMsgId).
-
-
-%%
-%% Reads a single message by message id.
-%% Returns {ok, #message{}}.
-%% If message with given ID is not found, function returns {error, not_found}.
-%% For querying the database, received message takes priority over sent one.
-%%
-read_message_id({InstId, TrnNr, MsgNr}) ->
+read_message({InstId, TrnNr, MsgNr}) ->
     case read_message({InstId, TrnNr, MsgNr, recv}) of
         {error, not_found} ->
             case read_message({InstId, TrnNr, MsgNr, sent}) of
@@ -689,8 +689,8 @@ read_message_id({InstId, TrnNr, MsgNr}) ->
 %% message id.
 %%
 read_message_normalised(MsgId) ->
-    case read_message_any_id(MsgId) of
-        {ok, Message}   -> {ok, eproc_store:normalise_message(Message)};
+    case read_message(MsgId) of
+        {ok, Message}   -> {ok, eproc_store:normalise_message(resolve_message(Message))};
         {error, Reason} -> {error, Reason}
     end.
 
@@ -701,7 +701,7 @@ read_message_normalised(MsgId) ->
 %%
 read_message_list_ids(MsgIds) ->
     ReadInstFun = fun(MsgId) ->
-        case read_message_id(MsgId) of
+        case read_message(MsgId) of
             {ok, Message}   -> {true, Message};
             {error, _}      -> false
         end

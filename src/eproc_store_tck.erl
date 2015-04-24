@@ -784,10 +784,10 @@ eproc_store_core_test_resolve_msg_dst(Config) ->
     Msg3 = Msg3r#message{msg_id = {IID1, 1, 3}},
     Msg4 = Msg4r#message{msg_id = {IID2, 1, 1}},
     ?assertThat(eproc_store:get_message(Store, {IID1, 1, 0      }, all), is({ok, Msg1})),
-    ?assertThat(eproc_store:get_message(Store, {IID1, 1, 0, sent}, all), is({ok, Msg1})),
+    ?assertThat(eproc_store:get_message(Store, {IID1, 1, 0, sent}, all), is({error, not_found})),
     ?assertThat(eproc_store:get_message(Store, {IID1, 1, 0, recv}, all), is({ok, Msg1})),
     ?assertThat(eproc_store:get_message(Store, {IID1, 1, 2      }, all), is({ok, Msg2})),
-    ?assertThat(eproc_store:get_message(Store, {IID1, 1, 2, sent}, all), is({ok, Msg2})),
+    ?assertThat(eproc_store:get_message(Store, {IID1, 1, 2, sent}, all), is({ok, Msg2})), % Receiver resolved.
     ?assertThat(eproc_store:get_message(Store, {IID1, 1, 2, recv}, all), is({ok, Msg2})),
     ?assertThat(eproc_store:get_message(Store, {IID1, 1, 1      }, all), is({error, not_found})),
     ?assertThat(eproc_store:get_transition(Store, {inst, IID1}, 1, all), is({ok, Trn1Fix})),
@@ -804,11 +804,11 @@ eproc_store_core_test_resolve_msg_dst(Config) ->
     %% Test get_message list
     ?assertThat(eproc_store:get_message(Store, {list, []}, all), is({ok, []})),
     ?assertThat(eproc_store:get_message(Store, {list, [{IID1, 1, 0      }]}, all), is({ok, [Msg1]})),
-    ?assertThat(eproc_store:get_message(Store, {list, [{IID1, 1, 0, sent}]}, all), is({ok, [Msg1]})),
+    ?assertThat(eproc_store:get_message(Store, {list, [{IID1, 1, 0, sent}]}, all), is({error, not_found})),
     ?assertThat(eproc_store:get_message(Store, {list, [{IID1, 1, 0, recv}]}, all), is({ok, [Msg1]})),
-    ?assertThat(eproc_store:get_message(Store, {list, [{IID1, 1, 0, sent}, {IID1, 1, 0      }]}, all), is({ok, [Msg1, Msg1]})),
+    ?assertThat(eproc_store:get_message(Store, {list, [{IID1, 1, 0, sent}, {IID1, 1, 0      }]}, all), is({error, not_found})),
     ?assertThat(eproc_store:get_message(Store, {list, [{IID1, 1, 0      }, {IID1, 1, 2, recv}]}, all), is({ok, [Msg1, Msg2]})),
-    ?assertThat(eproc_store:get_message(Store, {list, [{IID1, 1, 3, recv}, {IID1, 1, 0, sent}, {IID1, 1, 2}]}, all), is({ok, [Msg3, Msg1, Msg2]})),
+    ?assertThat(eproc_store:get_message(Store, {list, [{IID1, 1, 3, recv}, {IID1, 1, 0, recv}, {IID1, 1, 2}]}, all), is({ok, [Msg3, Msg1, Msg2]})),
     % Performing sucessful simple get_message filter tests
     From = 1,
     Count = 99,
