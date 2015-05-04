@@ -412,11 +412,12 @@ get_transition(_StoreArgs, FsmRef, TrnNr, all) when is_integer(TrnNr) ->
 get_transition(_StoreArgs, FsmRef, {list, From, Count}, all) ->
     case read_instance(FsmRef, current) of
         {ok, #instance{inst_id = IID, curr_state = #inst_state{stt_id = CurrTrnNr}}} ->
-            ReadResult = case From of
-                current                 -> read_transitions(IID, CurrTrnNr, Count, true);
-                _ when is_integer(From) -> read_transitions(IID, From,      Count, true)
+            RealFrom = case From of
+                current                            -> CurrTrnNr;
+                _ when is_integer(From), From > 0  -> From;
+                _ when is_integer(From), From =< 0 -> CurrTrnNr+From
             end,
-            case ReadResult of
+            case read_transitions(IID, RealFrom, Count, true) of
                 {ok, TrnList}       -> {ok, {CurrTrnNr, true, TrnList}};
                 {error, ReadTrnErr} -> {error, ReadTrnErr}
             end;

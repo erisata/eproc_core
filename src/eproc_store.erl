@@ -311,6 +311,9 @@
 %%
 %%  If {list, From, Count} is used as TrnNr parameter, then {TotalCount, TotalExact, [#transition{}]}}
 %%  is returned. TotalCount is the total number of transitions of this instance. TotalExact is always true.
+%%  If From is not positive, then transitions are numbered from current transition. Effectivelly,
+%%  {list, current, Count} is equivalent to {list, 0, Count}, index of current-1 is -1,
+%%  index of current-2 is -2, etc...
 %%
 -callback get_transition(
         StoreArgs   :: term(),
