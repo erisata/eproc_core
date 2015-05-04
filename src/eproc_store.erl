@@ -309,15 +309,22 @@
 %%  Get particular FSM transition.
 %%  Any partial message destinations should be resolved when returing message references.
 %%
+%%  If {list, From, Count} is used as TrnNr parameter, then {TotalCount, TotalExact, [#transition{}]}}
+%%  is returned. TotalCount is the total number of transitions of this instance. TotalExact is always true.
+%%
 -callback get_transition(
         StoreArgs   :: term(),
         FsmRef      :: fsm_ref(),
-        TrnNr       :: trn_nr() | {list, From :: (trn_nr() | current), Count :: integer()},
+        TrnNr       :: trn_nr() | {list, From, Count},
         Query       :: all
     ) ->
-        {ok, #transition{}} |
-        {ok, [#transition{}]} |
-        {error, Reason :: term()}.
+        {ok, #transition{} | {TotalCount, TotalExact, [#transition{}]}} |
+        {error, Reason :: term()}
+    when
+        From :: (trn_nr() | current),
+        Count :: integer(),
+        TotalCount :: integer() | undefined,
+        TotalExact :: true.
 
 
 %%

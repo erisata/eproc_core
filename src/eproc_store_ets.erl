@@ -410,23 +410,18 @@ get_transition(_StoreArgs, FsmRef, TrnNr, all) when is_integer(TrnNr) ->
     end;
 
 get_transition(_StoreArgs, FsmRef, {list, From, Count}, all) ->
-    ResolvedFrom = case From of
-        current ->
-            case read_instance(FsmRef, current) of
-                {ok, #instance{inst_id = IID, curr_state = #inst_state{stt_id = CurrTrnNr}}} ->
-                    {ok, IID, CurrTrnNr};
-                {error, ReadErr} ->
-                    {error, ReadErr}
+    case read_instance(FsmRef, current) of
+        {ok, #instance{inst_id = IID, curr_state = #inst_state{stt_id = CurrTrnNr}}} ->
+            ReadResult = case From of
+                current                 -> read_transitions(IID, CurrTrnNr, Count, true);
+                _ when is_integer(From) -> read_transitions(IID, From,      Count, true)
+            end,
+            case ReadResult of
+                {ok, TrnList}       -> {ok, {CurrTrnNr, true, TrnList}};
+                {error, ReadTrnErr} -> {error, ReadTrnErr}
             end;
-        _ when is_integer(From) ->
-            case resolve_inst_id(FsmRef) of
-                {ok, IID}           -> {ok, IID, From};
-                {error, ResolveErr} -> {error, ResolveErr}
-            end
-    end,
-    case ResolvedFrom of
-        {ok, InstId, FromTrnNr} -> read_transitions(InstId, FromTrnNr, Count, true);
-        {error, Reason}         -> {error, Reason}
+        {error, ReadInstErr} ->
+            {error, ReadInstErr}
     end.
 
 
