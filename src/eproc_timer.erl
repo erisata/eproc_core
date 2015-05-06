@@ -260,11 +260,12 @@ duration_parse(Duration, iso8601) when is_list(Duration) ->
 %%
 %% Helper function for duration_parse/2
 %% The parameters are:
-%% 		String to be parsed;
-%%		Buffer of previously parsed tokens;
-%%		List of pairs {Matcher,Atom}, where Matcher is a match symbol and Atom is respective atom of duration record.
-%%			It is use to force a certain order of duration elements.
-%%		Result is accumulator of parsed duration.
+%%
+%%   * String to be parsed;
+%%   * Buffer of previously parsed tokens;
+%%   * List of pairs {Matcher,Atom}, where Matcher is a match symbol and Atom is respective atom of duration record.
+%%   * It is use to force a certain order of duration elements.
+%%   * Result is accumulator of parsed duration.
 %%
 duration_parser("", [], _, Result) ->
     Result;
