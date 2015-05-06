@@ -28,7 +28,7 @@
 -behaviour(eproc_fsm_attr).
 -export([add_key/3, add_key/2]).
 -export([lookup/2, lookup/1, lookup_send/3, lookup_send/2, lookup_sync_send/3, lookup_sync_send/2]).
--export([init/2, handle_created/4, handle_updated/5, handle_removed/3, handle_event/4]).
+-export([init/2, handle_describe/2, handle_created/4, handle_updated/5, handle_removed/3, handle_event/4]).
 -include("eproc.hrl").
 
 -record(data, {
@@ -245,6 +245,19 @@ lookup_sync_send(Key, Fun) ->
 %%
 init(_InstId, ActiveAttrs) ->
     {ok, [ {A, undefined} || A <- ActiveAttrs ]}.
+
+
+%%
+%%  Describe this attribute.
+%%
+handle_describe(Attribute, all) ->
+    handle_describe(Attribute, [key]);
+
+handle_describe(Attribute, Props) when is_list(Props) ->
+    {ok, [{P, handle_describe(Attribute, {prop, P})} || P <- Props]};
+
+handle_describe(#attribute{data = #data{key = Key}}, {prop, key}) ->
+    Key.
 
 
 %%

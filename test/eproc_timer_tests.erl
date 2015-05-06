@@ -74,7 +74,7 @@ mocked_cancel_test() ->
 %%  Check if existing timers are restarted on init.
 %%
 init_restart_test() ->
-    OldNow = erlang:now(),
+    OldNow = os:timestamp(),
     ok = timer:sleep(200),
     Attr1 = #attribute{ % In the past.
         module = eproc_timer, name = undefined, scope = [],
@@ -90,6 +90,28 @@ init_restart_test() ->
     ?assert(receive _TimerMsg1 -> true  after 100 -> false end),    % This should be fired immediatelly.
     ?assert(receive _TimerMsg2 -> false after 150 -> true  end),    % This should be fired within 200 ms
     ?assert(receive _TimerMsg2 -> true  after 150 -> false end).    %   from the eproc_fsm_attr:init/5.
+
+
+%%
+%%  Check, if describing works.
+%%
+describe_test() ->
+    Now = os:timestamp(),
+    Dura = 100,
+    Fire = eproc_timer:timestamp_after(Dura, Now),
+    Attr = #attribute{ % In the past.
+        module = eproc_timer, name = undefined, scope = [],
+        data = {data, Now, Dura, msg1, {i, t, m1, sent}, <<"msg1">>},
+        from = from_trn, upds = [], till = undefined, reason = undefined
+    },
+    {ok, [
+        {start_time,    Now},
+        {delay_ms,      100},
+        {fire_time,     Fire},
+        {event_cid,     {i, t, m1, sent}},
+        {event_type,    <<"msg1">>},
+        {event_body,    msg1}
+    ]} = eproc_fsm_attr:describe(Attr, all).
 
 
 %%

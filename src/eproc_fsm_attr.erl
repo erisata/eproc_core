@@ -22,6 +22,7 @@
 %%
 -module(eproc_fsm_attr).
 -compile([{parse_transform, lager_transform}]).
+-export([describe/2]).
 -export([action/4, action/3, task/3, make_event/4]).
 -export([apply_actions/4]).
 -export([init/5, transition_start/4, transition_end/4, event/3]).
@@ -66,6 +67,20 @@
         AttrState :: term(),
         Reason :: term().
 
+
+%%
+%%  Asks to decribe the provided attribute. The returned values
+%%  should not expose any internal data structures, etc.
+%%
+%%  This callback will usually be called not from the process of the FSM.
+%%
+-callback handle_describe(
+        Attribute   :: #attribute{},
+        What        :: [PropName :: atom()] | all
+    ) ->
+        {ok, [{PropName :: atom(), PropValue :: term()}]}.
+
+
 %%
 %%  Attribute created.
 %%  This callback will always be called in the scope of transition.
@@ -83,6 +98,7 @@
         State :: term(),
         Reason :: term(),
         NeedsStore :: boolean().
+
 
 %%
 %%  Attribute updated by user.
@@ -104,6 +120,7 @@
         NewState :: term(),
         Reason :: term(),
         NeedsStore :: boolean().
+
 
 %%
 %%  Attribute removed by `eproc_fsm`.
@@ -145,6 +162,20 @@
             {remove, Reason},
         Reason :: term(),
         NeedsStore :: boolean().
+
+
+
+%% =============================================================================
+%%  Public API.
+%% =============================================================================
+
+%%
+%%  Describe attribute data.
+%%
+-spec describe(#attribute{}, [atom()] | all) -> {ok, [{atom(), term()}]}.
+
+describe(Attribute = #attribute{module = Module}, What) ->
+    Module:handle_describe(Attribute, What).
 
 
 

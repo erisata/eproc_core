@@ -33,6 +33,17 @@ init_test() ->
 
 
 %%
+%%  Check if describe works.
+%%
+describe_test() ->
+    Attr = #attribute{
+        module = eproc_meta, name = {tag, a, b},
+        scope = [], data = {data, a, b}, from = from_trn
+    },
+    {ok, [{tag, a}, {type, b}]} = eproc_fsm_attr:describe(Attr, all).
+
+
+%%
 %%  Check if attribute creation and updating works.
 %%
 add_tag_test() ->

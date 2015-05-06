@@ -20,7 +20,7 @@
 %%
 -module(eproc_fsm_attr__void).
 -behaviour(eproc_fsm_attr).
--export([init/2, handle_created/4, handle_updated/5, handle_removed/3, handle_event/4]).
+-export([init/2, handle_describe/2, handle_created/4, handle_updated/5, handle_removed/3, handle_event/4]).
 -include("eproc.hrl").
 
 
@@ -41,6 +41,22 @@
 init(_InstId, ActiveAttrs) ->
     Started = [ {A, undefined} || A <- ActiveAttrs ],
     {ok, Started}.
+
+
+%%
+%%  Describe this attribute.
+%%
+handle_describe(Attribute, all) ->
+    handle_describe(Attribute, [some, other]);
+
+handle_describe(Attribute, Props) when is_list(Props) ->
+    {ok, [{P, handle_describe(Attribute, {prop, P})} || P <- Props]};
+
+handle_describe(_Attribute, {prop, some}) ->
+    <<"this">>;
+
+handle_describe(_Attribute, {prop, other}) ->
+    <<"another">>.
 
 
 %%

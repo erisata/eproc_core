@@ -217,3 +217,17 @@ apply_actions_test() ->
     ok.
 
 
+%%
+%%  Check if `describe` works.
+%%
+describe_test() ->
+    ?assertEqual(
+        {ok, [{some, <<"this">>}, {other, <<"another">>}]},
+        eproc_fsm_attr:describe(#attribute{module = eproc_fsm_attr__void}, all)
+    ),
+    ?assertEqual(
+        {ok, [{some, <<"this">>}]},
+        eproc_fsm_attr:describe(#attribute{module = eproc_fsm_attr__void}, [some])
+    ).
+
+

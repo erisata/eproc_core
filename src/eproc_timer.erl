@@ -37,7 +37,7 @@
     timestamp_format/2,
     timestamp_parse/2
 ]).
--export([init/2, handle_created/4, handle_updated/5, handle_removed/3, handle_event/4]).
+-export([init/2, handle_describe/2, handle_created/4, handle_updated/5, handle_removed/3, handle_event/4]).
 -export_type([duration/0]).
 -include("eproc.hrl").
 
@@ -485,6 +485,34 @@ init(InstId, ActiveAttrs) ->
     end,
     Started = lists:map(InitTimerFun, ActiveAttrs),
     {ok, Started}.
+
+
+%%
+%%  Describe this attribute.
+%%
+handle_describe(Attribute, all) ->
+    handle_describe(Attribute, [start_time, delay_ms, fire_time, event_cid, event_type, event_body]);
+
+handle_describe(Attribute, Props) when is_list(Props) ->
+    {ok, [{P, handle_describe(Attribute, {prop, P})} || P <- Props]};
+
+handle_describe(#attribute{data = #data{start = Start}}, {prop, start_time}) ->
+    Start;
+
+handle_describe(#attribute{data = #data{delay = Delay}}, {prop, delay_ms}) ->
+    duration_to_ms(Delay);
+
+handle_describe(#attribute{data = #data{start = Start, delay = Delay}}, {prop, fire_time}) ->
+    timestamp_after(Delay, Start);
+
+handle_describe(#attribute{data = #data{event_cid = EventCid}}, {prop, event_cid}) ->
+    EventCid;
+
+handle_describe(#attribute{data = #data{event_msg = EventBody}}, {prop, event_body}) ->
+    EventBody;
+
+handle_describe(#attribute{data = #data{event_type = EventType}}, {prop, event_type}) ->
+    EventType.
 
 
 %%

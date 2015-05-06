@@ -27,9 +27,22 @@
 init_test() ->
     Attr = #attribute{
         module = eproc_router, name = {key, a},
-        scope = [], data = {data, a}, from = from_trn
+        scope = [], data = {data, a, undefined}, from = from_trn
     },
     {ok, _State} = eproc_fsm_attr:init(100, [], 0, store, [Attr]).
+
+
+%%
+%%  Check, if describing works.
+%%
+describe_test() ->
+    Attr = #attribute{
+        module = eproc_router, name = {key, a},
+        scope = [], data = {data, a, undefined}, from = from_trn
+    },
+    {ok, [
+        {key, a}
+    ]} = eproc_fsm_attr:describe(Attr, all).
 
 
 %%

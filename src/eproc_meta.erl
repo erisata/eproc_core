@@ -33,7 +33,7 @@
 -module(eproc_meta).
 -behaviour(eproc_fsm_attr).
 -export([add_tag/2, get_instances/2]).
--export([init/2, handle_created/4, handle_updated/5, handle_removed/3, handle_event/4]).
+-export([init/2, handle_describe/2, handle_created/4, handle_updated/5, handle_removed/3, handle_event/4]).
 -include("eproc.hrl").
 
 
@@ -106,6 +106,22 @@ get_instances(Query, Opts) ->
 %%
 init(_InstId, ActiveAttrs) ->
     {ok, [ {A, undefined} || A <- ActiveAttrs ]}.
+
+
+%%
+%%  Describe this attribute.
+%%
+handle_describe(Attribute, all) ->
+    handle_describe(Attribute, [tag, type]);
+
+handle_describe(Attribute, Props) when is_list(Props) ->
+    {ok, [{P, handle_describe(Attribute, {prop, P})} || P <- Props]};
+
+handle_describe(#attribute{data = #data{tag = Tag}}, {prop, tag}) ->
+    Tag;
+
+handle_describe(#attribute{data = #data{type = Type}}, {prop, type}) ->
+    Type.
 
 
 %%
