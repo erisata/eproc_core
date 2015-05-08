@@ -316,7 +316,9 @@ start_link_opts_register_test() ->
         (store, {inst, I = 1001}) -> {ok, GenInst(I, name1)};
         (store, {inst, I = 1002}) -> {ok, GenInst(I, name2)};
         (store, {inst, I = 1003}) -> {ok, GenInst(I, name3)};
-        (store, {inst, I = 1004}) -> {ok, GenInst(I, name4)}
+        (store, {inst, I = 1004}) -> {ok, GenInst(I, name4)};
+        (store, {inst, I = 1005}) -> {ok, GenInst(I, name5)};
+        (store, {inst, I = 1006}) -> {ok, GenInst(I, undefined)}
     end),
     ok = meck:expect(eproc_registry, ref, fun
         () -> {ok, reg2}
@@ -330,21 +332,29 @@ start_link_opts_register_test() ->
     {ok, PID2}  = eproc_fsm:start_link({inst, 1002}, [{register, name}, {registry, reg1}]),
     {ok, PID3}  = eproc_fsm:start_link({inst, 1003}, [{register, both}, {registry, reg1}]),
     {ok, PID4}  = eproc_fsm:start_link({inst, 1004}, [{register, both}]), % Will use default
+    {ok, PID5}  = eproc_fsm:start_link({inst, 1005}, [{registry, reg1}]), % Will register id and name.
+    {ok, PID6}  = eproc_fsm:start_link({inst, 1006}, [{registry, reg1}]), % Will register id only.
     ?assert(eproc_fsm:is_online(PID0a)),
     ?assert(eproc_fsm:is_online(PID0b)),
     ?assert(eproc_fsm:is_online(PID1)),
     ?assert(eproc_fsm:is_online(PID2)),
     ?assert(eproc_fsm:is_online(PID3)),
     ?assert(eproc_fsm:is_online(PID4)),
+    ?assert(eproc_fsm:is_online(PID5)),
+    ?assert(eproc_fsm:is_online(PID6)),
+    ?assertEqual(1, meck:num_calls(eproc_registry, register_fsm, [undefined, 1000, []])),
+    ?assertEqual(1, meck:num_calls(eproc_registry, register_fsm, [reg1,      1000, []])),
     ?assertEqual(1, meck:num_calls(eproc_registry, register_fsm, [reg1, 1001, [{inst, 1001}]])),
     ?assertEqual(1, meck:num_calls(eproc_registry, register_fsm, [reg1, 1002, [{name, name2}]])),
     ?assertEqual(1, meck:num_calls(eproc_registry, register_fsm, [reg1, 1003, [{inst, 1003}, {name, name3}]])),
     ?assertEqual(1, meck:num_calls(eproc_registry, register_fsm, [reg2, 1004, [{inst, 1004}, {name, name4}]])),
-    ?assertEqual(4, meck:num_calls(eproc_registry, register_fsm, '_')),
+    ?assertEqual(1, meck:num_calls(eproc_registry, register_fsm, [reg1, 1005, [{inst, 1005}, {name, name5}]])),
+    ?assertEqual(1, meck:num_calls(eproc_registry, register_fsm, [reg1, 1006, [{inst, 1006}]])),
+    ?assertEqual(8, meck:num_calls(eproc_registry, register_fsm, '_')),
     ?assertEqual(1, meck:num_calls(eproc_registry, ref, [])),
     ?assert(meck:validate([eproc_store, eproc_registry, eproc_fsm__void])),
     ok = meck:unload([eproc_store, eproc_registry, eproc_fsm__void]),
-    ok = unlink_kill([PID0a, PID0b, PID1, PID2, PID3, PID4]).
+    ok = unlink_kill([PID0a, PID0b, PID1, PID2, PID3, PID4, PID5, PID6]).
 
 
 %%
@@ -1438,9 +1448,9 @@ resume_no_start_test() ->
 %%        * as provided (2, 3, 4)
 %%
 resume_and_start_test() ->
-    Opts = [{store, store}, {registry, registry}],
+    Opts = [{store, store}, {registry, registry}, {register, none}],
     ok = meck:new(eproc_store, []),
-    ok = meck:new(eproc_registry, []),
+    ok = meck:new(eproc_registry, [passthrough]),
     ok = meck:new(eproc_registry_mock, [non_strict]),
     ok = meck:new(eproc_fsm__void, []),
     ok = meck:expect(eproc_store, set_instance_resuming, fun

@@ -713,13 +713,13 @@ create(Module, Args, Options) ->
 %%  :   a registry to be used by the instance. If this option not provided, a registry
 %%      specified in the `eproc_core` application environment is used. `eproc_core` can
 %%      cave no registry specified. In that case the registry will not be used.
-%%  `{register, (id | name | both)}`
+%%  `{register, (none | id | name | both)}`
 %%  :   specifies, what to register to the `eproc_registry` on startup.
-%%      The registration is performed asynchronously and the id or name are those
+%%      The registration is performed asynchronously and the id or name are those,
 %%      loaded from the store during startup. These registration options are independent
-%%      from the FsmName parameter. The FSM register nothing if this option is not
-%%      provided. The startup will fail if this option is provided but registry
-%%      is not configured for the `eproc_core` application (app environment).
+%%      from the FsmName parameter. The FSM registers `id` and `name` (if name exists) by default,
+%%      if registry exists. The startup will fail if this option is set to `id`, `name` or `both`,
+%%      and the registry is not configured for the `eproc_core` application (app environment).
 %%  `{start_sync, Sync :: boolean()}`
 %%  :   starts FSM synchronously if `Sync = true` and asynchronously otherwise.
 %%      Default is `false` (asynchronously). If FSM is started synchonously,
@@ -2210,13 +2210,17 @@ call_init_runtime(SName, SData, Module) ->
 %%  Register instance id and name to a registry if needed.
 %%
 register_online(#instance{inst_id = InstId, name = Name}, Registry, StartOpts) ->
-    case proplists:get_value(register, StartOpts) of
-        undefined -> ok;
-        none -> ok;
-        id   -> eproc_registry:register_fsm(Registry, InstId, [{inst, InstId}]);
-        name -> eproc_registry:register_fsm(Registry, InstId, [{name, Name}]);
-        both -> eproc_registry:register_fsm(Registry, InstId, [{inst, InstId}, {name, Name}])
-    end.
+    Keys = case proplists:get_value(register, StartOpts) of
+        none                                  -> [];
+        id                                    -> [{inst, InstId}              ];
+        name      when Name     =/= undefined -> [                {name, Name}];
+        both      when Name     =/= undefined -> [{inst, InstId}, {name, Name}];
+        undefined when Registry =:= undefined -> [];
+        undefined when Name     =:= undefined -> [{inst, InstId}              ];
+        undefined                             -> [{inst, InstId}, {name, Name}]
+    end,
+    ok = eproc_registry:register_fsm(Registry, InstId, Keys),
+    ok.
 
 
 %%
