@@ -228,8 +228,8 @@ test_timers(_Config) ->
 %%  Check if router works with FSM.
 %%
 test_router_integration(_Config) ->
-    OrderId = {order, erlang:node(), erlang:now()},
-    ok               = eproc_fsm__order:create(OrderId),
+    OrderId = erlang:phash2({order, erlang:node(), erlang:now()}),
+    ok               = eproc_fsm__order:create(OrderId, cust_123, [some, order, lines]),
     {ok, DeliveryId} = eproc_fsm__order:process(OrderId),
     {ok, completed}  = eproc_fsm__order:delivered(DeliveryId),
     ok.
