@@ -284,14 +284,15 @@
     when
         FilterClause ::
             %% TODO: Faulty (see webapi).
-            {id,        IIdFilter | [IIdFilter]} | % At most one in Filter list
-            {name,      INmFilter | [INmFilter]} | % At most one in Filter list
-            {last_trn,  From :: timestamp() | undefined, Till :: timestamp() | undefined} |
-            {created,   From :: timestamp() | undefined, Till :: timestamp() | undefined} |
-            {tag,       TagFilter | [TagFilter]} |
-            {module,    ModFilter | [ModFilter]} |
-            {status,    StsFilter | [StsFilter]} |
-            {age,       Age :: duration()},  % Older than Age. Instance age = terminated - created, if terminated is undefined, age = now() - created.
+            {id,            IIdFilter | [IIdFilter]} | % At most one in Filter list
+            {name,          INmFilter | [INmFilter]} | % At most one in Filter list
+            {last_trn,      From :: timestamp() | undefined, Till :: timestamp() | undefined} |
+            {last_trn_age,  Age :: duration()} | % Last activity no later than in last Age.
+            {created,       From :: timestamp() | undefined, Till :: timestamp() | undefined} |
+            {tag,           TagFilter | [TagFilter]} |
+            {module,        ModFilter | [ModFilter]} |
+            {status,        StsFilter | [StsFilter]} |
+            {age,           Age :: duration()},  % Older than Age. Instance age = terminated - created, if terminated is undefined, age = now() - created.
         IIdFilter :: InstId :: inst_id(),
         INmFilter :: Name :: inst_name(),
         TagFilter :: TagName :: binary() | {TagName :: binary(), TagType :: binary() | undefined},
@@ -848,16 +849,20 @@ instance_sort(Instances, SortBy) ->
 instance_filter_to_ms(InstanceFilters, SkipFilters) ->
     %
     % Normalize filter clauses (group ages).
-    {ok, AgeClauses, OtherClauses} = group_filter_by_type(InstanceFilters, [age]),
-    NormalizedFilters = case AgeClauses of
-        [] ->
-            InstanceFilters;
-        [_SingleAgeClause] ->
-            InstanceFilters;
-        _MultipleAgeClauses ->
-            AgesMS = [ eproc_timer:duration_to_ms(Age) || {age, Age} <- AgeClauses ],
-            [{age, {lists:max(AgesMS), ms}} | OtherClauses]
+    {ok, [AgeClauses, LastTrnAgeClauses], OtherClauses} = group_filter_by_type(InstanceFilters, [age, last_trn_age]),
+    NormalizeFilterFun = fun
+        ([],              NormalizedClauses, _NormalizeFun) -> NormalizedClauses;
+        ([SingleClause],  NormalizedClauses, _NormalizeFun) -> [SingleClause | NormalizedClauses];
+        (MultipleClauses, NormalizedClauses,  NormalizeFun) -> [NormalizeFun(MultipleClauses) | NormalizedClauses]
     end,
+    NormalizedFiltersAge = NormalizeFilterFun(AgeClauses, OtherClauses, fun(ClausesList) ->
+        AgesMS = [ eproc_timer:duration_to_ms(Age) || {age, Age} <- ClausesList ],
+        {age, {lists:max(AgesMS), ms}}
+    end),
+    NormalizedFilters = NormalizeFilterFun(LastTrnAgeClauses, NormalizedFiltersAge, fun(ClausesList) ->
+        LastTrnAgesMS = [ eproc_timer:duration_to_ms(Age) || {last_trn_age, Age} <- ClausesList ],
+        {last_trn_age, {lists:min(LastTrnAgesMS), ms}}
+    end),
     GoodSkipFilters = case lists:member(tag, SkipFilters) of
         true -> SkipFilters;
         false -> [tag | SkipFilters]
@@ -912,6 +917,10 @@ instance_filter_to_guard({last_trn, From, Till}) ->
         instance_filter_to_guard({last_trn, From, undefined}),
         instance_filter_to_guard({last_trn, undefined, Till})
     ];
+
+instance_filter_to_guard({last_trn_age, Age}) ->
+    From = eproc_timer:timestamp_before(Age, os:timestamp()),
+    instance_filter_to_guard({last_trn, From, undefined});
 
 instance_filter_to_guard({created, undefined, undefined}) ->
     [];
