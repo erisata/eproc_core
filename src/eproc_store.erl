@@ -365,6 +365,7 @@
             {id,        MIdFilter | [MIdFilter]} |
         %    {inst_id,   IIdFilter | [IIdFilter]} | %% TODO?
             {date,      From :: timestamp() | undefined, Till :: timestamp() | undefined} |
+            {age,       Age :: duration} | % Created no later than before Age (younger than age).
             {peer,      PeerFilter | [PeerFilter]},
         MIdFilter   :: msg_id() | msg_cid() ,
         %IIdFilter   :: InstId :: inst_id(),
@@ -848,18 +849,13 @@ instance_sort(Instances, SortBy) ->
 
 instance_filter_to_ms(InstanceFilters, SkipFilters) ->
     %
-    % Normalize filter clauses (group ages).
+    % Normalize filter clauses (group ages and last transition ages).
     {ok, [AgeClauses, LastTrnAgeClauses], OtherClauses} = group_filter_by_type(InstanceFilters, [age, last_trn_age]),
-    NormalizeFilterFun = fun
-        ([],              NormalizedClauses, _NormalizeFun) -> NormalizedClauses;
-        ([SingleClause],  NormalizedClauses, _NormalizeFun) -> [SingleClause | NormalizedClauses];
-        (MultipleClauses, NormalizedClauses,  NormalizeFun) -> [NormalizeFun(MultipleClauses) | NormalizedClauses]
-    end,
-    NormalizedFiltersAge = NormalizeFilterFun(AgeClauses, OtherClauses, fun(ClausesList) ->
+    NormalisedFiltersAge = normalise_filter(AgeClauses, OtherClauses, fun(ClausesList) ->
         AgesMS = [ eproc_timer:duration_to_ms(Age) || {age, Age} <- ClausesList ],
         {age, {lists:max(AgesMS), ms}}
     end),
-    NormalizedFilters = NormalizeFilterFun(LastTrnAgeClauses, NormalizedFiltersAge, fun(ClausesList) ->
+    NormalisedFilters = normalise_filter(LastTrnAgeClauses, NormalisedFiltersAge, fun(ClausesList) ->
         LastTrnAgesMS = [ eproc_timer:duration_to_ms(Age) || {last_trn_age, Age} <- ClausesList ],
         {last_trn_age, {lists:min(LastTrnAgesMS), ms}}
     end),
@@ -878,7 +874,7 @@ instance_filter_to_ms(InstanceFilters, SkipFilters) ->
         _ = '_'
     },
     MatchBody = ['$_'],
-    general_filter_to_ms(NormalizedFilters, GoodSkipFilters, MatchHead, fun instance_filter_to_guard/1, MatchBody).
+    general_filter_to_ms(NormalisedFilters, GoodSkipFilters, MatchHead, fun instance_filter_to_guard/1, MatchBody).
 
 
 %%
@@ -1062,6 +1058,13 @@ message_sort(Messages, SortBy) ->
 -spec message_filter_to_ms(list(), [atom()]) -> {ok, ets:match_spec()}.
 
 message_filter_to_ms(MessageFilters, SkipFilters) ->
+    %
+    % Normalize filter clauses (group ages).
+    {ok, [AgeClauses], OtherClauses} = group_filter_by_type(MessageFilters, [age]),
+    NormalisedFilters = normalise_filter(AgeClauses, OtherClauses, fun(ClausesList) ->
+        AgesMS = [ eproc_timer:duration_to_ms(Age) || {age, Age} <- ClausesList ],
+        {age, {lists:min(AgesMS), ms}}
+    end),
     MatchHead = #message{
         msg_id = ?MSG_MSVAR_ID,
         sender = ?MSG_MSVAR_SENDER,
@@ -1070,7 +1073,7 @@ message_filter_to_ms(MessageFilters, SkipFilters) ->
         _ = '_'
     },
     MatchBody = ['$_'],
-    general_filter_to_ms(MessageFilters, SkipFilters, MatchHead, fun message_filter_to_guard/1, MatchBody).
+    general_filter_to_ms(NormalisedFilters, SkipFilters, MatchHead, fun message_filter_to_guard/1, MatchBody).
 
 
 %%
@@ -1111,6 +1114,10 @@ message_filter_to_guard({date, From, Till}) ->
         message_filter_to_guard({date, From, undefined}),
         message_filter_to_guard({date, undefined, Till})
     ];
+
+message_filter_to_guard({age, Age}) ->
+    From = eproc_timer:timestamp_before(Age, os:timestamp()),
+    message_filter_to_guard({date, From, undefined});
 
 message_filter_to_guard({peer, PeerOrList}) ->
     make_orelse_guard(make_list(PeerOrList), fun message_peer_filter_to_guard/1).
@@ -1202,5 +1209,19 @@ resolve_ref({StoreMod, StoreArgs}) ->
 
 resolve_ref(undefined) ->
     ref().
+
+
+%%
+%% Transforms a list of filter clauses, provided as first argument into, a single filter clause
+%% using NormaliseFun/1, ataches the result to NormalisedClauses and returns the obtained list.
+%%
+normalise_filter([], NormalisedClauses, _NormaliseFun) ->
+    NormalisedClauses;
+
+normalise_filter([SingleClause], NormalisedClauses, _NormaliseFun) ->
+    [SingleClause | NormalisedClauses];
+
+normalise_filter(MultipleClauses, NormalisedClauses, NormaliseFun) ->
+    [NormaliseFun(MultipleClauses) | NormalisedClauses].
 
 

@@ -850,6 +850,9 @@ eproc_store_core_test_resolve_msg_dst(Config) ->
     {ok, {_, _, Res13}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, [{receiver, {inst, IID2}}, {receiver, {inst, IID3}}]}]}, all),
     {ok, {_, _, Res14}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, [{any,      {inst, IID2}}, {any,      {inst, IID3}}]}]}, all),
     {ok, {_, _, Res15}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, [{sender,   {inst, IID1}}, {receiver, {inst, IID3}}]}]}, all),
+    {ok, {_, _, Res16}} = eproc_store:get_message(Store, {filter, {From, Count}, [{age, {12,hour}}]}, all),
+    {ok, {_, _, Res16}} = eproc_store:get_message(Store, {filter, {From, Count}, [{age, {12,hour}}, {age, [{2,day},{1,hour}]}]}, all),
+    {ok, {_, _, Res17}} = eproc_store:get_message(Store, {filter, {From, Count}, [{age, [{2,day},{1,hour}]}]}, all),
     %Evaluating results
     Req = fun(List) ->
         [Elem || Elem <- List, Elem == Msg1 orelse Elem == Msg2 orelse Elem == Msg3 orelse Elem == Msg4]
@@ -897,18 +900,29 @@ eproc_store_core_test_resolve_msg_dst(Config) ->
     ?assertThat(Res15, contains_member(Msg3)),
     ?assertThat(Res15, contains_member(Msg4)),
     ?assertThat(Req(Res15), has_length(3)),
+    ?assertThat(Res16, contains_member(Msg3)),
+    ?assertThat(Res16, contains_member(Msg4)),
+    ?assertThat(Req(Res16), has_length(2)),
+    ?assertThat(Res17, contains_member(Msg2)),
+    ?assertThat(Res17, contains_member(Msg3)),
+    ?assertThat(Res17, contains_member(Msg4)),
+    ?assertThat(Req(Res17), has_length(3)),
     % Performing sucessful compound tests
     {ok, {_, _, Res50}} = eproc_store:get_message(Store, {filter, {From, Count}, [{id, {IID1, 1, 2, recv}}, {id, {IID1, 1, 2, sent}}]}, all),
     {ok, {_, _, Res51}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, {sender, {inst,IID1}}}, {date, undefined, OldDate4}]}, all),
     {ok, {_, _, Res52}} = eproc_store:get_message(Store, {filter, {From, Count}, [{date, undefined, OldDate4}, {peer, {sender, {inst,IID1}}}]}, all),
     {ok, {_, _, Res53}} = eproc_store:get_message(Store, {filter, {From, Count}, [{id, [{IID1, 1, 2}, {IID1, 1, 3}]}, {date, OldDate4, undefined}]}, all),
     {ok, {_, _, Res54}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, [{sender, {inst,IID2}},{receiver, {inst,IID2}}]}, {peer, {any, {inst,IID3}}}]}, all),
+    {ok, {_, _, Res55}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, [{any, {inst, IID1}}]}, {age, [{2,day},{1,hour}]}]}, all),
     %Evaluating results
     ?assertThat(Req(Res50), is([Msg2])),
     ?assertThat(Req(Res51), is([Msg2])),
     ?assertThat(Req(Res52), is([Msg2])),
     ?assertThat(Req(Res53), is([Msg3])),
     ?assertThat(Req(Res54), is([Msg4])),
+    ?assertThat(Res55, contains_member(Msg2)),
+    ?assertThat(Res55, contains_member(Msg3)),
+    ?assertThat(Req(Res55), has_length(2)),
     % Performing empty list tests
     {ok, {0, _, []}} = eproc_store:get_message(Store, {filter, {From, Count}, [{id, {non, existent, id}}]}, all),
     {ok, {0, _, []}} = eproc_store:get_message(Store, {filter, {From, Count}, [{id, {IID1, 1, 2}}, {id, {IID1, 1, 3, sent}}]}, all),
@@ -917,6 +931,7 @@ eproc_store_core_test_resolve_msg_dst(Config) ->
     {ok, {0, _, []}} = eproc_store:get_message(Store, {filter, {From, Count}, [{date, undefined, OldDate2}, {id, [{IID1, 1, 2}, {IID1, 1, 3}]}]}, all),
     {ok, {0, _, []}} = eproc_store:get_message(Store, {filter, {From, Count}, [{id, []}]}, all),
     {ok, {0, _, []}} = eproc_store:get_message(Store, {filter, {From, Count}, [{peer, []}]}, all),
+    {ok, {0, _, []}} = eproc_store:get_message(Store, {filter, {From, Count}, [{age, {12,hour}}, {date, OldDate2, OldDate4}, {age, [{2,day},{1,hour}]}]}, all),
     % Performing sort tests
     {ok, {_, _, Res90}} = eproc_store:get_message(Store, {filter, {From, Count, id}, []}, all),
     {ok, {_, _, Res01}} = eproc_store:get_message(Store, {filter, {From, Count, date}, []}, all),
