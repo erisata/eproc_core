@@ -38,6 +38,13 @@
 %%  reset or cleaned up in one go. Altrough process name is an
 %%  arbitraty term and is not related to Erlang process in any way.
 %%
+%%  Delays, returned by this module (as a response to `notify/*`)
+%%  are extracted from the time intervals between the notifications
+%%  when calculating limits. This is done in order to avoid interferrence
+%%  of delays and event rates/intervals. Without this, the delays would make
+%%  limit conditions to fail, when the limit time intervals are smaller
+%%  than delays (this is the common case).
+%%
 %%  Several types of counter limits are implemented:
 %%
 %%    * `series` - counts events in a series, where events in one
@@ -165,6 +172,16 @@
 
 
 %%
+%%  Describes single notification for the counter.
+%%
+-record(notif, {
+    time    :: integer(),       %% Notification time in ms.
+    count   :: integer(),       %% Count of events (usually 1).
+    delay   :: integer()        %% Delay, calculated based on the notification.
+}).
+
+
+%%
 %%  Describes single counter.
 %%  Single process can have several counters and each counter can have several limits.
 %%
@@ -173,7 +190,7 @@
     proc    :: term(),              %% Process name.
     specs   :: [limit_spec()],      %% Limit specifications.
     limits  :: [#limit{}],          %% Runtime state of the limits.
-    tstamps :: [{_, _, _}]          %% List of recent notification timestamps.
+    notifs  :: [#notif{}]           %% List of recent notifications.
 }).
 
 
@@ -242,11 +259,14 @@ notify(ProcessName, CounterName, Count) when Count > 0 ->
         [] ->
             {error, {not_found, CounterName}};
         [Counter] ->
-            {Response, NewCounter} = case handle_notif(Counter, Count) of
-                {[], 0, C} -> {ok, C};
-                {[], D, C} -> {{delay, D}, C};
-                {R, _D, C} -> {{reached, R}, C}
+            ThisNotif = #notif{time = timestamp_ms(), count = Count, delay = 0},
+            {Response, NewLimits, FilteredNotifs, Delay} = case handle_notif(Counter, ThisNotif) of
+                {ok, L, N, [], 0} -> {ok,           L, N, 0};
+                {ok, L, N, [], D} -> {{delay, D},   L, N, D};
+                {ok, L, N, R, _D} -> {{reached, R}, L, N, 0}
             end,
+            NewNotifs  = [ThisNotif#notif{delay = Delay} | FilteredNotifs],
+            NewCounter = Counter#counter{limits = NewLimits, notifs = NewNotifs},
             true = ets:insert(?MODULE, NewCounter),
             Response
     end.
@@ -266,7 +286,8 @@ notify(ProcessName, CounterName, Count) when Count > 0 ->
         {error, {not_found, CounterName :: term()}}.
 
 notify(ProcessName, Counters) ->
-    AggregateFun = fun
+    NowMS = timestamp_ms(),
+    AggregateResponse = fun
         ({_, {error, E}},   _Other           ) -> {error, E};
         ({N, {reached, R}}, {reached, OtherR}) -> {reached, [{N, R} | OtherR]};
         ({_, _Other},       {reached, OtherR}) -> {reached, OtherR};
@@ -275,8 +296,46 @@ notify(ProcessName, Counters) ->
         ({_, {delay, D}},   ok               ) -> {delay, D};
         ({_, ok},           Other            ) -> Other
     end,
-    Results = [ {N, notify(ProcessName, N, C)} || {N, C} <- lists:reverse(Counters) ],
-    lists:foldl(AggregateFun, ok, Results).
+    HandleCounters = fun ({CounterName, Count}, {HandledCounters, CommonResponse}) ->
+        case ets:lookup(?MODULE, {ProcessName, CounterName}) of
+            [] ->
+                {
+                    HandledCounters,
+                    {error, {not_found, CounterName}}
+                };
+            [Counter] ->
+                ThisNotif = #notif{time = NowMS, count = Count, delay = 0},
+                {Response, NewLimits, FilteredNotifs} = case handle_notif(Counter, ThisNotif) of
+                    {ok, L, N, [], 0} -> {ok,           L, N};
+                    {ok, L, N, [], D} -> {{delay, D},   L, N};
+                    {ok, L, N, R, _D} -> {{reached, R}, L, N}
+                end,
+                {
+                    [{Counter, NewLimits, ThisNotif, FilteredNotifs} | HandledCounters],
+                    AggregateResponse({CounterName, Response}, CommonResponse)
+                }
+        end
+    end,
+    {HandledCounters, CommonResponse} = lists:foldr(HandleCounters, {[], ok}, Counters),
+    SaveCounters = fun ({Counter, NewLimits, ThisNotif, FilteredNotifs}, Delay) ->
+        NewNotifs  = [ThisNotif#notif{delay = Delay} | FilteredNotifs],
+        NewCounter = Counter#counter{limits = NewLimits, notifs = NewNotifs},
+        true = ets:insert(?MODULE, NewCounter),
+        Delay
+    end,
+    case CommonResponse of
+        ok ->
+            lists:foldl(SaveCounters, 0, HandledCounters),
+            ok;
+        {delay, Delay} ->
+            lists:foldl(SaveCounters, Delay, HandledCounters),
+            {delay, Delay};
+        {reached, Limits} ->
+            lists:foldl(SaveCounters, 0, HandledCounters),
+            {reached, Limits};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 
 %%
@@ -389,13 +448,13 @@ code_change(_OldVsn, State, _Extra) ->
 %%  Initializes a counter.
 %%
 init_counter(ProcessName, CounterName, Specs) ->
-    Now = os:timestamp(),
+    NowMS = timestamp_ms(),
     #counter{
         key = {ProcessName, CounterName},
         proc = ProcessName,
         specs = Specs,
         limits = lists:map(fun init_limits/1, Specs),
-        tstamps = [{Now, 0}]
+        notifs = [#notif{time = NowMS, count = 0, delay = 0}]
     }.
 
 init_limits({series, LimitName, _MaxCount, _NewAfter, _Action}) ->
@@ -408,34 +467,32 @@ init_limits({rate, LimitName, _MaxCount, _Duration, _Action}) ->
 %%
 %%  Handles new counter notification.
 %%
-handle_notif(Counter = #counter{specs = Specs, limits = Limits, tstamps = TStamps}, Count) ->
-    Now = os:timestamp(),
-    ThisTStamp = {Now, Count},
-    {NewLimits, MaxDelay, MaxInterval, ReachedLimits} = handle_limit(Specs, Limits, TStamps, Now, Count),
-    FilteredTStamps = cleanup_tstamps(TStamps, Now, MaxInterval),
-    NewCounter = Counter#counter{limits = NewLimits, tstamps = [ThisTStamp | FilteredTStamps]},
-    {ReachedLimits, MaxDelay, NewCounter}.
+handle_notif(#counter{specs = Specs, limits = Limits, notifs = Notifs}, ThisNotif) ->
+    {NewLimits, MaxDelay, OldestUsed, ReachedLimits} = handle_limit(Specs, Limits, Notifs, ThisNotif),
+    FilteredNotifs = cleanup_notifs(Notifs, OldestUsed),
+    {ok, NewLimits, FilteredNotifs, ReachedLimits, MaxDelay}.
 
 
 %%
 %%  Handle particular limit of a counter.
 %%
-handle_limit([], [], _TStamps, _Now, _Count) ->
+handle_limit([], [], _Notifs, _ThisNotif) ->
     {[], 0, 0, []};
 
 handle_limit(
         [{series, LimitName, MaxCount, NewAfter, Action} | OtherSpecs],
-        [Limit | OtherLimits], TStamps, NotifTime, NotifCount
+        [Limit | OtherLimits], Notifs, ThisNotif
     ) ->
-    {NewLimits, MaxDelay, MaxInterval, ReachedLimits} = handle_limit(
-        OtherSpecs, OtherLimits, TStamps, NotifTime, NotifCount
+    {NewLimits, MaxDelay, OldestUsed, ReachedLimits} = handle_limit(
+        OtherSpecs, OtherLimits, Notifs, ThisNotif
     ),
-    [{LastTime, _LastCount} | _] = TStamps,
+    #notif{time = ThisNotifTime, count = ThisNotifCount} = ThisNotif,
+    [#notif{time = LastNotifTime, delay = LastNotifDelay} | _] = Notifs,
     #limit{name = LimitName, count = CurrentCount, delay = LastDelay} = Limit,
     NewAfterMS = eproc_timer:duration_to_ms(NewAfter),
-    NewCount = case timer:now_diff(NotifTime, LastTime) > (NewAfterMS * 1000) of
-        true  -> NotifCount;
-        false -> NotifCount + CurrentCount
+    NewCount = case (ThisNotifTime - LastNotifTime - LastNotifDelay) > NewAfterMS of
+        true  -> ThisNotifCount;
+        false -> ThisNotifCount + CurrentCount
     end,
     {NewReachedLimits, NewDelay} = case NewCount > MaxCount of
         true  -> handle_action(LimitName, Action, ReachedLimits, LastDelay);
@@ -443,26 +500,27 @@ handle_limit(
     end,
     NewLimit = Limit#limit{count = NewCount, delay = NewDelay},
     NewMaxDelay = erlang:max(MaxDelay, NewDelay),
-    {[NewLimit | NewLimits], NewMaxDelay, MaxInterval, NewReachedLimits};
+    {[NewLimit | NewLimits], NewMaxDelay, OldestUsed, NewReachedLimits};
 
 handle_limit(
         [{rate, LimitName, MaxCount, Duration, Action} | OtherSpecs],
-        [Limit | OtherLimits], TStamps, NotifTime, NotifCount
+        [Limit | OtherLimits], Notifs, ThisNotif
     ) ->
-    {NewLimits, MaxDelay, MaxInterval, ReachedLimits} = handle_limit(
-        OtherSpecs, OtherLimits, TStamps, NotifTime, NotifCount
+    {NewLimits, MaxDelay, OldestUsed, ReachedLimits} = handle_limit(
+        OtherSpecs, OtherLimits, Notifs, ThisNotif
     ),
+    #notif{time = ThisNotifTime} = ThisNotif,
     #limit{name = LimitName, delay = LastDelay} = Limit,
     DurationMS = eproc_timer:duration_to_ms(Duration),
-    OldestTStamp = timestamp_add_ms(NotifTime, -DurationMS),
-    {NewReachedLimits, NewDelay} = case rate_above([{NotifTime, NotifCount} | TStamps], OldestTStamp, MaxCount, 0) of
-        true  -> handle_action(LimitName, Action, ReachedLimits, LastDelay);
-        false -> {ReachedLimits, 0}
+    OldestMS = ThisNotifTime - DurationMS,
+    {NewReachedLimits, NewDelay} = case rate_above([ThisNotif | Notifs], OldestMS, MaxCount, 0) of
+        {true,  ActualOldestMS} -> handle_action(LimitName, Action, ReachedLimits, LastDelay);
+        {false, ActualOldestMS} -> {ReachedLimits, 0}
     end,
     NewLimit = Limit#limit{count = 0, delay = NewDelay},
     NewMaxDelay = erlang:max(MaxDelay, NewDelay),
-    NewMaxInterval = erlang:max(MaxInterval, DurationMS),
-    {[NewLimit | NewLimits], NewMaxDelay, NewMaxInterval, NewReachedLimits}.
+    NewOldestUsed = erlang:min(OldestUsed, ActualOldestMS),
+    {[NewLimit | NewLimits], NewMaxDelay, NewOldestUsed, NewReachedLimits}.
 
 
 %%
@@ -493,39 +551,39 @@ handle_action(_LimitName, {delay, MinDelay, Coefficient, MaxDelay}, ReachedLimit
 %%
 %%  Drop old timestamps.
 %%
-cleanup_tstamps(_TStamps, _Now, 0) ->
-    [];
-
-cleanup_tstamps(TStamps, Now, MaxInterval) ->
-    {N1, N2, _} = Now,
-    OldestSecs = N1 * 1000000 + N2 - (MaxInterval div 1000) - 1,
-    OldestTS = {OldestSecs div 1000000, OldestSecs rem 1000000, 0},
-    Filter = fun ({T, _C}) -> T >= OldestTS end,
-    lists:takewhile(Filter, TStamps).
+cleanup_notifs(Notifs, OldestUsed) ->
+    Filter = fun (#notif{time = T}) -> T >= OldestUsed end,
+    lists:takewhile(Filter, Notifs).
 
 
 %%
-%%  Counts notifications.
+%%  Counts notifications over provided time interval.
 %%
-rate_above(_TSs, _OldestTS, MaxCount, Count) when MaxCount < Count ->
-    true;
+rate_above(_Notifs, OldestMS, MaxCount, Count) when MaxCount < Count ->
+    {true, OldestMS};
 
-rate_above([], _OldestTS, _MaxCount, _Count) ->
-    false;
+rate_above([], OldestMS, _MaxCount, _Count) ->
+    {false, OldestMS};
 
-rate_above([{TS, _C} | _OtherTS], OldestTS, _MaxCount, _Count) when TS < OldestTS ->
-    false;
+rate_above([#notif{time = T, delay = D} | _OtherNotifs], OldestMS, _MaxCount, _Count) when T < (OldestMS - D) ->
+    {false, OldestMS - D};
 
-rate_above([{_TS, C} | OtherTS], OldestTS, MaxCount, Count) ->
-    rate_above(OtherTS, OldestTS, MaxCount, Count + C).
+rate_above([#notif{count = C, delay = D} | OtherNotifs], OldestMS, MaxCount, Count) ->
+    rate_above(OtherNotifs, OldestMS - D, MaxCount, Count + C).
 
 
 %%
-%%  Adds milliseconds to timestamp.
+%%  Convert timestamp to milliseconds.
 %%
-timestamp_add_ms({T1, T2, T3}, AddMS) ->
-    MS = (T1 * 1000000 + T2) * 1000000 + T3 + (AddMS * 1000),
-    {MS div 1000000000000, (MS div 1000000) rem 1000000, MS rem 1000000}.
+timestamp_ms({T1, T2, T3}) ->
+    (T1 * 1000000 + T2) * 1000 + (T3 div 1000).
+
+
+%%
+%%  Convert current timestamp to milliseconds.
+%%
+timestamp_ms() ->
+    timestamp_ms(os:timestamp()).
 
 
 
@@ -536,16 +594,20 @@ timestamp_add_ms({T1, T2, T3}, AddMS) ->
 -include_lib("eunit/include/eunit.hrl").
 
 rate_above_test_() ->
-    TStamps = [{{0, 1, 400}, 10}, {{0, 1, 300}, 10}, {{0, 1, 200}, 10}],
+    Notifs = [
+        #notif{time = 400, count = 10, delay = 0},
+        #notif{time = 300, count = 10, delay = 0},
+        #notif{time = 200, count = 10, delay = 0},
+        #notif{time =   0, count = 10, delay = 100}
+    ],
     [
-    ?_assertEqual(true,  rate_above(TStamps, {0, 1, 150}, 25, 0)),
-    ?_assertEqual(false, rate_above(TStamps, {0, 1, 150}, 35, 0)),
-    ?_assertEqual(true,  rate_above(TStamps, {0, 1, 250}, 15, 0)),
-    ?_assertEqual(false, rate_above(TStamps, {0, 1, 250}, 25, 0))
+        ?_assertMatch({true,  _}, rate_above(Notifs,  50, 35, 0)),
+        ?_assertMatch({false, _}, rate_above(Notifs,  50, 45, 0)),
+        ?_assertMatch({true,  _}, rate_above(Notifs, 150, 25, 0)),
+        ?_assertMatch({false, _}, rate_above(Notifs, 150, 35, 0)),
+        ?_assertMatch({true,  _}, rate_above(Notifs, 250, 15, 0)),
+        ?_assertMatch({false, _}, rate_above(Notifs, 250, 25, 0))
     ].
-
-timestamp_add_ms_test() ->
-    ?assertEqual({123, 124, 234123}, timestamp_add_ms({123, 123, 123}, 1234)).
 
 -endif.
 

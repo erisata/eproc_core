@@ -35,6 +35,9 @@ main_test_() ->
         test_delay_exp(PID),
         test_delay_mixed(PID),
         test_delay_multi(PID),
+        test_delay_limit_series(PID),
+        test_delay_limit_rate(PID),
+        test_delay_limit_multi(PID),
         test_setup_update(PID),
         test_reset_single(PID),
         test_reset_all(PID),
@@ -288,6 +291,69 @@ test_delay_multi(_PID) ->
     ?_assertMatch(
         [ok, {delay, 100}, {delay, 100}, {delay, 200}],
         [R1, R2, R3, R4]
+    ).
+
+
+%%
+%%  Check if delays issued (calculated in previous notifications) are not
+%%  interleaving with limit conditions in the case of series limit.
+%%
+test_delay_limit_series(_PID) ->
+    Proc = ?MODULE,
+    Name = ?LINE,
+    ok = eproc_limits:setup(Proc, Name, {series, test, 2, {50, ms}, {delay, 100}}),
+    R1 = eproc_limits:notify(Proc, Name, 1), timer:sleep(10),
+    R2 = eproc_limits:notify(Proc, Name, 1), timer:sleep(10),
+    R3 = eproc_limits:notify(Proc, Name, 1), timer:sleep(10 + 100),
+    R4 = eproc_limits:notify(Proc, Name, 1), timer:sleep(10 + 100),
+    R5 = eproc_limits:notify(Proc, Name, 1), timer:sleep(10 + 100),
+    R6 = eproc_limits:notify(Proc, Name, 1),
+    ok = eproc_limits:cleanup(Proc),
+    ?_assertMatch(
+        [ok, ok, {delay, 100}, {delay, 100}, {delay, 100}, {delay, 100}],
+        [R1, R2, R3,           R4,           R5,           R6          ]
+    ).
+
+
+%%
+%%  Check if delays issued (calculated in previous notifications) are not
+%%  interferring with limit conditions in the case of rate limit.
+%%
+test_delay_limit_rate(_PID) ->
+    Proc = ?MODULE,
+    Name = ?LINE,
+    ok = eproc_limits:setup(Proc, Name, {rate, test, 2, {50, ms}, {delay, 100}}),
+    R1 = eproc_limits:notify(Proc, Name, 1), timer:sleep(10),
+    R2 = eproc_limits:notify(Proc, Name, 1), timer:sleep(10),
+    R3 = eproc_limits:notify(Proc, Name, 1), timer:sleep(10 + 100),
+    R4 = eproc_limits:notify(Proc, Name, 1), timer:sleep(10 + 100),
+    R5 = eproc_limits:notify(Proc, Name, 1), timer:sleep(10 + 100),
+    R6 = eproc_limits:notify(Proc, Name, 1),
+    ok = eproc_limits:cleanup(Proc),
+    ?_assertMatch(
+        [ok, ok, {delay, 100}, {delay, 100}, {delay, 100}, {delay, 100}],
+        [R1, R2, R3,           R4,           R5,           R6          ]
+    ).
+
+%%
+%%  Check if delays issued (calculated in previous notifications) are not
+%%  interferring with limit conditions in the case of multiple limits.
+%%
+test_delay_limit_multi(_PID) ->
+    Proc = ?MODULE,
+    Name1 = ?LINE,
+    Name2 = ?LINE,
+    ok = eproc_limits:setup(Proc, Name1, {series, s1, 4, {50, ms}, {delay, 200}}),
+    ok = eproc_limits:setup(Proc, Name2, {series, s2, 2, {50, ms}, {delay, 100}}),
+    R1 = eproc_limits:notify(Proc, [{Name1, 1}, {Name2, 1}]), timer:sleep(10),
+    R2 = eproc_limits:notify(Proc, [{Name1, 1}, {Name2, 1}]), timer:sleep(10),
+    R3 = eproc_limits:notify(Proc, [{Name1, 1}, {Name2, 1}]), timer:sleep(10 + 100),
+    R4 = eproc_limits:notify(Proc, [{Name1, 1}, {Name2, 1}]), timer:sleep(10 + 100),
+    R5 = eproc_limits:notify(Proc, [{Name1, 1}, {Name2, 1}]),
+    ok = eproc_limits:cleanup(Proc),
+    ?_assertMatch(
+        [ok, ok, {delay, 100}, {delay, 100}, {delay, 200}],
+        [R1, R2, R3,           R4,           R5          ]
     ).
 
 
