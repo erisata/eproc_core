@@ -19,5 +19,6 @@
     eproc_fsm_SUITE,
     eproc_reg_gproc_SUITE,
     eproc_store_ets_SUITE,
-    eproc_event_hub_SUITE
+    eproc_event_hub_SUITE,
+    eproc_test_SUITE
 ]}.
