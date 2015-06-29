@@ -20,7 +20,7 @@
 -module(eproc_test_SUITE).
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([
-    test_wait_for_completion/1
+    test_wait_term/1
 ]).
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eproc_core/include/eproc.hrl").
@@ -30,7 +30,7 @@
 %%  CT API.
 %%
 all() -> [
-    test_wait_for_completion
+    test_wait_term
 ].
 
 
@@ -66,7 +66,7 @@ end_per_suite(_Config) ->
 %%
 %%  Test functions of the SEQ FSM, using instance id.
 %%
-test_wait_for_completion(_Config) ->
+test_wait_term(_Config) ->
     SleepFun = fun() -> timer:sleep(50) end,
     %% Test succesful exits
     FsmToCompletionFun = fun(Ref) ->
@@ -94,7 +94,7 @@ test_wait_for_completion(_Config) ->
             Ref
         end, FunsToRun),
         FsmFilters = [{id, lists:map(fun({inst, InstId}) -> InstId end, FsmRefs)}],
-        ok = eproc_test:wait_for_completion(FsmFilters, 1000),
+        ok = eproc_test:wait_term(FsmFilters, 1000),
         lists:foreach(fun(Ref) ->
             false = eproc_fsm:is_online(Ref)
         end, FsmRefs)
@@ -105,16 +105,17 @@ test_wait_for_completion(_Config) ->
     % Test timeout
     {ok, Ref} = eproc_fsm__seq:new(),
     {inst, InstId} = Ref,
-    {error, time_out} = eproc_test:wait_for_completion([{id, InstId}], 1000),
+    {error, timeout} = eproc_test:wait_term([{id, InstId}], 1000),
+    {ok, running, [incrementing]} = eproc_test:get_state({inst, InstId}),
     true = eproc_fsm:is_online(Ref).
 
 
 %     {ok, ToCompleteSingle} = eproc_fsm__seq:new(),
 %     erlang:spawn(fun() -> FsmToCompletionFun(ToCompleteSingle) end),
-%     ok = eproc_test:wait_for_completion([FsmRefToFilterFun(ToCompleteSingle)]),
+%     ok = eproc_test:wait_term([FsmRefToFilterFun(ToCompleteSingle)]),
 %     false = eproc_fsm:is_online(ToCompleteSingle).
 %     {ok, ToKillSingle} = eproc_fsm__seq:new(),
 %     erlang:spawn(fun() -> FsmToKillFun(ToKillSingle) end),
-%     ok = eproc_test:wait_for_completion([FsmRefToFilterFun(ToKillSingle)]),
+%     ok = eproc_test:wait_term([FsmRefToFilterFun(ToKillSingle)]),
 %     false = eproc_fsm:is_online(ToKillSingle).
 

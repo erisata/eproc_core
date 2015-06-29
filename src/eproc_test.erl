@@ -14,27 +14,27 @@
 %| limitations under the License.
 %\--------------------------------------------------------------------
 
-%%
-%%  This module is helpful for testinf FSM implementations.
-%%
+%%%
+%%% This module is helpful for testing FSM implementations.
+%%%
 -module(eproc_test).
--export([get_states/1, wait_for_completion/1, wait_for_completion/2]).
+-export([get_state/1, wait_term/1, wait_term/2]).
 -include("eproc.hrl").
 
 -define(WAIT_FOR_COMPLETION_REPEAT, 10).
 -define(WAIT_FOR_COMPLETION_TIMEOUT, {1,s}).
 -define(WAIT_FOR_COMPLETION_MAX_INSTANCES, 100).
 
-%% =============================================================================
-%%  Public API.
-%% =============================================================================
+%%% ============================================================================
+%%% Public API.
+%%% ============================================================================
 
 %%
 %% Function return instance status and state name.
 %%
--spec get_states(FsmRef :: fsm_ref()) -> {ok, Status :: inst_status(), StateData :: term()}.
+-spec get_state(FsmRef :: fsm_ref()) -> {ok, Status :: inst_status(), StateData :: term()}.
 
-get_states(FsmRef) ->
+get_state(FsmRef) ->
     FilterClause = case FsmRef of
         {inst, InstId} -> {id, InstId};
         {name, Name}   -> {name, Name}
@@ -50,27 +50,27 @@ get_states(FsmRef) ->
 %% No more than ?WAIT_FOR_COMPLETION_MAX_INSTANCES are checked.
 %% Elements of Filters are of the same type, as specified in eproc_store:get_instance/3 FilterClause type.
 %%
--spec wait_for_completion(Filters :: list()) -> ok | {error, time_out}.
+-spec wait_term(Filters :: list()) -> ok | {error, timeout}.
 
-wait_for_completion(Filters) ->
-    wait_for_completion(Filters, ?WAIT_FOR_COMPLETION_TIMEOUT).
+wait_term(Filters) ->
+    wait_term(Filters, ?WAIT_FOR_COMPLETION_TIMEOUT).
 
--spec wait_for_completion(Filters :: list(), Timeout :: duration()) -> ok | {error, time_out}.
+-spec wait_term(Filters :: list(), Timeout :: duration()) -> ok | {error, timeout}.
 
-wait_for_completion(Filters, Timeout) ->
+wait_term(Filters, Timeout) ->
     StopAt = eproc_timer:timestamp_after(Timeout, erlang:now()),
     FilterTuple = {filter, {1,?WAIT_FOR_COMPLETION_MAX_INSTANCES}, Filters},
     {ok, {_, _, Instances}} = eproc_store:get_instance(undefined, FilterTuple, header),
     GetInstIdFun = fun(#instance{inst_id = InstId}) -> {inst, InstId} end,
     InstIds = lists:map(GetInstIdFun, Instances),
-    wait_for_completion2(InstIds, StopAt).
+    wait_term2(InstIds, StopAt).
 
 
-%% =============================================================================
-%%  Internal functions.
-%% =============================================================================
+%%% ============================================================================
+%%% Internal functions.
+%%% ============================================================================
 
-wait_for_completion2(InstIds, StopAt) ->
+wait_term2(InstIds, StopAt) ->
     case os:timestamp() < StopAt of
         true ->
             {ok, Instances} = eproc_store:get_instance(undefined, {list, InstIds}, header),
@@ -84,10 +84,10 @@ wait_for_completion2(InstIds, StopAt) ->
                 [] -> ok;
                 [Id | Ids] ->
                     timer:sleep(?WAIT_FOR_COMPLETION_REPEAT),
-                    wait_for_completion2([Id | Ids], StopAt)
+                    wait_term2([Id | Ids], StopAt)
             end;
         false ->
-            {error, time_out}
+            {error, timeout}
     end.
 
 
