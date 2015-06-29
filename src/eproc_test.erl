@@ -21,9 +21,9 @@
 -export([get_state/1, wait_term/1, wait_term/2]).
 -include("eproc.hrl").
 
--define(WAIT_FOR_COMPLETION_REPEAT, 10).
--define(WAIT_FOR_COMPLETION_TIMEOUT, {1,s}).
--define(WAIT_FOR_COMPLETION_MAX_INSTANCES, 100).
+-define(WAIT_TERM_REPEAT, 10).
+-define(WAIT_TERM_TIMEOUT, {1,s}).
+-define(WAIT_TERM_MAX_INSTANCES, 100).
 
 %%% ============================================================================
 %%% Public API.
@@ -53,13 +53,13 @@ get_state(FsmRef) ->
 -spec wait_term(Filters :: list()) -> ok | {error, timeout}.
 
 wait_term(Filters) ->
-    wait_term(Filters, ?WAIT_FOR_COMPLETION_TIMEOUT).
+    wait_term(Filters, ?WAIT_TERM_TIMEOUT).
 
 -spec wait_term(Filters :: list(), Timeout :: duration()) -> ok | {error, timeout}.
 
 wait_term(Filters, Timeout) ->
-    StopAt = eproc_timer:timestamp_after(Timeout, erlang:now()),
-    FilterTuple = {filter, {1,?WAIT_FOR_COMPLETION_MAX_INSTANCES}, Filters},
+    StopAt = eproc_timer:timestamp_after(Timeout, os:timestamp()),
+    FilterTuple = {filter, {1,?WAIT_TERM_MAX_INSTANCES}, Filters},
     {ok, {_, _, Instances}} = eproc_store:get_instance(undefined, FilterTuple, header),
     GetInstIdFun = fun(#instance{inst_id = InstId}) -> {inst, InstId} end,
     InstIds = lists:map(GetInstIdFun, Instances),
@@ -83,7 +83,7 @@ wait_term2(InstIds, StopAt) ->
             case lists:filtermap(RemoveTerminatedFun, Instances) of
                 [] -> ok;
                 [Id | Ids] ->
-                    timer:sleep(?WAIT_FOR_COMPLETION_REPEAT),
+                    timer:sleep(?WAIT_TERM_REPEAT),
                     wait_term2([Id | Ids], StopAt)
             end;
         false ->

@@ -94,7 +94,7 @@ test_wait_term(_Config) ->
             Ref
         end, FunsToRun),
         FsmFilters = [{id, lists:map(fun({inst, InstId}) -> InstId end, FsmRefs)}],
-        ok = eproc_test:wait_term(FsmFilters, 1000),
+        ok = eproc_test:wait_term(FsmFilters, {1,s}),
         lists:foreach(fun(Ref) ->
             false = eproc_fsm:is_online(Ref)
         end, FsmRefs)
@@ -105,17 +105,8 @@ test_wait_term(_Config) ->
     % Test timeout
     {ok, Ref} = eproc_fsm__seq:new(),
     {inst, InstId} = Ref,
-    {error, timeout} = eproc_test:wait_term([{id, InstId}], 1000),
+    {error, timeout} = eproc_test:wait_term([{id, InstId}], {1,s}),
     {ok, running, [incrementing]} = eproc_test:get_state({inst, InstId}),
     true = eproc_fsm:is_online(Ref).
 
-
-%     {ok, ToCompleteSingle} = eproc_fsm__seq:new(),
-%     erlang:spawn(fun() -> FsmToCompletionFun(ToCompleteSingle) end),
-%     ok = eproc_test:wait_term([FsmRefToFilterFun(ToCompleteSingle)]),
-%     false = eproc_fsm:is_online(ToCompleteSingle).
-%     {ok, ToKillSingle} = eproc_fsm__seq:new(),
-%     erlang:spawn(fun() -> FsmToKillFun(ToKillSingle) end),
-%     ok = eproc_test:wait_term([FsmRefToFilterFun(ToKillSingle)]),
-%     false = eproc_fsm:is_online(ToKillSingle).
 
