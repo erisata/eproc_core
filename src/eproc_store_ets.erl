@@ -360,11 +360,11 @@ get_instance(StoreArgs, {filter, {ResFrom, ResCount}, Filters}, Query) ->
 
 get_instance(_StoreArgs, {filter, {ResFrom, ResCount, SortedBy}, Filters}, Query) ->
     {ok, MatchSpec} = eproc_store:instance_filter_to_ms(Filters, [tag]),
-    {ok, Grouped, _Other} = eproc_store:group_filter_by_type(Filters, [id, name, tag]),
-    [IdClauses, NameClauses, TagClauses] = Grouped,
+    {ok, Grouped, _Other} = eproc_store:group_filter_by_type(Filters, [id, tag]),
+    [IdClauses, TagClauses] = Grouped,
     FilterFuns = [
         fun (Insts) -> resolve_instance_id_filter  (Insts, IdClauses           ) end,
-        fun (Insts) -> resolve_instance_name_filter(Insts, NameClauses         ) end,
+        % Names cannot be resolved as prefilters, because terminated instances are not present in ?INST_TBL
         fun (Insts) -> resolve_instance_tag_filters(Insts, TagClauses          ) end,
         fun (Insts) -> resolve_match_filter        (Insts, ?INST_TBL, MatchSpec) end
     ],
@@ -889,22 +889,6 @@ resolve_instance_id_filter(undefined, FilterClauses) ->
     read_instance_list_opt(inst, InstIds);
 
 resolve_instance_id_filter(Instances, _FilterClauses) ->
-    Instances.  % Leave filtering for match_spec.
-
-
-%%
-%%  Resolves name filter. At most one such filter is expected, but several
-%%  clauses are also supported. This function takes undefined or an instance list,
-%%  returns undefined or an instance list.
-%%
-resolve_instance_name_filter(Instances, []) ->
-    Instances;
-
-resolve_instance_name_filter(undefined, FilterClauses) ->
-    Names = eproc_store:intersect_filter_values(FilterClauses),
-    read_instance_list_opt(name, Names);
-
-resolve_instance_name_filter(Instances, _FilterClauses) ->
     Instances.  % Leave filtering for match_spec.
 
 

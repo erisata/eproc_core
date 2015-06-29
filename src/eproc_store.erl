@@ -84,6 +84,7 @@
 -define(INST_MSVAR_CREATED, '$5').
 -define(INST_MSVAR_CURR_STATE, '$6').
 -define(INST_MSVAR_TERMINATED, '$7').
+-define(INST_MSVAR_GROUP, '$8').
 
 -define(MSG_MSVAR_ID, '$1').
 -define(MSG_MSVAR_SENDER, '$2').
@@ -290,12 +291,14 @@
             {last_trn_age,  Age :: duration()} | % Last activity no later than in last Age.
             {created,       From :: timestamp() | undefined, Till :: timestamp() | undefined} |
             {tag,           TagFilter | [TagFilter]} |
+            {group,         IGrFilter | [IGrFilter]} |
             {module,        ModFilter | [ModFilter]} |
             {status,        StsFilter | [StsFilter]} |
             {age,           Age :: duration()},  % Older than Age. Instance age = terminated - created, if terminated is undefined, age = now() - created.
         IIdFilter :: InstId :: inst_id(),
         INmFilter :: Name :: inst_name(),
         TagFilter :: TagName :: binary() | {TagName :: binary(), TagType :: binary() | undefined},
+        IGrFilter :: Group :: inst_group(),
         ModFilter :: Module :: module(),
         StsFilter :: Status :: inst_status(),
         Paging    :: {ResFrom, ResCount} | {ResFrom, ResCount, SortedBy}, % SortedBy=last_trn by default
@@ -865,6 +868,7 @@ instance_filter_to_ms(InstanceFilters, SkipFilters) ->
     end,
     MatchHead = #instance{
         inst_id = ?INST_MSVAR_ID,
+        group = ?INST_MSVAR_GROUP,
         name = ?INST_MSVAR_NAME,
         module = ?INST_MSVAR_MODULE,
         status = ?INST_MSVAR_STATUS,
@@ -939,6 +943,12 @@ instance_filter_to_guard({created, From, Till}) ->
 
 instance_filter_to_guard({tag, Tags}) ->
     erlang:error(tags_guard_not_supported_in_matchspec, Tags);
+
+instance_filter_to_guard({group, GroupOrList}) ->
+    MakeGuardFun = fun (Group) ->
+        {'==', ?INST_MSVAR_GROUP, {const, Group}}
+    end,
+    make_orelse_guard(make_list(GroupOrList), MakeGuardFun);
 
 instance_filter_to_guard({module, ModuleOrList}) ->
     MakeGuardFun = fun (Module) ->

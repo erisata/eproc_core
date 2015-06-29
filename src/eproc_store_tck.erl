@@ -286,13 +286,20 @@ eproc_store_core_test_get_instance_filter(Config) ->
     OldDate4 = eproc_timer:timestamp_before({12,hour}, Now),
     TagName1 = <<"123">>, TagType1 = <<"cust_nr">>,
     TagName2 = <<"rejected">>, TagType2 = <<"resolution">>,
+    Group1 = {1, main}, % TODO: group id doesn't match instance id.
+    Group2 = {5, main},
     % Create and add testing instances
     Inst = inst_value(),
-    {ok, IID1} = eproc_store:add_instance(Store, Inst#instance{name = testing_name, created = OldDate1}),
-    {ok, IID2} = eproc_store:add_instance(Store, Inst#instance{created = OldDate3}),
-    {ok, IID3} = eproc_store:add_instance(Store, Inst#instance{module = another_fsm, created = OldDate1, terminated = OldDate3, status = killed}),
-    {ok, IID4} = eproc_store:add_instance(Store, Inst#instance{module = some_other_fsm}),
-    {ok, IID5} = eproc_store:add_instance(Store, Inst#instance{created = os:timestamp(), name = other_name, status = resuming}),
+    {ok, IID1} = eproc_store:add_instance(Store,
+        Inst#instance{name = testing_name, created = OldDate1, group = Group1}),
+    {ok, IID2} = eproc_store:add_instance(Store,
+        Inst#instance{created = OldDate3, group = Group1}),
+    {ok, IID3} = eproc_store:add_instance(Store,
+        Inst#instance{module = another_fsm, created = OldDate1, terminated = OldDate3, status = killed}),
+    {ok, IID4} = eproc_store:add_instance(Store,
+        Inst#instance{module = some_other_fsm}),
+    {ok, IID5} = eproc_store:add_instance(Store,
+        Inst#instance{created = os:timestamp(), name = other_name, status = resuming, group = Group2}),
     InstRefs = [ {inst, IID} || IID <- [IID1, IID2, IID3, IID4, IID5] ],
     % Add transitions for testing
     AddTrnFun(IID1, 1, OldDate1, []),
@@ -353,6 +360,10 @@ eproc_store_core_test_get_instance_filter(Config) ->
     {ok, {_, _, Res31}} = eproc_store:get_instance(Store, {filter, {From, Count}, [{last_trn_age, {12,hour}}, {last_trn_age, [{2,day},{1,hour}]}]}, header),
     {ok, {_, _, Res32}} = eproc_store:get_instance(Store, {filter, {From, Count}, [{last_trn_age, [{2,day},{1,hour}]}]}, header),
     {ok, {_, _, Res33}} = eproc_store:get_instance(Store, {filter, {From, Count}, [{age, [{1,day},{1,hour}]}]}, header),
+    {ok, {_, _, Res34}} = eproc_store:get_instance(Store, {filter, {From, Count}, [{group, Group1}]}, header),
+    {ok, {_, _, Res34}} = eproc_store:get_instance(Store, {filter, {From, Count}, [{group, [Group1]}]}, header),
+    {ok, {_, _, Res35}} = eproc_store:get_instance(Store, {filter, {From, Count}, [{group, [Group1, Group2]}]}, header),
+    {ok, {_, _, Res36}} = eproc_store:get_instance(Store, {filter, {From, Count}, [{group, [Group1, wrong_group, Group2]}]}, header),
     %Evaluating results
     Req = fun(List) ->
         [Elem || Elem <- List, Elem == Inst1 orelse Elem == Inst2 orelse Elem == Inst3 orelse Elem == Inst4 orelse Elem == Inst5]
@@ -449,12 +460,24 @@ eproc_store_core_test_get_instance_filter(Config) ->
     ?assertThat(Res33, contains_member(Inst1)),
     ?assertThat(Res33, contains_member(Inst3)),
     ?assertThat(Req(Res33), has_length(2)),
+    ?assertThat(Res34, contains_member(Inst1)),
+    ?assertThat(Res34, contains_member(Inst2)),
+    ?assertThat(Req(Res34), has_length(2)),
+    ?assertThat(Res35, contains_member(Inst1)),
+    ?assertThat(Res35, contains_member(Inst2)),
+    ?assertThat(Res35, contains_member(Inst5)),
+    ?assertThat(Req(Res35), has_length(3)),
+    ?assertThat(Res36, contains_member(Inst1)),
+    ?assertThat(Res36, contains_member(Inst2)),
+    ?assertThat(Res36, contains_member(Inst5)),
+    ?assertThat(Req(Res36), has_length(3)),
     % Performing sucessful compound tests
     {ok, {_, _, Res50}} = eproc_store:get_instance(Store, {filter, {From, Count}, [{id, IID1},{name, testing_name}]}, header),
     {ok, {_, _, Res51}} = eproc_store:get_instance(Store, {filter, {From, Count}, [{age, {12,hour}},{id, IID1}]}, header),
     {ok, {_, _, Res52}} = eproc_store:get_instance(Store, {filter, {From, Count}, [{created, OldDate2, undefined},{tag, [{<<"123">>, <<"cust_nr">>}]}]}, header),
     {ok, {_, _, Res53}} = eproc_store:get_instance(Store, {filter, {From, Count}, [{age, {12,hour}},{created, OldDate2, undefined}]}, header),
     {ok, {_, _, Res54}} = eproc_store:get_instance(Store, {filter, {From, Count}, [{last_trn_age, {12,hour}}, {age, {12,hour}}, {age, [{1,day},{1,hour}]}, {last_trn_age, [{2,day},{1,hour}]}]}, header),
+    {ok, {_, _, Res55}} = eproc_store:get_instance(Store, {filter, {From, Count}, [{created, undefined, OldDate2}, {group, Group1}]}, header),
     % Evaluating results
     ?assertThat(Req(Res50), is([Inst1])),
     ?assertThat(Req(Res51), is([Inst1])),
@@ -463,6 +486,7 @@ eproc_store_core_test_get_instance_filter(Config) ->
     ?assertThat(Req(Res52), has_length(2)),
     ?assertThat(Req(Res53), is([Inst2])),
     ?assertThat(Req(Res54), is([Inst1])),
+    ?assertThat(Req(Res55), is([Inst1])),
     % Performing empty list tests
     {ok, {0, _, []}} = eproc_store:get_instance(Store, {filter, {From, Count}, [{id, non_existent_id}]}, header),
     {ok, {0, _, []}} = eproc_store:get_instance(Store, {filter, {From, Count}, [{name, non_existent_name}]}, header),
@@ -475,6 +499,7 @@ eproc_store_core_test_get_instance_filter(Config) ->
     {ok, {0, _, []}} = eproc_store:get_instance(Store, {filter, {From, Count}, [{module, []}]}, header),
     {ok, {0, _, []}} = eproc_store:get_instance(Store, {filter, {From, Count}, [{status, []}]}, header),
     {ok, {0, _, []}} = eproc_store:get_instance(Store, {filter, {From, Count}, [{age, {12,hour}},{created, OldDate2, undefined},{last_trn_age, {12,hour}}]}, header),
+    {ok, {0, _, []}} = eproc_store:get_instance(Store, {filter, {From, Count}, [{group, Group1},{group, Group2}]}, header),
     % Performing sort tests
     {ok, {_, _, Res90}} = eproc_store:get_instance(Store, {filter, {From, Count, id}, []}, header),
     {ok, {_, _, Res91}} = eproc_store:get_instance(Store, {filter, {From, Count, name}, []}, header),
