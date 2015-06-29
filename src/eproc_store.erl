@@ -915,7 +915,7 @@ instance_filter_to_guard({last_trn, From, Till}) ->
     ];
 
 instance_filter_to_guard({last_trn_age, Age}) ->
-    From = eproc_timer:timestamp_before(Age, os:timestamp()),
+    From = eproc_timer:timestamp_before(Age, os:timestamp()), %% TODO: Use the same time instant for all the criterias.
     instance_filter_to_guard({last_trn, From, undefined});
 
 instance_filter_to_guard({created, undefined, undefined}) ->
