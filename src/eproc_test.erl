@@ -32,7 +32,7 @@
 %%
 %% Function return instance status and state name.
 %%
--spec get_state(FsmRef :: fsm_ref()) -> {ok, Status :: inst_status(), StateData :: term()}.
+-spec get_state(FsmRef :: fsm_ref()) -> {ok, Status :: inst_status(), StateName :: term(), StateData :: term()}.
 
 get_state(FsmRef) ->
     FilterClause = case FsmRef of
@@ -40,8 +40,8 @@ get_state(FsmRef) ->
         {name, Name}   -> {name, Name}
     end,
     {ok, {1, _, [Instance]}} = eproc_store:get_instance(undefined, {filter, {1, 2}, [FilterClause]}, current),
-    #instance{status = Status, curr_state = #inst_state{sname = StateName}} = Instance,
-    {ok, Status, StateName}.
+    #instance{status = Status, curr_state = #inst_state{sname = StateName, sdata = StateData}} = Instance,
+    {ok, Status, StateName, StateData}.
 
 
 %%
