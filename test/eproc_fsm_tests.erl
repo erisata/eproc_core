@@ -719,6 +719,52 @@ send_event_same_state_from_ordinary_test() ->
 
 
 %%
+%%  Check if `send_event/*` works with `next_state` returned from the entry callback.
+%%
+send_event_entry_next_state_test() ->
+    ok = meck:new(eproc_store, []),
+    ok = meck:new(eproc_fsm__void, [passthrough]),
+    ok = meck:expect(eproc_store, load_instance, fun
+        (store, {inst, 100}) ->
+            {ok, #instance{
+                inst_id = 100, group = 200, name = name, module = eproc_fsm__void,
+                args = {}, opts = [], status = running, created = erlang:now(),
+                curr_state = #inst_state{
+                    stt_id = 1,
+                    sname = [],
+                    sdata = {state, some},
+                    attr_last_nr = 0,
+                    attrs_active = []
+                }
+            }}
+    end),
+    ok = meck:expect(eproc_store, add_transition, fun
+        (store, InstId, Transition = #transition{trn_id = TrnNr = 2}, [#message{}]) ->
+            #transition{
+                sname = [closed],
+                trigger_type = event,
+                trigger_msg  = #msg_ref{cid = {InstId, TrnNr, 0, recv}},
+                trigger_resp = undefined,
+                inst_status  = completed
+            } = Transition,
+            {ok, InstId, TrnNr}
+    end),
+    {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
+    ?assert(eproc_fsm:is_online(PID)),
+    Mon = erlang:monitor(process, PID),
+    ?assertEqual(ok, eproc_fsm__void:close(PID)),
+    ?assert(receive {'DOWN', Mon, process, PID, Reason} when Reason == normal -> true after 1000 -> false end),
+    ?assertEqual(false, eproc_fsm:is_online(PID)),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, [[], {event, close}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, [[closing], {entry, []}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, [[closing, cleanup], {entry, []}, '_'])),
+    ?assertEqual(3, meck:num_calls(eproc_fsm__void, handle_state, '_')),
+    ?assertEqual(1, meck:num_calls(eproc_store, add_transition, '_')),
+    ?assert(meck:validate([eproc_store, eproc_fsm__void])),
+    ok = meck:unload([eproc_store, eproc_fsm__void]).
+
+
+%%
 %%  Check if `send_event/*` craches if reply_* is returned from the state transition.
 %%
 send_event_reply_test() ->

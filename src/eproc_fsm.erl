@@ -483,8 +483,24 @@
 %%  should be used to send a reply and do the transition. Meaning of these response terms are
 %%  the same as for the `same_state`, `next_state` and `final_state` correspondingly.
 %%
-%%  If the callback was invoked to handle state exit or entry, the response term should be
+%%  If the callback was invoked to handle state exit, the response term should be
 %%  `{ok, NewStateData}`.
+%%
+%%  If the callback was invoked to handle state entry, the response term can be one of the following:
+%%
+%%  `{ok | same_state, NewStateData}`
+%%  :   indicates, that the entry to the state if done.
+%%  `{next_state, NextStateName, NewStateData}`
+%%  :   says, that other state should be entered instead of this one.
+%%      This is usefull for entering substates in a composite state.
+%%      I.e, the source state can issue transition to the composite state withouth
+%%      knowing its substates. The target state then enters its own initial state
+%%      as needed. 'eproc_fsm' will only call entry callback for the new state,
+%%      the exit and event callbacks will not be called for the current state.
+%%  `{final_state, FinalStateName, NewStateData}`
+%%  :   indicates, that the FSM is terminating. As in the case of the `next_state`,
+%%      this case is also usefull when implementing composite states. No other callbacks
+%%      will be called after this response.
 %%
 %%  The state exit action is not invoked for the initial transition. The initial transition
 %%  can be recognized by the state entry action, it will be invoked with `[]` as a PrevStateName
@@ -875,7 +891,8 @@ is_state_valid(_State) ->
 is_next_state_valid([_|_] = State) ->
     is_state_valid(State);
 
-is_next_state_valid(_State) ->
+is_next_state_valid(State) ->
+    lager:debug("Next state ~p is not valid.", [State]),
     false.
 
 
@@ -2447,18 +2464,22 @@ perform_event_transition(Trigger, TrnNr, InitAttrActions, State) ->
             noreply
     end,
 
-    {ProcAction, SDataAfterTrn} = case TrnMode of
+    {ProcAction, SNameAfterTrn, SDataAfterTrn} = case TrnMode of
         same ->
-            {cont, NewSData};
+            {cont, NewSName, NewSData};
         next ->
             {ok, SDataAfterExit} = perform_exit(SName, NewSName, NewSData, State),
-            {ok, SDataAfterEntry} = perform_entry(SName, NewSName, SDataAfterExit, State),
-            {cont, SDataAfterEntry};
+            case perform_entry(SName, NewSName, SDataAfterExit, State) of
+                {ok, SNameAfterEntry, SDataAfterEntry} ->
+                    {cont, SNameAfterEntry, SDataAfterEntry};
+                {stop, SNameAfterEntry, SDataAfterEntry} ->
+                    {stop, SNameAfterEntry, SDataAfterEntry}
+            end;
         final ->
             {ok, SDataAfterExit} = perform_exit(SName, NewSName, NewSData, State),
-            {stop, SDataAfterExit}
+            {stop, NewSName, SDataAfterExit}
     end,
-    {ok, ProcAction, NewSName, SDataAfterTrn, Reply, InitAttrActions}.
+    {ok, ProcAction, SNameAfterTrn, SDataAfterTrn, Reply, InitAttrActions}.
 
 
 %%
@@ -2477,10 +2498,18 @@ perform_exit(PrevSName, NextSName, SData, #state{module = Module}) ->
 %%
 %%  Invoke the state entry action.
 %%
-perform_entry(PrevSName, NextSName, SData, #state{module = Module}) ->
+perform_entry(PrevSName, NextSName, SData, State = #state{module = Module}) ->
     case Module:handle_state(NextSName, {entry, PrevSName}, SData) of
         {ok, NewSData} ->
-            {ok, NewSData}
+            {ok, NextSName, NewSData};
+        {same_state, NewSData} ->
+            {ok, NextSName, NewSData};
+        {next_state, NewSName, NewSData} ->
+            true = is_next_state_valid(NewSName),
+            perform_entry(PrevSName, NewSName, NewSData, State);
+        {final_state, NewSName, NewSData} ->
+            true = is_next_state_valid(NewSName),
+            {stop, NewSName, NewSData}
     end.
 
 

@@ -34,7 +34,7 @@ check: test itest
 
 test: compile
 	mkdir -p logs
-	env ERL_AFLAGS='-config test/sys' $(REBAR) eunit skip_deps=true verbose=1
+	env ERL_LIBS=deps ERL_AFLAGS='-config test/sys -s lager' $(REBAR) eunit skip_deps=true verbose=1
 
 itest: compile
 	$(REBAR) ct skip_deps=true || grep Testing logs/raw.log
