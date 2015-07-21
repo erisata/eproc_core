@@ -145,7 +145,6 @@
 %%%         * Subprocesses can be one of a ways to link processes.
 %%%   * Implement sub-fsm modules, that work in the same process.
 %%%   * Implement wakeup event, that would be sent when the FSM becomes online. Maybe init/* can be used instead?
-%%%   * Next state with patterns including '_', to handle entry actions in orthogonal states.
 %%%   * Do we need the initial event at all? Maybe the creation args are enough?
 %%%
 -module(eproc_fsm).
@@ -177,10 +176,12 @@
 %%  APIs for related `eproc` modules.
 %%
 -export([
+    is_fsm_ref/1,
     is_state_in_scope/2,
     is_state_valid/1,
     is_next_state_valid/1,
-    is_fsm_ref/1,
+    is_next_state_valid/2,
+    derive_next_state/2,
     register_sent_msg/6,
     register_resp_msg/7,
     registered_send/5,
@@ -248,6 +249,15 @@
 %%  regions, where first region have substates `done`, `failed` and `killed`,
 %%  and the second region - `available` and `archived`.
 %%  The state "`done` and `archived`" can be expresses as `[{completed, [done], [archived]}]`.
+%%
+%%  The FSM callback can return ortogonal state with some of its regions
+%%  marked as unchanged ('_' instead of region state). The corresponding
+%%  exit and entry events will be called with the same wildcarded state
+%%  name, although the final state will be derived by replacing wildcards
+%%  with the previous states of the corresponding regions. This allows
+%%  handle_state callback implementation to determine, which state is entered
+%%  or exited. Wildcarded transition is only allowed within the same orthogonal
+%%  state, i.e. only regions can differ from the previous state.
 %%
 -type state_name() :: list().
 
@@ -828,6 +838,16 @@ name() ->
 
 
 %%
+%%  Checks, if a term is an FSM reference.
+%%
+-spec is_fsm_ref(fsm_ref() | term()) -> boolean().
+
+is_fsm_ref({inst, _}) -> true;
+is_fsm_ref({name, _}) -> true;
+is_fsm_ref(_) -> false.
+
+
+%%
 %%  Checks, if a state is in specified scope.
 %%
 -spec is_state_in_scope(state_name(), state_scope()) -> boolean().
@@ -888,26 +908,115 @@ is_state_valid(_State) ->
 
 
 %%
-%%  Checks if the state name is valid for transition target.
+%%  Checks if the state name is valid for a transition target.
 %%
--spec is_next_state_valid(state_name()) -> boolean().
+%%  Comparing to the `is_state_valid/1`, the next state cannot be empty,
+%%  and it can contain '_' in regions of an orthogonal state. The last
+%%  situation is only allowed, if the FSM already was in the orthogonal
+%%  state, that now has the underscores.
+%%
+-spec is_next_state_valid(StateName :: state_name(), PrevStateName :: state_name()) -> boolean().
 
-is_next_state_valid([_|_] = State) ->
-    is_state_valid(State);
-
-is_next_state_valid(State) ->
-    lager:debug("Next state ~p is not valid.", [State]),
-    false.
+is_next_state_valid(StateName, PrevStateName) ->
+    case derive_next_state(StateName, PrevStateName) of
+        {ok, _} -> true;
+        {error, _} -> false
+    end.
 
 
 %%
-%%  Checks, if a term is an FSM reference.
+%%  Equivalent to `is_next_state_valid(StateName, undefined | [])`.
+%%  This function can be used instead of the mentioned, if orthogonal
+%%  states are not used or used without wildcarding regions with '_'.
 %%
--spec is_fsm_ref(fsm_ref() | term()) -> boolean().
+-spec is_next_state_valid(NextStateName :: state_name()) -> boolean().
 
-is_fsm_ref({inst, _}) -> true;
-is_fsm_ref({name, _}) -> true;
-is_fsm_ref(_) -> false.
+is_next_state_valid(NextStateName) ->
+    is_next_state_valid(NextStateName, undefined).
+
+
+%%
+%%  Orthogonal states returned from the FSM callbacks can have unchanged
+%%  regions marked with '_'. This function takes new state and the previous
+%%  one and created the final state, as it should be after the transition.
+%%
+-spec derive_next_state(StateName :: state_name(), PrevStateName :: state_name())
+    -> {ok, DerivedStateName :: state_name()} | {error, term()}.
+
+derive_next_state([], _) ->
+    {error, empty};
+
+derive_next_state(StateName, PrevStateName) ->
+    derive_next_sub_state(StateName, PrevStateName).
+
+
+%%
+%%  Internal function for `derive_next_state/2`.
+%%
+derive_next_sub_state([], _) ->
+    {ok, []};
+
+% If the state is simple, it should be atom, binary or integer.
+derive_next_sub_state([Simple | SubStates], PrevStateName) when is_atom(Simple); is_binary(Simple); is_integer(Simple) ->
+    PrevSubStates = case PrevStateName of
+        [Simple | PSS] -> PSS;
+        _              -> undefined
+    end,
+    case derive_next_sub_state(SubStates, PrevSubStates) of
+        {ok, NewSubStates} -> {ok, [Simple | NewSubStates]};
+        {error, Reason}    -> {error, Reason}
+    end;
+
+% If the state is orthogonal...
+derive_next_sub_state([OrthState], PrevStateName) when is_tuple(OrthState) ->
+    [StateName | StateRegions] = tuple_to_list(OrthState),
+    case is_atom(StateName) of
+        true ->
+            RegionsResult = case PrevStateName of
+                [PrevOrthState] when is_tuple(PrevOrthState),
+                        element(1, PrevOrthState) =:= StateName,
+                        tuple_size(PrevOrthState) =:= tuple_size(OrthState)
+                        ->
+                    % The FSM stays in the same FSM, so '_' can be used.
+                    [StateName | PrevStateRegions] = tuple_to_list(PrevOrthState),
+                    RegionsDeriveFun = fun
+                        (_, {error, Reason}) ->
+                            {error, Reason};
+                        ({'_', PrevRegion}, {ok, Regions}) ->
+                            case derive_next_state(PrevRegion, undefined) of
+                                {error, Reason} -> {error, Reason};
+                                {ok, NewRegion} -> {ok, [NewRegion | Regions]}
+                            end;
+                        ({Region, PrevRegion}, {ok, Regions}) ->
+                            case derive_next_state(Region, PrevRegion) of
+                                {error, Reason} -> {error, Reason};
+                                {ok, NewRegion} -> {ok, [NewRegion | Regions]}
+                            end
+                    end,
+                    lists:foldr(RegionsDeriveFun, {ok, []}, lists:zip(StateRegions, PrevStateRegions));
+                _ ->
+                    % The FSM came into the orthogonal state, all regions must be defined.
+                    RegionsDeriveFun = fun
+                        (_, {error, Reason}) ->
+                            {error, Reason};
+                        (Region, {ok, Regions}) ->
+                            case derive_next_state(Region, undefined) of
+                                {error, Reason} -> {error, Reason};
+                                {ok, NewRegion} -> {ok, [NewRegion | Regions]}
+                            end
+                    end,
+                    lists:foldr(RegionsDeriveFun, {ok, []}, StateRegions)
+            end,
+            case RegionsResult of
+                {ok, NewRegions} -> {ok, [erlang:list_to_tuple([StateName | NewRegions])]};
+                {error, RegionsReason} -> {error, RegionsReason}
+            end;
+        false ->
+            {error, {bad_orthogonal, StateName}}
+    end;
+
+derive_next_sub_state(State, _) ->
+    {error, {bad_state, State}}.
 
 
 %%
@@ -2455,7 +2564,7 @@ perform_event_transition(Trigger, TrnNr, InitAttrActions, State) ->
         {reply_next,  R, NSN, NSD} -> {next,  {reply, R}, NSN,   NSD};
         {reply_final, R, NSN, NSD} -> {final, {reply, R}, NSN,   NSD}
     end,
-    true = is_next_state_valid(NewSName),
+    {ok, DerivedSName} = derive_next_state(NewSName, SName),
 
     ExplicitReply = erlang:erase('eproc_fsm$reply'),
     Reply = case {TriggerSync, TransitionReply, ExplicitReply} of
@@ -2470,18 +2579,18 @@ perform_event_transition(Trigger, TrnNr, InitAttrActions, State) ->
 
     {ProcAction, SNameAfterTrn, SDataAfterTrn} = case TrnMode of
         same ->
-            {cont, NewSName, NewSData};
+            {cont, DerivedSName, NewSData};
         next ->
             {ok, SDataAfterExit} = perform_exit(SName, NewSName, NewSData, State),
-            case perform_entry(SName, NewSName, SDataAfterExit, State) of
-                {ok, SNameAfterEntry, SDataAfterEntry} ->
-                    {cont, SNameAfterEntry, SDataAfterEntry};
-                {stop, SNameAfterEntry, SDataAfterEntry} ->
-                    {stop, SNameAfterEntry, SDataAfterEntry}
+            case perform_entry(SName, NewSName, DerivedSName, SDataAfterExit, State) of
+                {ok, DerivedSNameAfterEntry, SDataAfterEntry} ->
+                    {cont, DerivedSNameAfterEntry, SDataAfterEntry};
+                {stop, DerivedSNameAfterEntry, SDataAfterEntry} ->
+                    {stop, DerivedSNameAfterEntry, SDataAfterEntry}
             end;
         final ->
             {ok, SDataAfterExit} = perform_exit(SName, NewSName, NewSData, State),
-            {stop, NewSName, SDataAfterExit}
+            {stop, DerivedSName, SDataAfterExit}
     end,
     {ok, ProcAction, SNameAfterTrn, SDataAfterTrn, Reply, InitAttrActions}.
 
@@ -2502,18 +2611,18 @@ perform_exit(PrevSName, NextSName, SData, #state{module = Module}) ->
 %%
 %%  Invoke the state entry action.
 %%
-perform_entry(PrevSName, NextSName, SData, State = #state{module = Module}) ->
+perform_entry(PrevSName, NextSName, DerivedSName, SData, State = #state{module = Module}) ->
     case Module:handle_state(NextSName, {entry, PrevSName}, SData) of
         {ok, NewSData} ->
-            {ok, NextSName, NewSData};
+            {ok, DerivedSName, NewSData};
         {same_state, NewSData} ->
-            {ok, NextSName, NewSData};
+            {ok, DerivedSName, NewSData};
         {next_state, NewSName, NewSData} ->
-            true = is_next_state_valid(NewSName),
-            perform_entry(PrevSName, NewSName, NewSData, State);
+            {ok, NewDerivedSName} = derive_next_state(NewSName, PrevSName),
+            perform_entry(PrevSName, NewSName, NewDerivedSName, NewSData, State);
         {final_state, NewSName, NewSData} ->
-            true = is_next_state_valid(NewSName),
-            {stop, NewSName, NewSData}
+            {ok, NewDerivedSName} = derive_next_state(NewSName, PrevSName),
+            {stop, NewDerivedSName, NewSData}
     end.
 
 

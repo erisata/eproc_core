@@ -74,10 +74,31 @@ is_state_valid_test_() ->
     ].
 
 is_next_state_valid_test_() ->
+    OrthP = {a, '_', '_', [w]},
+    Orth1 = {a, [x], [y], [z]},
+    Orth2 = {b, [i], [j], [k]},
     [
-        ?_assert(true =:=  eproc_fsm:is_next_state_valid([a, b, c])),
-        ?_assert(false =:= eproc_fsm:is_next_state_valid([])),
-        ?_assert(false =:= eproc_fsm:is_next_state_valid(123))
+        ?_assertMatch(true,  eproc_fsm:is_next_state_valid([a, b, c])),
+        ?_assertMatch(false, eproc_fsm:is_next_state_valid([])),
+        ?_assertMatch(false, eproc_fsm:is_next_state_valid(123)),
+        ?_assertMatch(true,  eproc_fsm:is_next_state_valid([Orth1])),
+        ?_assertMatch(false, eproc_fsm:is_next_state_valid([OrthP])),
+        ?_assertMatch(true,  eproc_fsm:is_next_state_valid([OrthP], [Orth1])),
+        ?_assertMatch(false, eproc_fsm:is_next_state_valid([OrthP], [Orth2])),
+        ?_assertMatch(false, eproc_fsm:is_next_state_valid([OrthP], [a, b, c]))
+    ].
+
+
+derive_next_state_test_() ->
+    OrthP = {a, '_', '_', [w]},
+    Orth1 = {a, [x], [y], [z]},
+    Orth2 = {b, [i], [j], [k]},
+    [
+        ?_assertMatch({ok, [a, b, c]},              eproc_fsm:derive_next_state([a, b, c], [])),
+        ?_assertMatch({ok, [Orth1]},                eproc_fsm:derive_next_state([Orth1],   [])),
+        ?_assertMatch({ok, [Orth1]},                eproc_fsm:derive_next_state([Orth1],   [Orth2])),
+        ?_assertMatch({ok, [{a, [x], [y], [w]}]},   eproc_fsm:derive_next_state([OrthP],   [Orth1])),
+        ?_assertMatch({error, {bad_state, '_'}},    eproc_fsm:derive_next_state([OrthP],   [Orth2]))
     ].
 
 

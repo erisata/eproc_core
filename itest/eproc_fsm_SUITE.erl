@@ -29,7 +29,8 @@
     test_timers/1,
     test_router_integration/1,
     test_metadata_integration/1,
-    test_event_type/1
+    test_event_type/1,
+    test_orthogonal_states/1
 ]).
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eproc_core/include/eproc.hrl").
@@ -48,7 +49,8 @@ all() -> [
     test_timers,
     test_router_integration,
     test_metadata_integration,
-    test_event_type
+    test_event_type,
+    test_orthogonal_states
     ].
 
 
@@ -260,6 +262,24 @@ test_event_type(Config) ->
     false     = eproc_fsm__seq:exists(Seq),
     {ok, #transition{trigger_msg = #msg_ref{type = <<"next">>}}} = eproc_store:get_transition(Store, Seq, 2, all),
     {ok, #transition{trigger_msg = #msg_ref{type = <<"what">>}}} = eproc_store:get_transition(Store, Seq, 3, all),
+    ok.
+
+
+%%
+%%  Test orthogonal states.
+%%
+test_orthogonal_states(_Config) ->
+    {ok, Lamp}      = eproc_fsm__lamp:create(),         % It is turned off, when created.
+    {ok, [off]}     = eproc_fsm__lamp:events(Lamp),
+    ok              = eproc_fsm__lamp:toggle(Lamp),     % Turn it on.
+    ok              = eproc_fsm__lamp:toggle(Lamp),     % Turn it off
+    {ok, [on, off]} = eproc_fsm__lamp:events(Lamp),
+    ok              = eproc_fsm__lamp:break(Lamp),      % Switch state does not change here.
+    ok              = eproc_fsm__lamp:fix(Lamp),        % Lamp is turned off, after fixing it.
+    ok              = eproc_fsm__lamp:toggle(Lamp),     % Now turn it on.
+    {ok, [off, on]} = eproc_fsm__lamp:events(Lamp),
+    {ok, {no, on}}  = eproc_fsm__lamp:state(Lamp),
+    ok              = eproc_fsm__lamp:recycle(Lamp),
     ok.
 
 
