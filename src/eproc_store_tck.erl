@@ -1197,48 +1197,75 @@ eproc_store_router_test_attrs(Config) ->
     Store = store(Config),
     Key1 = {eproc_store_router_test_attrs, now()},
     Key2 = {eproc_store_router_test_attrs, now()},
+    Key3 = {eproc_store_router_test_attrs, now()},  % Non-unique key.
     RouterOpts = [{store, Store}],
     %%
     %%  Add instances.
     %%
-    {ok, IID} = eproc_store:add_instance(Store, inst_value()),
+    {ok, IID1} = eproc_store:add_instance(Store, inst_value()),
+    {ok, IID2} = eproc_store:add_instance(Store, inst_value()),
     ?assertThat(eproc_router:lookup(Key1, RouterOpts), is({ok, []})),
     ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, []})),
+    ?assertThat(eproc_router:lookup(Key3, RouterOpts), is({ok, []})),
     %%
     %%  Add a key synchronously.
     %%
-    {ok, SyncRef} = eproc_store:attr_task(Store, eproc_router, {key_sync, Key2, IID, false}),
+    {ok, SyncRef} = eproc_store:attr_task(Store, eproc_router, {key_sync, Key2, IID1, false}),
     ?assertThat(eproc_router:lookup(Key1, RouterOpts), is({ok, []})),
-    ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, [IID]})),
+    ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, [IID1]})),
+    ?assertThat(eproc_router:lookup(Key3, RouterOpts), is({ok, []})),
     %%
     %%  Add the key attributes.
     %%
-    MsgId1 = {IID, 1, 0, recv},
-    Trn1 = #transition{
+    % First instance.
+    MsgId111 = {IID1, 1, 0, recv},
+    Trn11 = #transition{
         trn_id = 1, sname = [s1], sdata = d1,
         timestamp = os:timestamp(), duration = 13, trigger_type = event,
         trn_node = undefined,
-        trigger_msg = #msg_ref{cid = MsgId1, peer = {connector, some}},
+        trigger_msg = #msg_ref{cid = MsgId111, peer = {connector, some}},
         trigger_resp = undefined,
         trn_messages = [],
         attr_last_nr = 1,
         attr_actions = [
             #attr_action{module = eproc_router, attr_nr = 1, needs_store = true, action = {create, undefined, [s1], {data, Key1, undefined}}},
-            #attr_action{module = eproc_router, attr_nr = 2, needs_store = true, action = {create, undefined, [],   {data, Key2, SyncRef}}}
+            #attr_action{module = eproc_router, attr_nr = 2, needs_store = true, action = {create, undefined, [],   {data, Key2, SyncRef}}},
+            #attr_action{module = eproc_router, attr_nr = 3, needs_store = true, action = {create, undefined, [],   {data, Key3, undefined}}}
         ],
         inst_status = running, interrupts = undefined
     },
-    Msg11 = #message{msg_id = MsgId1, sender = {connector, some}, receiver = {inst, IID}, resp_to = undefined, date = os:timestamp(), body = m11},
-    {ok, IID, 1} = eproc_store:add_transition(Store, IID, Trn1, [Msg11]),
-    ?assertThat(eproc_router:lookup(Key1, RouterOpts), is({ok, [IID]})),
-    ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, [IID]})),
+    Msg111 = #message{msg_id = MsgId111, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m111},
+    {ok, IID1, 1} = eproc_store:add_transition(Store, IID1, Trn11, [Msg111]),
+    % Second instance.
+    MsgId211 = {IID2, 1, 0, recv},
+    Trn21 = #transition{
+        trn_id = 1, sname = [s1], sdata = d1,
+        timestamp = os:timestamp(), duration = 13, trigger_type = event,
+        trn_node = undefined,
+        trigger_msg = #msg_ref{cid = MsgId211, peer = {connector, some}},
+        trigger_resp = undefined,
+        trn_messages = [],
+        attr_last_nr = 1,
+        attr_actions = [
+            #attr_action{module = eproc_router, attr_nr = 1, needs_store = true, action = {create, undefined, [], {data, Key3, undefined}}}
+        ],
+        inst_status = running, interrupts = undefined
+    },
+    Msg211 = #message{msg_id = MsgId211, sender = {connector, some}, receiver = {inst, IID2}, resp_to = undefined, date = os:timestamp(), body = m211},
+    {ok, IID2, 1} = eproc_store:add_transition(Store, IID2, Trn21, [Msg211]),
+    %
+    ?assertThat(eproc_router:lookup(Key1, RouterOpts), is({ok, [IID1]})),
+    ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, [IID1]})),
+    {ok, Key3IDs} = eproc_router:lookup(Key3, RouterOpts),
+    SortedKey3IDs = lists:sort([IID1, IID2]),
+    SortedKey3IDs = lists:sort(Key3IDs),
     %%
     %%  Remove one attr by scope.
     %%
-    MsgId2 = {IID, 2, 0, recv},
-    Trn2 = Trn1#transition{
+    MsgId121 = {IID1, 2, 0, recv},
+    Trn12 = Trn11#transition{
         trn_id = 2, sname = [s2], sdata = d2,
-        trigger_msg = #msg_ref{cid = MsgId2, peer = {connector, some}},
+        trigger_msg = #msg_ref{cid = MsgId121, peer = {connector, some}},
         trigger_resp = undefined,
         trn_messages = [],
         attr_last_nr = 2,
@@ -1247,14 +1274,17 @@ eproc_store_router_test_attrs(Config) ->
         ],
         inst_status = running, interrupts = undefined
     },
-    Msg21 = #message{msg_id = MsgId2, sender = {connector, some}, receiver = {inst, IID}, resp_to = undefined, date = os:timestamp(), body = m11},
-    {ok, IID, 2} = eproc_store:add_transition(Store, IID, Trn2, [Msg21]),
+    Msg121 = #message{msg_id = MsgId121, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m11},
+    {ok, IID1, 2} = eproc_store:add_transition(Store, IID1, Trn12, [Msg121]),
     ?assertThat(eproc_router:lookup(Key1, RouterOpts), is({ok, []})),
-    ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, [IID]})),
+    ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, [IID1]})),
     %%
     %% Check, if taks are available after instance is terminated.
-    ?assertThat(eproc_store:set_instance_killed(Store, {inst, IID}, #user_action{}), is({ok, IID})),
+    ?assertThat(eproc_store:set_instance_killed(Store, {inst, IID1}, #user_action{}), is({ok, IID1})),
     ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, []})),
+    ?assertThat(eproc_router:lookup(Key3, RouterOpts), is({ok, [IID2]})),
+    ?assertThat(eproc_store:set_instance_killed(Store, {inst, IID2}, #user_action{}), is({ok, IID2})),
+    ?assertThat(eproc_router:lookup(Key3, RouterOpts), is({ok, []})),
     ok.
 
 

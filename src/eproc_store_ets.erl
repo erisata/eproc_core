@@ -110,7 +110,7 @@ init({}) ->
     ets:new(?NAME_TBL, [set, public, named_table, {keypos, #inst_name.name},     WC]),
     ets:new(?TRN_TBL,  [set, public, named_table, {keypos, #transition.trn_id},  WC]),
     ets:new(?MSG_TBL,  [set, public, named_table, {keypos, #message.msg_id},     WC]),
-    ets:new(?KEY_TBL,  [set, public, named_table, {keypos, #router_key.key},     WC]),
+    ets:new(?KEY_TBL,  [bag, public, named_table, {keypos, #router_key.key},     WC]),
     ets:new(?TAG_TBL,  [bag, public, named_table, {keypos, #meta_tag.tag},       WC]),
     ets:new(?CNT_TBL,  [set, public, named_table, {keypos, 1}]),
     ets:insert(?CNT_TBL, {inst, 0}),
@@ -1008,7 +1008,14 @@ handle_attr_custom_router_action(AttrAction, Instance) ->
     #attr_action{attr_nr = AttrNr, action = Action} = AttrAction,
     #instance{inst_id = InstId} = Instance,
     case Action of
-        {create, _Name, _Scope, {data, Key, _SyncRef}} ->
+        {create, _Name, _Scope, {data, Key, SyncRef}} ->
+            case SyncRef of
+                undefined ->
+                    true;
+                _ ->
+                    DeletePattern = #router_key{key = Key, inst_id = InstId, attr_nr = SyncRef, _ = '_'},
+                    true = ets:match_delete(?KEY_TBL, DeletePattern)
+            end,
             true = ets:insert(?KEY_TBL, #router_key{key = Key, inst_id = InstId, attr_nr = AttrNr}),
             ok;
         {remove, _Reason} ->
@@ -1017,7 +1024,7 @@ handle_attr_custom_router_action(AttrAction, Instance) ->
     end.
 
 %%
-%%
+%%  This is called from the process callback to add a key synchronously.
 %%
 handle_attr_custom_router_task({key_sync, Key, InstId, Uniq}) ->
     AddKeyFun = fun () ->
