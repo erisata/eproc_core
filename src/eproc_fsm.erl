@@ -143,6 +143,10 @@
 %%%         * Processes are activated only when all linked (related) processes are online.
 %%%         * When becoming online, linked processes start to monitor each other.
 %%%         * Subprocesses can be one of a ways to link processes.
+%%%   * Implement sub-fsm modules, that work in the same process.
+%%%   * Implement wakeup event, that would be sent when the FSM becomes online. Maybe init/* can be used instead?
+%%%   * Next state with patterns including '_', to handle entry actions in orthogonal states.
+%%%   * Do we need the initial event at all? Maybe the creation args are enough?
 %%%
 -module(eproc_fsm).
 -behaviour(gen_server).
