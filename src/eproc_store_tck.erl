@@ -1195,9 +1195,10 @@ eproc_store_core_test_attrs(Config) ->
 %%
 eproc_store_router_test_attrs(Config) ->
     Store = store(Config),
-    Key1 = {eproc_store_router_test_attrs, now()},
-    Key2 = {eproc_store_router_test_attrs, now()},
-    Key3 = {eproc_store_router_test_attrs, now()},  % Non-unique key.
+    Now = os:timestamp(),
+    Key1 = {eproc_store_router_test_attrs, {Now, 1}},
+    Key2 = {eproc_store_router_test_attrs, {Now, 2}},
+    Key3 = {eproc_store_router_test_attrs, {Now, 3}},  % Non-unique key.
     RouterOpts = [{store, Store}],
     %%
     %%  Add instances.
@@ -1298,9 +1299,9 @@ eproc_store_router_test_attrs(Config) ->
 %%
 eproc_store_meta_test_attrs(Config) ->
     Store = store(Config),
-    Tag1 = erlang:term_to_binary(erlang:now()),
-    Tag2 = erlang:term_to_binary(erlang:now()),
-    Tag3 = erlang:term_to_binary(erlang:now()),
+    Tag1 = erlang:term_to_binary(erlang:make_ref()),
+    Tag2 = erlang:term_to_binary(erlang:make_ref()),
+    Tag3 = erlang:term_to_binary(erlang:make_ref()),
     Type1 = <<"eproc_store_meta_test_attrs_x">>,
     Type2 = <<"eproc_store_meta_test_attrs_y">>,
     Opts = [{store, Store}],

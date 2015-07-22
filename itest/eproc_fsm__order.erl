@@ -122,7 +122,7 @@ handle_state([pending], {entry, _PrevState}, StateData) ->
     {ok, StateData};
 
 handle_state([pending], {sync, _From, process}, StateData) ->
-    DeliveryId = {delivery, erlang:node(), erlang:now()},
+    DeliveryId = {delivery, erlang:node(), os:timestamp()},
     ok = eproc_router:add_key(?DELIVERY_KEY(DeliveryId), [], [sync]),
     {reply_next, {ok, DeliveryId}, [delivering], StateData};
 

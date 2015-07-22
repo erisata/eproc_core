@@ -151,7 +151,7 @@ start_link_new_by_inst_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__void,
-                args = {a}, opts = [], status = running, created = erlang:now(),
+                args = {a}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{sname = [], sdata = {state, a}, attr_last_nr = 0, attrs_active = []}
             }}
     end),
@@ -179,7 +179,7 @@ start_link_new_by_name_test() ->
         (store, {name, N = start_link_by_name_test}) ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = N, module = eproc_fsm__void,
-                args = {a}, opts = [], status = running, created = erlang:now(),
+                args = {a}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{sname = [], sdata = {state, a}, attr_last_nr = 0, attrs_active = []}
             }}
     end),
@@ -216,7 +216,7 @@ start_link_existing_test() ->
                     ]
                 },
                 status = running,
-                created = erlang:now()
+                created = os:timestamp()
             }}
     end),
     ok = meck:expect(eproc_fsm_attr, init, fun
@@ -243,7 +243,7 @@ start_link_get_id_group_name_test() ->
         (store, {inst, I = 1000}) ->
             {ok, #instance{
                 inst_id = I, group = 2000, name = name, module = eproc_fsm__void,
-                args = {a}, opts = [], status = running, created = erlang:now(),
+                args = {a}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{sname = [], sdata = {state, a}, attr_last_nr = 0, attrs_active = []}
             }}
     end),
@@ -276,7 +276,7 @@ start_link_init_runtime_test() ->
         (store, {inst, I = 1000}) ->
             {ok, #instance{
                 inst_id = I, group = 2000, name = name, module = eproc_fsm__void,
-                args = {a}, opts = [], status = running, created = erlang:now(),
+                args = {a}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{sname = [], sdata = {state, a, undefined}, attr_last_nr = 0, attrs_active = []}
             }}
     end),
@@ -304,7 +304,7 @@ start_link_fsmname_test() ->
         (store, {inst, I = 1000}) ->
             {ok, #instance{
                 inst_id = I, group = 2000, name = name, module = eproc_fsm__void,
-                args = {a}, opts = [], status = running, created = erlang:now(),
+                args = {a}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{sname = [], sdata = {state, a}, attr_last_nr = 0, attrs_active = []}
             }}
     end),
@@ -323,7 +323,7 @@ start_link_fsmname_test() ->
 start_link_opts_register_test() ->
     GenInst = fun (I, N) -> #instance{
         inst_id = I, group = I, name = N, module = eproc_fsm__void,
-        args = {a}, opts = [], status = running, created = erlang:now(),
+        args = {a}, opts = [], status = running, created = os:timestamp(),
         curr_state = #inst_state{sname = [], sdata = {state, a}, attr_last_nr = 0, attrs_active = []}
     } end,
     ok = meck:new(eproc_store, []),
@@ -390,7 +390,7 @@ start_link_opts_limit_restarts_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__void,
-                args = {a}, opts = [], status = running, created = erlang:now(),
+                args = {a}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{sname = [], sdata = {state, a}, attr_last_nr = 0, attrs_active = []}
             }}
     end),
@@ -423,7 +423,7 @@ start_link_restart_suspend_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__void,
-                args = {a}, opts = [], status = running, created = erlang:now(),
+                args = {a}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{sname = [], sdata = {state, undefined}, attr_last_nr = 0, attrs_active = []}
             }}
     end),
@@ -466,7 +466,7 @@ start_link_restart_delay_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__void,
-                args = {a}, opts = [], status = running, created = erlang:now(),
+                args = {a}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{sname = [], sdata = {state, undefined}, attr_last_nr = 0, attrs_active = []}
             }}
     end),
@@ -498,7 +498,7 @@ send_event_final_state_from_init_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__void,
-                args = {a}, opts = [], status = running, created = erlang:now(),
+                args = {a}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{stt_id = 0, sname = [], sdata = {state, a}, attr_last_nr = 0, attrs_active = []}
             }}
     end),
@@ -545,7 +545,7 @@ send_event_final_state_from_ordinary_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], status = running, created = erlang:now(), curr_state = #inst_state{
+                args = {}, opts = [], status = running, created = os:timestamp(), curr_state = #inst_state{
                     stt_id = 1, sname = [incrementing], sdata = {state, 5},
                     attr_last_nr = 0, attrs_active = []
                 }
@@ -586,7 +586,7 @@ send_event_next_state_from_init_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {a}, opts = [], status = running, created = erlang:now(), curr_state = #inst_state{
+                args = {a}, opts = [], status = running, created = os:timestamp(), curr_state = #inst_state{
                     stt_id = 0, sname = [], sdata = {state, undefined},
                     attr_last_nr = 0, attrs_active = []
                 }
@@ -625,7 +625,7 @@ send_event_next_state_from_ordinary_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], status = running, created = erlang:now(),
+                args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1,
                     sname = [incrementing],
@@ -669,7 +669,7 @@ send_event_same_state_from_init_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {a}, opts = [], status = running, created = erlang:now(), curr_state = #inst_state{
+                args = {a}, opts = [], status = running, created = os:timestamp(), curr_state = #inst_state{
                     stt_id = 0, sname = [], sdata = {state, undefined},
                     attr_last_nr = 0, attrs_active = []
                 }
@@ -707,7 +707,7 @@ send_event_same_state_from_ordinary_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], status = running, created = erlang:now(),
+                args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1,
                     sname = [incrementing],
@@ -749,7 +749,7 @@ send_event_entry_next_state_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__void,
-                args = {}, opts = [], status = running, created = erlang:now(),
+                args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1,
                     sname = [],
@@ -795,7 +795,7 @@ send_event_reply_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], status = running, created = erlang:now(),
+                args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1,
                     sname = [incrementing],
@@ -838,7 +838,7 @@ send_event_save_runtime_test() ->
         (store, {inst, I = 1000}) ->
             {ok, #instance{
                 inst_id = I, group = 2000, name = name, module = eproc_fsm__void,
-                args = {a}, opts = [], status = running, created = erlang:now(), curr_state = #inst_state{
+                args = {a}, opts = [], status = running, created = os:timestamp(), curr_state = #inst_state{
                     stt_id = 0, sname = [], sdata = {state, a, this_is_empty},
                     attr_last_nr = 0, attrs_active = []
                 }
@@ -877,7 +877,7 @@ send_event_handle_attrs_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], status = running, created = erlang:now(),
+                args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1,
                     sname = [incrementing],
@@ -920,7 +920,7 @@ send_event_restart_unreg_test() ->
         (store, {inst, IID}) ->
             {ok, #instance{
                 inst_id = IID, group = 200, name = name, module = eproc_fsm__void,
-                args = {a}, opts = [], status = running, created = erlang:now(), curr_state = #inst_state{
+                args = {a}, opts = [], status = running, created = os:timestamp(), curr_state = #inst_state{
                     stt_id = 0, sname = [], sdata = {state, IID},
                     attr_last_nr = 0, attrs_active = []
                 }
@@ -979,7 +979,7 @@ send_event_suspend_by_user_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], status = running, created = erlang:now(),
+                args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1,
                     sname = [incrementing],
@@ -1028,7 +1028,7 @@ send_event_limit_suspend_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], status = running, created = erlang:now(),
+                args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1,
                     sname = [incrementing],
@@ -1079,7 +1079,7 @@ send_event_limit_delay_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], status = running, created = erlang:now(),
+                args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1,
                     sname = [incrementing],
@@ -1127,7 +1127,7 @@ self_send_event_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__void,
-                args = {}, opts = [], status = running, created = erlang:now(),
+                args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1,
                     sname = [],
@@ -1185,7 +1185,7 @@ sync_send_event_final_state_from_ordinary_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], status = running, created = erlang:now(),
+                args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1,
                     sname = [incrementing],
@@ -1230,7 +1230,7 @@ sync_send_event_next_state_from_ordinary_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], status = running, created = erlang:now(),
+                args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1,
                     sname = [incrementing],
@@ -1274,7 +1274,7 @@ sync_send_event_same_state_from_ordinary_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], status = running, created = erlang:now(),
+                args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1,
                     sname = [incrementing],
@@ -1316,7 +1316,7 @@ sync_send_event_reply_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], status = running, created = erlang:now(),
+                args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1,
                     sname = [incrementing],
@@ -1363,7 +1363,7 @@ unknown_message_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], status = running, created = erlang:now(),
+                args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1,
                     sname = [incrementing],
@@ -1468,7 +1468,7 @@ kill_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {a}, opts = [], status = running, created = erlang:now(), curr_state = #inst_state{
+                args = {a}, opts = [], status = running, created = os:timestamp(), curr_state = #inst_state{
                     stt_id = 0, sname = [], sdata = {state, undefined},
                     attr_last_nr = 0, attrs_active = []
                 }
@@ -1509,7 +1509,7 @@ suspend_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {a}, opts = [], status = running, created = erlang:now(), curr_state = #inst_state{
+                args = {a}, opts = [], status = running, created = os:timestamp(), curr_state = #inst_state{
                     stt_id = 0, sname = [], sdata = {state, undefined},
                     attr_last_nr = 0, attrs_active = []
                 }
@@ -1588,13 +1588,13 @@ resume_and_start_test() ->
         (store, {inst, InstId = 101}) ->
             {ok, #instance{
                 inst_id = InstId, group = InstId, name = name, module = eproc_fsm__void,
-                args = {a}, opts = [], status = resuming, created = erlang:now(),
+                args = {a}, opts = [], status = resuming, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1, sname = [some], sdata = {state, b}, attr_last_nr = 2,
                     attrs_active = []
                 },
                 interrupt = #interrupt{
-                    intr_id = undefined, status = active, suspended = erlang:now(),
+                    intr_id = undefined, status = active, suspended = os:timestamp(),
                     resumes = [#resume_attempt{
                         res_nr = 1, upd_sname = undefined, upd_sdata = undefined,
                         upd_script = undefined, resumed = #user_action{}
@@ -1604,13 +1604,13 @@ resume_and_start_test() ->
         (store, {inst, InstId = 102}) ->
             {ok, #instance{
                 inst_id = InstId, group = InstId, name = name, module = eproc_fsm__void,
-                args = {a}, opts = [], status = resuming, created = erlang:now(),
+                args = {a}, opts = [], status = resuming, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1, sname = [some], sdata = {state, b}, attr_last_nr = 2,
                     attrs_active = []
                 },
                 interrupt = #interrupt{
-                    intr_id = undefined, status = active, suspended = erlang:now(),
+                    intr_id = undefined, status = active, suspended = os:timestamp(),
                     resumes = [#resume_attempt{
                         res_nr = 1, upd_sname = [s2], upd_sdata = d2,
                         upd_script = [], resumed = #user_action{}
@@ -1620,13 +1620,13 @@ resume_and_start_test() ->
         (store, {inst, InstId = 103}) ->
             {ok, #instance{
                 inst_id = InstId, group = InstId, name = name, module = eproc_fsm__void,
-                args = {a}, opts = [], status = resuming, created = erlang:now(),
+                args = {a}, opts = [], status = resuming, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1, sname = [some], sdata = {state, b}, attr_last_nr = 2,
                     attrs_active = []
                 },
                 interrupt = #interrupt{
-                    intr_id = undefined, status = active, suspended = erlang:now(),
+                    intr_id = undefined, status = active, suspended = os:timestamp(),
                     resumes = [#resume_attempt{
                         res_nr = 1, upd_sname = [s3], upd_sdata = d3,
                         upd_script = [], resumed = #user_action{}
@@ -1636,13 +1636,13 @@ resume_and_start_test() ->
         (store, {inst, InstId = 104}) ->
             {ok, #instance{
                 inst_id = InstId, group = InstId, name = name, module = eproc_fsm__void,
-                args = {a}, opts = [], status = resuming, created = erlang:now(),
+                args = {a}, opts = [], status = resuming, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1, sname = [some], sdata = {state, b}, attr_last_nr = 2,
                     attrs_active = []
                 },
                 interrupt = #interrupt{
-                    intr_id = undefined, status = active, suspended = erlang:now(),
+                    intr_id = undefined, status = active, suspended = os:timestamp(),
                     resumes = [#resume_attempt{
                         res_nr = 1, upd_sname = [s4], upd_sdata = undefined,
                         upd_script = undefined, resumed = #user_action{}
@@ -1719,7 +1719,7 @@ register_outgoing_message_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__seq,
-                args = {}, opts = [], status = running, created = erlang:now(),
+                args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1, sname = [incrementing],
                     sdata = {state, 5}, attr_last_nr = 1, attrs_active = []
@@ -1783,7 +1783,7 @@ register_incoming_message_test() ->
         (store, {inst, 100}) ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__mock,
-                args = {}, opts = [], status = running, created = erlang:now(),
+                args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1, sname = [sa], sdata = {state, 5},
                     attr_last_nr = 1, attrs_active = []

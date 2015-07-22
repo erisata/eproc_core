@@ -75,7 +75,7 @@ init({}) ->
 %%  Runtime init.
 %%
 init(_StateName, #state{data = undefined}) ->
-    {ok, #state.data, erlang:now()}.
+    {ok, #state.data, os:timestamp()}.
 
 
 %%
