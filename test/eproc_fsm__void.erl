@@ -23,7 +23,7 @@
 -module(eproc_fsm__void).
 -behaviour(eproc_fsm).
 -compile([{parse_transform, lager_transform}]).
--export([create/0, create/1, start_link/1, done/1, close/1]).
+-export([create/0, create/1, start_link/1, done/1, close/1, self_done/1]).
 -export([init/1, init/2, handle_state/3, terminate/3, code_change/4, format_status/2]).
 -include("eproc.hrl").
 
@@ -62,13 +62,20 @@ done(FsmRef) ->
 
 
 %%
-%%  Closes the FSM in several steps.
+%%  Closes the FSM in several steps withing single transition.
 %%
 close(Pid) when is_pid(Pid) ->
     eproc_fsm:send_event(Pid, close);
 
 close(FsmRef) ->
     eproc_fsm:send_event(?REF(FsmRef), close).
+
+
+%%
+%%  Closes the FSM by sending itself the done event.
+%%
+self_done(Pid) when is_pid(Pid) ->
+    eproc_fsm:send_event(Pid, self_done).
 
 
 
@@ -104,6 +111,7 @@ init(_StateName, _StateData) ->
 handle_state([], {event, done}, StateData) ->
     {final_state, [done], StateData};
 
+
 handle_state([], {event, close}, StateData) ->
     {next_state, [closing], StateData};
 
@@ -111,7 +119,21 @@ handle_state([closing], {entry, []}, StateData) ->
     {next_state, [closing, cleanup], StateData};
 
 handle_state([closing, cleanup], {entry, []}, StateData) ->
-    {final_state, [closed], StateData}.
+    {final_state, [closed], StateData};
+
+
+handle_state([], {event, self_done}, StateData) ->
+    ok = eproc_fsm:self_send_event(done),
+    {next_state, [waiting], StateData};
+
+handle_state([waiting], {entry, []}, StateData) ->
+    {ok, StateData};
+
+handle_state([waiting], {self, done}, StateData) ->
+    {final_state, [done], StateData};
+
+handle_state([waiting], {exit, [done]}, StateData) ->
+    {ok, StateData}.
 
 
 %%

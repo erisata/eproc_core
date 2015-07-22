@@ -159,6 +159,7 @@
     create/3, start_link/3, start_link/2, id/0, group/0, name/0,
     send_create_event/4, sync_send_create_event/4,
     send_event/3, send_event/2,
+    self_send_event/2, self_send_event/1,
     sync_send_event/3, sync_send_event/2,
     kill/2, suspend/2, resume/2, update/5,
     is_online/2, is_online/1
@@ -258,6 +259,11 @@
 %%  handle_state callback implementation to determine, which state is entered
 %%  or exited. Wildcarded transition is only allowed within the same orthogonal
 %%  state, i.e. only regions can differ from the previous state.
+%%
+%%  TODO: Consider to use atoms for simple states and tuples for nested
+%%      states, like {active, {running, online}}. It whould allow to define
+%%      state machine type (declare allowed states), and event would be more
+%%      consistent with UML and state regions.
 %%
 -type state_name() :: list().
 
@@ -1148,7 +1154,7 @@ send_event(FsmRef, Event, Options) ->
     {ok, EventTypeFun} = resolve_event_type_fun(Options),
     {ok, ResolvedFsmRef} = resolve_fsm_ref(FsmRef, Options),
     SendFun = fun (SentMsgCId) ->
-        CastMsg = {'eproc_fsm$send_event', Event, EventTypeFun, EventSrc, SentMsgCId},
+        CastMsg = {'eproc_fsm$send_event', Event, event, EventTypeFun, EventSrc, SentMsgCId},
         ok = gen_server:cast(ResolvedFsmRef, CastMsg)
     end,
     {ok, _SentMsgCId} = registered_send(EventSrc, EventDst, EventTypeFun, Event, SendFun),
@@ -1167,6 +1173,70 @@ send_event(FsmRef, Event, Options) ->
 
 send_event(FsmRef, Event) ->
     send_event(FsmRef, Event, []).
+
+
+%%
+%%  Send event to itself. This function can only be used from within
+%%  the FSM process. This function can be usefull to make checkpoints,
+%%  where the process state should be recorded.
+%%
+%%  The event is delivered to the FSM with type `self`. If this function
+%%  will be called with argument `next`, the trigger in the `handle_state/3`
+%%  will be `{self, next}`.
+%%
+%%  This function returns `ok` immediatelly.
+%%
+%%  Parameters:
+%%
+%%  `Event`
+%%  :   Its an event to be sent to the FSM. It can be any term.
+%%      This event is then passed to the `handle_state` callback.
+%%  `Options`
+%%  :   List of options, that can be specified when sending
+%%      a message for the FSM. They are listed bellow.
+%%
+%%  Available options:
+%%
+%%  `{type, MsgType :: binary() | atom() | function()}`
+%%  :   User defined type of the event message. This type can be used to display
+%%      message in more user-friendly, or to filter messages by it.
+%%
+-spec self_send_event(
+        Event   :: term(),
+        Options :: proplist()
+    ) ->
+        ok |
+        {error, Reason :: not_fsm | term()}.
+
+self_send_event(Event, Options) ->
+    case id() of
+        {ok, InstId} ->
+            SelfRef = {inst, InstId},
+            SelfPid = self(),
+            {ok, EventTypeFun} = resolve_event_type_fun(Options),
+            SendFun = fun (SentMsgCId) ->
+                % TODO: Why EventTypeFun is fun? It can cause problems in a cluster.
+                CastMsg = {'eproc_fsm$send_event', Event, self, EventTypeFun, SelfRef, SentMsgCId},
+                ok = gen_server:cast(SelfPid, CastMsg)
+            end,
+            {ok, _SentMsgCId} = registered_send(SelfRef, SelfRef, EventTypeFun, Event, SendFun),
+            ok;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+
+%%
+%%  Simplified version of the `self_send_event/2`,
+%%  equivalent to `self_send_event(Event, [])`.
+%%
+-spec self_send_event(
+        Event   :: term()
+    ) ->
+        ok.
+
+self_send_event(Event) ->
+    self_send_event(Event, []).
 
 
 %%
@@ -1225,7 +1295,7 @@ sync_send_event(FsmRef, Event, Options) ->
         FsmRef  :: fsm_ref() | fsm_key() | otp_ref(),
         Event   :: term()
     ) ->
-        ok.
+        Reply :: term().
 
 sync_send_event(FsmRef, Event) ->
     sync_send_event(FsmRef, Event, []).
@@ -1812,9 +1882,9 @@ handle_call({'eproc_fsm$sync_send_event', Event, EventTypeFun, EventSrc, MsgCId}
 %%
 %%  Asynchronous messages.
 %%
-handle_cast({'eproc_fsm$send_event', Event, EventTypeFun, EventSrc, MsgCId}, State) ->
+handle_cast({'eproc_fsm$send_event', Event, EventType, EventTypeFun, EventSrc, MsgCId}, State) ->
     Trigger = #trigger_spec{
-        type = event,
+        type = EventType,
         source = EventSrc,
         message = Event,
         msg_cid = MsgCId,
