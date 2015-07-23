@@ -136,7 +136,7 @@
 %%  FSM attribute implementations can define own trigger types.
 %%  For example, the timer trigger is implemented as an attribute trigger.
 %%
--type trigger_type() :: event | sync | timer | admin | create | atom().
+-type trigger_type() :: event | sync | info | timer | self | admin | create | atom().
 
 
 %%

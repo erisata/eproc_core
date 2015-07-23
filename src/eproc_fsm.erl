@@ -535,6 +535,7 @@
                        {sync, From, Message} |
                        {info, Message} |
                        {timer, Message} |
+                       {self, Message} |
                        {Type, Message} |
                        {Type, From, Message} |
                        {Type, Source, Message} |
