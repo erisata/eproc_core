@@ -90,11 +90,16 @@ recycle(FsmRef) ->
 %%% ============================================================================
 
 -record(operated, {
-    broken = '_'    :: '_' | [yes] | [no],
-    switch = '_'    :: '_' | [on] | [off]
+    broken = '_'    :: '_' | yes | no,
+    switch = '_'    :: '_' | on | off
 }).
 
--record(state, {
+-type state() ::
+    initial |
+    #operated{} |
+    recycled.
+
+-record(data, {
     events = []
 }).
 
@@ -108,7 +113,7 @@ recycle(FsmRef) ->
 %%  FSM init.
 %%
 init({}) ->
-    {ok, #state{events = []}}.
+    {ok, initial, #data{events = []}}.
 
 
 %%
@@ -125,49 +130,51 @@ init(_StateName, _StateData) ->
 %
 %   The initial state.
 %
-handle_state([], {sync, _From, create}, StateData) ->
-    {reply_next, ok, [#operated{broken = [no], switch = [off]}], StateData};
+-spec handle_state(state(), term(), #data{}) -> term().
+
+handle_state(initial, {sync, _From, create}, StateData) ->
+    {reply_next, ok, #operated{broken = no, switch = off}, StateData};
 
 
 %
 %   The `operated` state -- this state is orthogonal.
 %
-handle_state([#operated{switch = [on]}], {entry, _PrevSName}, StateData = #state{events = Events}) ->
-    {ok, StateData#state{events = [on | Events]}};
+handle_state(#operated{switch = on}, {entry, _PrevSName}, StateData = #data{events = Events}) ->
+    {ok, StateData#data{events = [on | Events]}};
 
-handle_state([#operated{switch = [off]}], {entry, _PrevSName}, StateData = #state{events = Events}) ->
-    {ok, StateData#state{events = [off | Events]}};
+handle_state(#operated{switch = off}, {entry, _PrevSName}, StateData = #data{events = Events}) ->
+    {ok, StateData#data{events = [off | Events]}};
 
-handle_state([#operated{}], {entry, _PrevSName}, StateData) ->
+handle_state(#operated{}, {entry, _PrevSName}, StateData) ->
     % NOTE: We don't handle lamp brokes and fixes.
     {ok, StateData};
 
-handle_state([#operated{}], {sync, _From, break}, StateData) ->
-    {reply_next, ok, [#operated{broken = [yes]}], StateData}; % NOTE: switch left as '_'.
+handle_state(#operated{}, {sync, _From, break}, StateData) ->
+    {reply_next, ok, #operated{broken = yes}, StateData}; % NOTE: switch left as '_'.
 
-handle_state([#operated{broken = [yes]}], {sync, _From, fix}, StateData) ->
-    {reply_next, ok, [#operated{broken = [no], switch = [off]}], StateData}; % NOTE: Both changed.
+handle_state(#operated{broken = yes}, {sync, _From, fix}, StateData) ->
+    {reply_next, ok, #operated{broken = no, switch = off}, StateData}; % NOTE: Both changed.
 
-handle_state([#operated{broken = [no]}], {sync, _From, fix}, StateData) ->
+handle_state(#operated{broken = no}, {sync, _From, fix}, StateData) ->
     {reply_same, ok, StateData};
 
-handle_state([#operated{switch = Switch}], {sync, _From, toggle}, StateData) ->
+handle_state(#operated{switch = Switch}, {sync, _From, toggle}, StateData) ->
     NewSwitch = case Switch of
-        [on] -> [off];
-        [off] -> [on]
+        on -> off;
+        off -> on
     end,
-    {reply_next, ok, [#operated{switch = NewSwitch}], StateData};  % NOTE: broken left as '_'
+    {reply_next, ok, #operated{switch = NewSwitch}, StateData};  % NOTE: broken left as '_'
 
-handle_state([#operated{}], {sync, _From, events}, StateData = #state{events = Events}) ->
-    {reply_same, {ok, lists:reverse(Events)}, StateData#state{events = []}};
+handle_state(#operated{}, {sync, _From, events}, StateData = #data{events = Events}) ->
+    {reply_same, {ok, lists:reverse(Events)}, StateData#data{events = []}};
 
-handle_state([#operated{broken = [Broken], switch = [Switch]}], {sync, _From, state}, StateData) ->
+handle_state(#operated{broken = Broken, switch = Switch}, {sync, _From, state}, StateData) ->
     {reply_same, {ok, {Broken, Switch}}, StateData};
 
-handle_state([#operated{}], {sync, _From, recycle}, StateData) ->
+handle_state(#operated{}, {sync, _From, recycle}, StateData) ->
     {reply_final, ok, [recycled], StateData};
 
-handle_state([#operated{}], {exit, _NextState}, StateData) ->
+handle_state(#operated{}, {exit, _NextState}, StateData) ->
     {ok, StateData}.
 
 

@@ -136,7 +136,6 @@
 %%%
 %%%   * Attachment support.
 %%%   * Implement FSM crash listener (`eproc_fsm_mgr`?).
-%%%   * Check if InstId can be non-integer.
 %%%   * Add support for transient processes, that are not registered to the store.
 %%%   * Add `ignore` handling for `handle_cast` and `handle_call`.
 %%%   * Implement persistent process linking. It could work as follows:
@@ -145,7 +144,6 @@
 %%%         * Subprocesses can be one of a ways to link processes.
 %%%   * Implement sub-fsm modules, that work in the same process.
 %%%   * Implement wakeup event, that would be sent when the FSM becomes online. Maybe init/* can be used instead?
-%%%   * Do we need the initial event at all? Maybe the creation args are enough?
 %%%
 -module(eproc_fsm).
 -behaviour(gen_server).
@@ -227,80 +225,81 @@
 %%
 -type state_event() :: term().
 
+
 %%
 %%  State name describes current state of the FSM. The `eproc_fsm` supports
-%%  nested and orthogonal states and state name is sued to describe them.
+%%  nested and orthogonal states and state name is used to describe them.
 %%
-%%  State name is always a list, where first element denotes a state and
-%%  all the rest elements stand for substate. I.e. if we have a state
-%%  `active` its substate `running` with substates `online` and `offline`,
-%%  the state `online` is expresses as `[active, running, online]` and the
-%%  offline state is expressed as `[active, running, offline]`.
+%%  State name is always an atom, binary, integer or a tuple (for complex states).
+%%  In the case of the complex states, first element in the tuple stands for
+%%  the state name, and all the rest elements define regions in that state.
+%%  Nested states can be modelled by two-element tuples. Tuples of arity more
+%%  than 2 can be used to model orthogonal states. The following are examples
+%%  of valid state names:
 %%
-%%  The root state is `[]`. This state is entered when new FSM is created
+%%    * `active` -- simple state.
+%%    * `{active, running}` -- the state `active` has substate `running`.
+%%    * `{active, {running, online}}` -- composite states can be nested.
+%%    * `{selling, sale, low_in_stock}` -- orthogonal state `selling` with
+%%      two regions, one have state `sale` and other is `low_in_stock`.
+%%      The regions can also have composite states.
+%%
+%%  The special case is the empty state `{}`. It can only be used for the
+%%  initial state of the FSM. This state is entered when new FSM is created
 %%  and it is never exited till termination of the FSM. Nevertheless, the
-%%  entry and exit actions are not invoked for the root state.
-%%
-%%  Elements of the state name should be atoms or records (tagged tuples).
-%%  The atom (or the name of the record) stands for the unqualified (local)
-%%  name of the state. While atoms are used to describe nested states, records
-%%  are used to describe orthogonal states. Each field of the record has the
-%%  same structure as the entire state name. I.e. it can have nested and orthogonal
-%%  states. For example, lets assume we have state `completed` with two orthogonal
-%%  regions, where first region have substates `done`, `failed` and `killed`,
-%%  and the second region - `available` and `archived`.
-%%  The state "`done` and `archived`" can be expresses as `[{completed, [done], [archived]}]`.
+%%  entry and exit actions are not invoked for this state.
 %%
 %%  The FSM callback can return ortogonal state with some of its regions
-%%  marked as unchanged ('_' instead of region state). The corresponding
+%%  marked as unchanged (`'_'` or `{}` instead of region state). The corresponding
 %%  exit and entry events will be called with the same wildcarded state
 %%  name, although the final state will be derived by replacing wildcards
-%%  with the previous states of the corresponding regions. This allows
-%%  handle_state callback implementation to determine, which state is entered
+%%  with the previous states of the corresponding regions. This allows the
+%%  `handle_state` callback implementation to determine, which state is entered
 %%  or exited. Wildcarded transition is only allowed within the same orthogonal
 %%  state, i.e. only regions can differ from the previous state.
 %%
-%%  TODO: Consider to use atoms for simple states and tuples for nested
-%%      states, like {active, {running, online}}. It whould allow to define
-%%      state machine type (declare allowed states), and event would be more
-%%      consistent with UML and state regions.
+%%  NOTE: List based states are allowed only for legacy purposes. It should not
+%%  be used and will be removed in future.
 %%
--type state_name() :: list().
+-type state_name() :: atom() | binary() | integer() | tuple() | list().
+
 
 %%
 %%  State scope is used to specify validity of some FSM attributes. Currently the
 %%  scope needs to be specified for timers and keys. I.e. when the FSM exits the
-%%  specified state (scope), the corresponding timers and keys will be terminated.
+%%  specified state (scope), the corresponding timers and keys will be deactivated.
 %%
 %%  The state scope has a structure similar to state name, except that it supports
 %%  wildcarding. Main use case for wildcarding is orthogonal states, but it can
-%%  be used with nested states also.
+%%  be used with nested states also. Two wildcard symbols are supported: `'_'` and
+%%  `{}`, but the firts one is preferred as it is more consistent with ETS and Mnesia.
 %%
 %%  In general, scope is a state, which is not necessary the leaf state in the
 %%  tree of possible states. For nested states, the scope can be seen as a state
 %%  prefix, for which the specified timer or key is valid. I.e. looking at the
-%%  example provided in the description of `state_name`, all of `[]`, `[active]`,
-%%  `[active, running]` and `[active, running, online]` can be scopes and the
-%%  state `[active, running, online]` will be in all of these scopes.
-%%  Similarly, the state `[active, running, offline]` will be in scopes `[]`, `[active]`
-%%  and `[active, running]` but not in `[active, running, online]` (from the scopes listed above).
+%%  example provided in the description of `state_name`, all of `{}`, `active`,
+%%  `{active}`, `{active, running}` and `{active, {running, online}}` can be scopes
+%%  and the state `{active, {running, online}}` will be in all of these scopes.
+%%  Similarly, the state `{active, {running, offline}}` will be in scopes `{}`,
+%%  `active` and `{active, running}` but not in `{active, {running, online}}`
+%%  (from the scopes listed above).
 %%
-%%  When used with orthogonal states, scopes can be used to specify in one
+%%  When used with orthogonal states, scopes can be used to specify one or several
 %%  of its regions. E.g. if the state 'done' should be specified as a scope,
-%%  the following term can be used: `[{completed, [done], []}]`. I.e. the second
+%%  the following term can be used: `{completed, done, '_'}`. I.e. the second
 %%  region can be in any substate.
 %%
-%%  The atom `_` can be used for wildcarding instead of `[]`. It was introduced to
-%%  maintain some similarity with mnesia queries. Additionally, the `_` atom can be
-%%  used to wildcard a state element, that is not at the end of the path.
-%%
 %%  Scope for a state, that has orthogonal regions can be expressed in several ways.
-%%  Wildcards can be specified for all of its regions, e.g. `[{completed, '_', '_'}]`
-%%  or `[{completed, [], []}]`. Additionally, a shortcut notation can be used for
-%%  it: only name can be specified in the scope, if all the regions are going to be ignored.
-%%  I.e. the above mentioned scope can be expressed as `[completed]`.
+%%  Wildcards can be specified for all of its regions, e.g. `{completed, '_', '_'}`
+%%  or `{completed, {}, {}}`. Additionally, a shortcut notation can be used for
+%%  it: only name can be specified in the scope, if all the regions should be ignored.
+%%  I.e. the above mentioned scope can be expressed as `completed` or `{completed}`.
 %%
--type state_scope() :: list().
+%%  NOTE: List based scopes are allowed only for legacy purposes. It should not
+%%  be used and will be removed in future.
+%%
+-type state_scope() :: atom() | binary() | integer() | tuple() | list().
+
 
 %%
 %%  Internal state of the callback module. The state is considered
@@ -859,16 +858,29 @@ is_fsm_ref(_) -> false.
 %%
 -spec is_state_in_scope(state_name(), state_scope()) -> boolean().
 
-is_state_in_scope(State, Scope) when State =:= Scope; Scope =:= []; Scope =:= '_' ->
+is_state_in_scope({State}, Scope) ->
+    is_state_in_scope(State, Scope);
+
+is_state_in_scope(State, {Scope}) ->
+    is_state_in_scope(State, Scope);
+
+is_state_in_scope(State, Scope) when State =:= Scope; Scope =:= {}; Scope =:= '_' ->
+    true;
+
+is_state_in_scope(_State, []) ->
+    % Support for legacy list based states.
     true;
 
 is_state_in_scope([BaseState | SubStates], [BaseScope | SubScopes]) when BaseState =:= BaseScope; BaseScope =:= '_' ->
+    % Support for legacy list based states.
     is_state_in_scope(SubStates, SubScopes);
 
 is_state_in_scope([BaseState | SubStates], [BaseScope | SubScopes]) when element(1, BaseState) =:= BaseScope ->
+    % Support for legacy list based states.
     is_state_in_scope(SubStates, SubScopes);
 
 is_state_in_scope([BaseState | _SubStates], [BaseScope | _SubScopes]) when is_tuple(BaseState), is_tuple(BaseScope) ->
+    % Support for legacy list based states.
     [StateName | StateRegions] = tuple_to_list(BaseState),
     [ScopeName | ScopeRegions] = tuple_to_list(BaseScope),
     RegionCheck = fun
@@ -882,6 +894,26 @@ is_state_in_scope([BaseState | _SubStates], [BaseScope | _SubScopes]) when is_tu
         false -> false
     end;
 
+is_state_in_scope(State, Scope) when is_tuple(State), tuple_size(State) > 0 ->
+    [StateName | StateRegions] = tuple_to_list(State),
+    case Scope of
+        {} ->
+            true;
+        '_' ->
+            true;
+        StateName ->
+            true;
+        _ when is_tuple(Scope), tuple_size(Scope) =:= tuple_size(State), element(1, Scope) =:= StateName ->
+            RegionCheck = fun
+                (_, false) -> false;
+                ({St, Sc}, true) -> is_state_in_scope(St, Sc)
+            end,
+            [_ScopeName | ScopeRegions] = tuple_to_list(Scope),
+            lists:foldl(RegionCheck, true, lists:zip(StateRegions, ScopeRegions));
+        _ ->
+            false
+    end;
+
 is_state_in_scope(_State, _Scope) ->
     false.
 
@@ -892,14 +924,23 @@ is_state_in_scope(_State, _Scope) ->
 -spec is_state_valid(state_name()) -> boolean().
 
 is_state_valid([]) ->
+    % Support for legacy list based states.
     true;
 
 is_state_valid([BaseState | SubStates]) when is_atom(BaseState); is_binary(BaseState); is_integer(BaseState) ->
+    % Support for legacy list based states.
     is_state_valid(SubStates);
 
 is_state_valid([BaseState]) when is_tuple(BaseState) ->
-    [StateName | StateRegions] = tuple_to_list(BaseState),
-    case is_state_valid([StateName]) of
+    % Support for legacy list based states.
+    is_state_valid(BaseState);
+
+is_state_valid(State) when State =:= {}; is_atom(State); is_binary(State); is_integer(State) ->
+    true;
+
+is_state_valid(State) when is_tuple(State) ->
+    [StateName | StateRegions] = tuple_to_list(State),
+    case is_atom(StateName) orelse is_binary(StateName) orelse is_integer(StateName) of
         true ->
             RegionsCheckFun = fun
                 (_, false) -> false;
@@ -953,6 +994,9 @@ is_next_state_valid(NextStateName) ->
 derive_next_state([], _) ->
     {error, empty};
 
+derive_next_state({}, _) ->
+    {error, empty};
+
 derive_next_state(StateName, PrevStateName) ->
     derive_next_sub_state(StateName, PrevStateName).
 
@@ -961,10 +1005,12 @@ derive_next_state(StateName, PrevStateName) ->
 %%  Internal function for `derive_next_state/2`.
 %%
 derive_next_sub_state([], _) ->
+    % Support for legacy list based states.
     {ok, []};
 
 % If the state is simple, it should be atom, binary or integer.
 derive_next_sub_state([Simple | SubStates], PrevStateName) when is_atom(Simple); is_binary(Simple); is_integer(Simple) ->
+    % Support for legacy list based states.
     PrevSubStates = case PrevStateName of
         [Simple | PSS] -> PSS;
         _              -> undefined
@@ -975,12 +1021,36 @@ derive_next_sub_state([Simple | SubStates], PrevStateName) when is_atom(Simple);
     end;
 
 % If the state is orthogonal...
-derive_next_sub_state([OrthState], PrevStateName) when is_tuple(OrthState) ->
+derive_next_sub_state([OrthState], [PrevStateName]) when is_tuple(OrthState) ->
+    % Support for legacy list based states.
+    case derive_next_state(OrthState, PrevStateName) of
+        {ok, NewState}  -> {ok, [NewState]};
+        {error, Reason} -> {error, Reason}
+    end;
+
+% If the state is orthogonal...
+derive_next_sub_state([OrthState], _PrevStateName) when is_tuple(OrthState) ->
+    % Support for legacy list based states.
+    case derive_next_state(OrthState, undefined) of
+        {ok, NewState}  -> {ok, [NewState]};
+        {error, Reason} -> {error, Reason}
+    end;
+
+% Patterns are not allowed.
+derive_next_sub_state(Wildcard, _PrevStateName) when Wildcard =:= '_'; Wildcard =:= {} ->
+    {error, {bad_state, Wildcard}};
+
+% If the state is simple, it should be atom, binary or integer.
+derive_next_sub_state(Simple, _PrevStateName) when is_atom(Simple); is_binary(Simple); is_integer(Simple) ->
+    {ok, Simple};
+
+% If the state is orthogonal...
+derive_next_sub_state(OrthState, PrevStateName) when is_tuple(OrthState), tuple_size(OrthState) > 0 ->
     [StateName | StateRegions] = tuple_to_list(OrthState),
-    case is_atom(StateName) of
+    case is_atom(StateName) orelse is_binary(StateName) orelse is_integer(StateName) of
         true ->
             RegionsResult = case PrevStateName of
-                [PrevOrthState] when is_tuple(PrevOrthState),
+                PrevOrthState when is_tuple(PrevOrthState),
                         element(1, PrevOrthState) =:= StateName,
                         tuple_size(PrevOrthState) =:= tuple_size(OrthState)
                         ->
@@ -1015,7 +1085,7 @@ derive_next_sub_state([OrthState], PrevStateName) when is_tuple(OrthState) ->
                     lists:foldr(RegionsDeriveFun, {ok, []}, StateRegions)
             end,
             case RegionsResult of
-                {ok, NewRegions} -> {ok, [erlang:list_to_tuple([StateName | NewRegions])]};
+                {ok, NewRegions} -> {ok, erlang:list_to_tuple([StateName | NewRegions])};
                 {error, RegionsReason} -> {error, RegionsReason}
             end;
         false ->
@@ -2196,10 +2266,10 @@ handle_create(Module, Args, CreateOpts, CustomOpts) ->
     Name        = proplists:get_value(name,       CreateOpts, undefined),
     Store       = proplists:get_value(store,      CreateOpts, undefined),
     StartSpec   = proplists:get_value(start_spec, CreateOpts, undefined),
-    {ok, InitSData} = call_init_persistent(Module, Args),
+    {ok, InitSName, InitSData} = call_init_persistent(Module, Args),
     InstState = #inst_state{
         stt_id          = 0,
-        sname           = [],
+        sname           = InitSName,
         sdata           = InitSData,
         timestamp       = Now,
         attr_last_nr    = 0,
@@ -2389,7 +2459,10 @@ init_loaded(Instance, SName, SData, State) ->
 call_init_persistent(Module, Args) ->
     case Module:init(Args) of
         {ok, SData} ->
-            {ok, SData}
+            {ok, [], SData};
+        {ok, SName, SData} ->
+            true = is_state_valid(SName),
+            {ok, SName, SData}
     end.
 
 
@@ -2652,7 +2725,10 @@ perform_event_transition(Trigger, TrnNr, InitAttrActions, State) ->
         same ->
             {cont, DerivedSName, NewSData};
         next ->
-            {ok, SDataAfterExit} = perform_exit(SName, NewSName, NewSData, State),
+            {ok, SDataAfterExit} = case TrnNr of
+                1 -> {ok, NewSData};    % Do not exit for the initial state.
+                _ -> perform_exit(SName, NewSName, NewSData, State)
+            end,
             case perform_entry(SName, NewSName, DerivedSName, SDataAfterExit, State) of
                 {ok, DerivedSNameAfterEntry, SDataAfterEntry} ->
                     {cont, DerivedSNameAfterEntry, SDataAfterEntry};
@@ -2660,7 +2736,10 @@ perform_event_transition(Trigger, TrnNr, InitAttrActions, State) ->
                     {stop, DerivedSNameAfterEntry, SDataAfterEntry}
             end;
         final ->
-            {ok, SDataAfterExit} = perform_exit(SName, NewSName, NewSData, State),
+            {ok, SDataAfterExit} = case TrnNr of
+                1 -> {ok, NewSData};    % Do not exit for the initial state.
+                _ -> perform_exit(SName, NewSName, NewSData, State)
+            end,
             {stop, DerivedSName, SDataAfterExit}
     end,
     {ok, ProcAction, SNameAfterTrn, SDataAfterTrn, Reply, InitAttrActions}.
@@ -2669,9 +2748,6 @@ perform_event_transition(Trigger, TrnNr, InitAttrActions, State) ->
 %%
 %%  Invoke the state exit action.
 %%
-perform_exit([], _NextSName, SData, _State) ->
-    {ok, SData};
-
 perform_exit(PrevSName, NextSName, SData, #state{module = Module}) ->
     case Module:handle_state(PrevSName, {exit, NextSName}, SData) of
         {ok, NewSData} ->

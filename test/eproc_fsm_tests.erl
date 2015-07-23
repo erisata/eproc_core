@@ -42,35 +42,70 @@ unlink_kill(PID) ->
 %%
 state_in_scope_test_() ->
     [
-        ?_assert(true =:= eproc_fsm:is_state_in_scope([], [])),
-        ?_assert(true =:= eproc_fsm:is_state_in_scope([a], [])),
-        ?_assert(true =:= eproc_fsm:is_state_in_scope([a], [a])),
-        ?_assert(true =:= eproc_fsm:is_state_in_scope([a, b], [a])),
-        ?_assert(true =:= eproc_fsm:is_state_in_scope([a, b], [a, b])),
-        ?_assert(true =:= eproc_fsm:is_state_in_scope([a, b], ['_', b])),
-        ?_assert(true =:= eproc_fsm:is_state_in_scope([{a, [b], [c]}], [a])),
-        ?_assert(true =:= eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{a, [], []}])),
-        ?_assert(true =:= eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{a, '_', '_'}])),
-        ?_assert(true =:= eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{a, [b], '_'}])),
-        ?_assert(false =:= eproc_fsm:is_state_in_scope([], [a])),
-        ?_assert(false =:= eproc_fsm:is_state_in_scope([a], [b])),
-        ?_assert(false =:= eproc_fsm:is_state_in_scope([{a, [b], [c]}], [b])),
-        ?_assert(false =:= eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{b}])),
-        ?_assert(false =:= eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{b, []}])),
-        ?_assert(false =:= eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{b, [], []}])),
-        ?_assert(false =:= eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{a, [c], []}]))
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope({}, '_')),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope({a}, '_'  )),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope({a}, {'_'})),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope(a,   {'_'})),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope(a,   {'_'})),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope({a}, a)),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope({a}, {a})),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope(a,   a)),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope(a,   {a})),
+        ?_assertMatch(false, eproc_fsm:is_state_in_scope(a,   {a, '_'})),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope({a, b}, a)),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope({a, b}, '_')),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope({a, b}, {a, b})),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope({a, b}, {a, '_'})),
+        ?_assertMatch(false, eproc_fsm:is_state_in_scope({a, b}, {'_', b})),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope({a, b, c}, a)),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope({a, b, c}, '_')),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope({a, b, c}, {a, {}, {}})),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope({a, b, c}, {a, '_', '_'})),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope({a, b, c}, {a, b,   '_'})),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope({a, b, c}, {a, '_', c})),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope({a, b, c}, {a, b,   c})),
+        ?_assertMatch(false, eproc_fsm:is_state_in_scope({}, a)),
+        ?_assertMatch(false, eproc_fsm:is_state_in_scope(a, b)),
+        ?_assertMatch(false, eproc_fsm:is_state_in_scope({a, b, c}, b)),
+        ?_assertMatch(false, eproc_fsm:is_state_in_scope({a, b, c}, {b})),
+        ?_assertMatch(false, eproc_fsm:is_state_in_scope({a, b, c}, {a, '_'})),
+        ?_assertMatch(false, eproc_fsm:is_state_in_scope({a, b, c}, {b, '_', '_'})),
+        ?_assertMatch(false, eproc_fsm:is_state_in_scope({a, b, c}, {a, c, '_'})),
+        % The following are for legacy support - list based states.
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope([], [])),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope([a], [])),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope([a], [a])),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope([a, b], [a])),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope([a, b], [a, b])),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope([a, b], ['_', b])),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope([{a, [b], [c]}], [a])),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{a, [], []}])),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{a, '_', '_'}])),
+        ?_assertMatch(true,  eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{a, [b], '_'}])),
+        ?_assertMatch(false, eproc_fsm:is_state_in_scope([], [a])),
+        ?_assertMatch(false, eproc_fsm:is_state_in_scope([a], [b])),
+        ?_assertMatch(false, eproc_fsm:is_state_in_scope([{a, [b], [c]}], [b])),
+        ?_assertMatch(false, eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{b}])),
+        ?_assertMatch(false, eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{b, []}])),
+        ?_assertMatch(false, eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{b, [], []}])),
+        ?_assertMatch(false, eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{a, [c], []}]))
     ].
 
 
 is_state_valid_test_() ->
     [
-        ?_assert(true =:= eproc_fsm:is_state_valid([])),
-        ?_assert(true =:= eproc_fsm:is_state_valid([a, <<"b">>, 1])),
-        ?_assert(true =:= eproc_fsm:is_state_valid([z, {a, [b, c], []}])),
-        ?_assert(false =:= eproc_fsm:is_state_valid([{a, [b], [c]}, z])),
-        ?_assert(false =:= eproc_fsm:is_state_valid({a, []})),
-        ?_assert(false =:= eproc_fsm:is_state_valid([1.2])),
-        ?_assert(false =:= eproc_fsm:is_state_valid(1))
+        ?_assertMatch(true,  eproc_fsm:is_state_valid([])),
+        ?_assertMatch(true,  eproc_fsm:is_state_valid([a, <<"b">>, 1])),
+        ?_assertMatch(true,  eproc_fsm:is_state_valid([z, {a, [b, c], []}])),
+        ?_assertMatch(true,  eproc_fsm:is_state_valid(1)),
+        ?_assertMatch(true,  eproc_fsm:is_state_valid(<<"1">>)),
+        ?_assertMatch(true,  eproc_fsm:is_state_valid({a})),
+        ?_assertMatch(true,  eproc_fsm:is_state_valid({a, b})),
+        ?_assertMatch(true,  eproc_fsm:is_state_valid({a, b, c})),
+        ?_assertMatch(true,  eproc_fsm:is_state_valid({a, b, {c, x}})),
+        ?_assertMatch(false, eproc_fsm:is_state_valid({{a, x}, b, {c, x}})),
+        ?_assertMatch(false, eproc_fsm:is_state_valid([{a, [b], [c]}, z])),
+        ?_assertMatch(false, eproc_fsm:is_state_valid([1.2]))
     ].
 
 is_next_state_valid_test_() ->
@@ -80,7 +115,7 @@ is_next_state_valid_test_() ->
     [
         ?_assertMatch(true,  eproc_fsm:is_next_state_valid([a, b, c])),
         ?_assertMatch(false, eproc_fsm:is_next_state_valid([])),
-        ?_assertMatch(false, eproc_fsm:is_next_state_valid(123)),
+        ?_assertMatch(false, eproc_fsm:is_next_state_valid(12.3)),
         ?_assertMatch(true,  eproc_fsm:is_next_state_valid([Orth1])),
         ?_assertMatch(false, eproc_fsm:is_next_state_valid([OrthP])),
         ?_assertMatch(true,  eproc_fsm:is_next_state_valid([OrthP], [Orth1])),
@@ -94,6 +129,12 @@ derive_next_state_test_() ->
     Orth1 = {a, [x], [y], [z]},
     Orth2 = {b, [i], [j], [k]},
     [
+        ?_assertMatch({ok, {a, {b, c}}},            eproc_fsm:derive_next_state({a, {b, c}}, [])),
+        ?_assertMatch({ok, Orth1},                  eproc_fsm:derive_next_state(Orth1,       {})),
+        ?_assertMatch({ok, Orth1},                  eproc_fsm:derive_next_state(Orth1,       Orth2)),
+        ?_assertMatch({ok, {a, [x], [y], [w]}},     eproc_fsm:derive_next_state(OrthP,       Orth1)),
+        ?_assertMatch({error, {bad_state, '_'}},    eproc_fsm:derive_next_state(OrthP,       Orth2)),
+        % The following are for legacy list based states.
         ?_assertMatch({ok, [a, b, c]},              eproc_fsm:derive_next_state([a, b, c], [])),
         ?_assertMatch({ok, [Orth1]},                eproc_fsm:derive_next_state([Orth1],   [])),
         ?_assertMatch({ok, [Orth1]},                eproc_fsm:derive_next_state([Orth1],   [Orth2])),
@@ -206,7 +247,7 @@ start_link_existing_test() ->
             {ok, #instance{
                 inst_id = I, group = I, name = name, module = eproc_fsm__void,
                 args = {a}, opts = [], curr_state = #inst_state{
-                    stt_id = 1,
+                    stt_id = 0,
                     sname = [some],
                     sdata = {state, b},
                     attr_last_nr = 2,
@@ -751,7 +792,7 @@ send_event_entry_next_state_test() ->
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__void,
                 args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
-                    stt_id = 1,
+                    stt_id = 0,
                     sname = [],
                     sdata = {state, some},
                     attr_last_nr = 0,
@@ -760,7 +801,7 @@ send_event_entry_next_state_test() ->
             }}
     end),
     ok = meck:expect(eproc_store, add_transition, fun
-        (store, InstId, Transition = #transition{trn_id = TrnNr = 2}, [#message{}]) ->
+        (store, InstId, Transition = #transition{trn_id = TrnNr = 1}, [#message{}]) ->
             #transition{
                 sname = [closed],
                 trigger_type = event,
@@ -1129,7 +1170,7 @@ self_send_event_test() ->
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__void,
                 args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
-                    stt_id = 1,
+                    stt_id = 0,
                     sname = [],
                     sdata = {state, some},
                     attr_last_nr = 0,
@@ -1138,7 +1179,7 @@ self_send_event_test() ->
             }}
     end),
     ok = meck:expect(eproc_store, add_transition, fun
-        (store, InstId, Transition = #transition{trn_id = TrnNr = 2}, [#message{}, #message{}]) ->
+        (store, InstId, Transition = #transition{trn_id = TrnNr = 1}, [#message{}, #message{}]) ->
             #transition{
                 sname = [waiting],
                 trigger_type = event,
@@ -1147,11 +1188,11 @@ self_send_event_test() ->
                 inst_status  = running
             } = Transition,
             {ok, InstId, TrnNr};
-        (store, InstId, Transition = #transition{trn_id = TrnNr = 3}, [#message{}]) ->
+        (store, InstId, Transition = #transition{trn_id = TrnNr = 2}, [#message{}]) ->
             #transition{
                 sname = [done],
                 trigger_type = self,
-                trigger_msg  = #msg_ref{cid = {InstId, 2, _, recv}},
+                trigger_msg  = #msg_ref{cid = {InstId, 1, _, recv}},
                 trigger_resp = undefined,
                 inst_status  = completed
             } = Transition,
@@ -1169,8 +1210,8 @@ self_send_event_test() ->
     ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, [[waiting], {exit, [done]}, '_'])),
     ?assertEqual(4, meck:num_calls(eproc_fsm__void, handle_state, '_')),
     ?assertEqual(2, meck:num_calls(eproc_store, add_transition, '_')),
+    ?assertEqual(1, meck:num_calls(eproc_store, add_transition, ['_', '_', #transition{trn_id = 1, _ = '_'}, '_'])),
     ?assertEqual(1, meck:num_calls(eproc_store, add_transition, ['_', '_', #transition{trn_id = 2, _ = '_'}, '_'])),
-    ?assertEqual(1, meck:num_calls(eproc_store, add_transition, ['_', '_', #transition{trn_id = 3, _ = '_'}, '_'])),
     ?assert(meck:validate([eproc_store, eproc_fsm__void])),
     ok = meck:unload([eproc_store, eproc_fsm__void]).
 
