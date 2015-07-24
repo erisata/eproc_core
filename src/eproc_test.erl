@@ -39,9 +39,17 @@ get_state(FsmRef) ->
         {inst, InstId} -> {id, InstId};
         {name, Name}   -> {name, Name}
     end,
-    {ok, {1, _, [Instance]}} = eproc_store:get_instance(undefined, {filter, {1, 2}, [FilterClause]}, current),
-    #instance{status = Status, curr_state = #inst_state{sname = StateName, sdata = StateData}} = Instance,
-    {ok, Status, StateName, StateData}.
+    case eproc_store:get_instance(undefined, {filter, {1, 2}, [FilterClause]}, current) of
+        {ok, {0, _, []}} ->
+            {error, not_found};
+        {ok, {1, _, [Instance]}} ->
+            #instance{status = Status, curr_state = #inst_state{sname = StateName, sdata = StateData}} = Instance,
+            {ok, Status, StateName, StateData};
+        {ok, {_, _, Multiple}} ->
+            {error, {multiple, Multiple}};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 
 %%
