@@ -1576,6 +1576,9 @@ resume(FsmRef, Options) ->
                             try gen_server:call(ResolvedFsmRef, {'eproc_fsm$is_online'}) of
                                 true -> {ok, {inst, InstId}}
                             catch
+%                               TODO:  exit:{normal, Reason} ->
+%                                   Race condition is here because of is_online. The process can be already
+%                                   terminated successfully when calling the is_online.
                                 C:E ->
                                     lager:error("FSM resume failed with reason ~p:~p at ~p", [C, E, erlang:get_stacktrace()]),
                                     {error, resume_failed}
