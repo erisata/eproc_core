@@ -24,7 +24,9 @@
 %%%
 -module(eproc_timer).
 -behaviour(eproc_fsm_attr).
+-compile([{parse_transform, lager_transform}]).
 -export([set/4, set/3, set/2, cancel/1]).
+-export([force_fire/2]).
 -export([
     duration_to_ms/1,
     duration_format/2,
@@ -143,6 +145,29 @@ set(After, Event) ->
 
 cancel(Name) ->
     eproc_fsm_attr:action(?MODULE, Name, {timer, remove}).
+
+
+%%
+%%  Forces existing timer to fire immediatelly. This function is intended
+%%  for use in unit tests as well as for manual actions from the process
+%%  web console.
+%%
+-spec force_fire(
+        FsmRef  :: fsm_ref(),
+        AttrRef :: {id, integer()} | {name, term()}
+    ) ->
+        ok |
+        {error, Reason :: term()}.
+
+force_fire(FsmRef, AttrRef) ->
+    case eproc_registry:whereis_fsm(undefined, FsmRef) of
+        FsmPid when is_pid(FsmPid) ->
+            {ok, EventMsg} = eproc_fsm_attr:make_event(AttrRef, force_fire),
+            FsmPid ! EventMsg,
+            ok;
+        undefined ->
+            {error, not_found}
+    end.
 
 
 %%
@@ -589,7 +614,12 @@ handle_event(_InstId, Attribute, _State, fired) ->
         src_arg = false
     },
     Action = {remove, fired},
-    {trigger, Trigger, Action, false}.
+    {trigger, Trigger, Action, false};
+
+handle_event(InstId, Attribute, AttrState, force_fire) ->
+    ok = stop_timer(AttrState),
+    lager:info("Forcing triggering of a timer ~p for fsm=~p", [Attribute, InstId]),
+    handle_event(InstId, Attribute, AttrState, fired).
 
 
 
@@ -612,21 +642,21 @@ set_timer(Name, After, Start, Event, Scope) ->
 %%
 %%  Starts a timer.
 %%
-start_timer(InstId, AttrId, #data{start = Start, delay = DelaySpec}) ->
+start_timer(_InstId, AttrId, #data{start = Start, delay = DelaySpec}) ->
     Now = os:timestamp(),
     Delay = duration_to_ms(DelaySpec),
     Left = Delay - (timer:now_diff(Now, Start) div 1000),
     if
         Left < 0 ->
-            {ok, EventMsg} = eproc_fsm_attr:make_event(?MODULE, InstId, AttrId, fired),
+            {ok, EventMsg} = eproc_fsm_attr:make_event({id, AttrId}, fired),
             self() ! EventMsg,
             {ok, #state{ref = undefined}};
         Left > ?MAX_ATOMIC_DELAY ->
-            {ok, EventMsg} = eproc_fsm_attr:make_event(?MODULE, InstId, AttrId, long_delay),
+            {ok, EventMsg} = eproc_fsm_attr:make_event({id, AttrId}, long_delay),
             TimerRef = erlang:send_after(?MAX_ATOMIC_DELAY, self(), EventMsg),
             {ok, #state{ref = TimerRef}};
         true ->
-            {ok, EventMsg} = eproc_fsm_attr:make_event(?MODULE, InstId, AttrId, fired),
+            {ok, EventMsg} = eproc_fsm_attr:make_event({id, AttrId}, fired),
             TimerRef = erlang:send_after(Left, self(), EventMsg),
             {ok, #state{ref = TimerRef}}
     end.

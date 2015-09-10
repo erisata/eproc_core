@@ -221,6 +221,11 @@ test_timers(_Config) ->
     %% Cancel timer explicitly.
     ok = eproc_fsm__sched:cancel(P),
     ok = receive tick -> bad after 1000 -> ok end,
+    %% Check manual firing of the timer.
+    ok = eproc_fsm__sched:set(P, {1, year}),
+    ok = receive tick -> bad after 1000 -> ok end,
+    ok = eproc_timer:force_fire(P, {name, main}),
+    ok = receive tick -> ok after 500 -> timeout end,
     %% Cleanup.
     ok = eproc_fsm__sched:stop(P),
     ok.

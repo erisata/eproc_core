@@ -165,22 +165,25 @@ event_test() ->
     meck:expect(Mod, handle_event, fun
         (100, #attribute{attr_id = 1}, state, my_event1) -> {handled, state1};
         (100, #attribute{attr_id = 1}, state, my_event2) -> {trigger, #trigger_spec{type = trg2}, {update, data2, state2}, true};
-        (100, #attribute{attr_id = 1}, state, my_event3) -> {trigger, #trigger_spec{type = trg3}, {remove, reason3}, true}
+        (100, #attribute{attr_id = 1}, state, my_event3) -> {trigger, #trigger_spec{type = trg3}, {remove, reason3}, true};
+        (100, #attribute{attr_id = 1}, state, my_event4) -> {handled, state4}
     end),
     {ok, State} = eproc_fsm_attr:init(100, [], 1, store, [
-        #attribute{attr_id = 1, module = Mod, scope = []}
+        #attribute{attr_id = 1, name = a, module = Mod, scope = []}
     ]),
     Event0 = any_message,
-    {ok, Event1} = eproc_fsm_attr:make_event(Mod, 100, 1, my_event1),
-    {ok, Event2} = eproc_fsm_attr:make_event(Mod, 100, 1, my_event2),
-    {ok, Event3} = eproc_fsm_attr:make_event(Mod, 100, 1, my_event3),
+    {ok, Event1} = eproc_fsm_attr:make_event({id, 1},   my_event1),
+    {ok, Event2} = eproc_fsm_attr:make_event({id, 1},   my_event2),
+    {ok, Event3} = eproc_fsm_attr:make_event({id, 1},   my_event3),
+    {ok, Event4} = eproc_fsm_attr:make_event({name, a}, my_event4),
     ?assertEqual(unknown, eproc_fsm_attr:event(100, Event0, State)),
     {handled, _State1}                                      = eproc_fsm_attr:event(100, Event1, State),
     {trigger, _State2, #trigger_spec{type = trg2}, Action2} = eproc_fsm_attr:event(100, Event2, State),
     {trigger, _State3, #trigger_spec{type = trg3}, Action3} = eproc_fsm_attr:event(100, Event3, State),
+    {handled, _State4}                                      = eproc_fsm_attr:event(100, Event4, State),
     ?assertEqual(#attr_action{attr_nr = 1, module = Mod, action = {update, [], data2},       needs_store = true}, Action2),
     ?assertEqual(#attr_action{attr_nr = 1, module = Mod, action = {remove, {user, reason3}}, needs_store = true}, Action3),
-    ?assertEqual(3, meck:num_calls(Mod, handle_event, '_')),
+    ?assertEqual(4, meck:num_calls(Mod, handle_event, '_')),
     ?assert(meck:validate([Mod])),
     meck:unload([Mod]).
 

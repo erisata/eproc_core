@@ -23,7 +23,7 @@
 -module(eproc_fsm_attr).
 -compile([{parse_transform, lager_transform}]).
 -export([describe/2]).
--export([action/4, action/3, task/3, make_event/4]).
+-export([action/4, action/3, task/3, make_event/2]).
 -export([apply_actions/4]).
 -export([init/5, transition_start/4, transition_end/4, event/3]).
 -include("eproc.hrl").
@@ -222,8 +222,8 @@ task(Module, Task, Opts) ->
 %%  Returns a message, that can be sent to the FSM process. It will be recognized
 %%  as a message sent to the particular attribute and its handler.
 %%
-make_event(_Module, InstId, AttrNr, Event) ->
-    {ok, {'eproc_fsm_attr$event', InstId, AttrNr, Event}}.
+make_event(AttrRef, Event) ->
+    {ok, {'eproc_fsm_attr$event', AttrRef, Event}}.
 
 
 
@@ -277,14 +277,35 @@ transition_end(InstId, TrnNr, NextSName, State = #state{last_nr = LastAttrNr, at
 
 
 %%
-%%  Invoked, when the FSM receives
+%%  Invoked, when the FSM receives an unknown event.
 %%
-event(InstId, {'eproc_fsm_attr$event', InstId, AttrNr, Event}, State = #state{attrs = AttrCtxs}) ->
-    case lists:keyfind(AttrNr, #attr_ctx.attr_nr, AttrCtxs) of
-        false ->
-            lager:debug("Ignoring attribute event with unknown id=~p for inst_id=~p", [AttrNr, InstId]),
+event(InstId, {'eproc_fsm_attr$event', AttrRef, Event}, State = #state{attrs = AttrCtxs}) ->
+    Found = case AttrRef of
+        {name, undefined} ->
+            lager:debug("Ignoring attribute event with name=undefined for inst_id=~p", [InstId]),
+            {error, not_found};
+        {name, Name} ->
+            case [ AC || AC = #attr_ctx{attr = #attribute{name = N}} <- AttrCtxs, N =:= Name ] of
+                [] ->
+                    lager:debug("Ignoring attribute event with unknown name=~p for inst_id=~p", [Name, InstId]),
+                    {error, not_found};
+                [AC] ->
+                    {ok, AC}
+            end;
+        {id, RefAttrNr} ->
+            case lists:keyfind(RefAttrNr, #attr_ctx.attr_nr, AttrCtxs) of
+                false ->
+                    lager:debug("Ignoring attribute event with unknown id=~p for inst_id=~p", [RefAttrNr, InstId]),
+                    {error, not_found};
+                 AC ->
+                    {ok, AC}
+            end
+    end,
+    case Found of
+        {error, _Reason} ->
+            % Already logged above.
             {handled, State};
-        AttrCtx ->
+        {ok, AttrCtx = #attr_ctx{attr_nr = AttrNr}} ->
             case process_event(InstId, AttrCtx, Event) of
                 {handled, NewAttrCtx} ->
                     NewAttrCtxs = lists:keyreplace(AttrNr, #attr_ctx.attr_nr, AttrCtxs, NewAttrCtx),
