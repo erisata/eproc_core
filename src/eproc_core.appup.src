@@ -1,12 +1,14 @@
 {git,
     [
-        {"1.2.0", [
-            {load_module, eproc_event_hub}
+        {"1.4.0", [
+            {load_module, eproc_fsm},
+            {load_module, eproc_timer}
         ]}
     ],
     [
-        {"1.2.0", [
-            {load_module, eproc_event_hub}
+        {"1.4.0", [
+            {load_module, eproc_fsm},
+            {load_module, eproc_timer}
         ]}
     ]
 }.
