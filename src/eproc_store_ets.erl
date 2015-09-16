@@ -45,6 +45,12 @@
     load_running/2,
     attr_task/3
 ]).
+-export([
+    attachment_save/5,
+    attachment_load/2,
+    attachment_delete/2,
+    attachment_cleanup/2
+]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -include("eproc.hrl").
 
@@ -55,6 +61,7 @@
 -define(KEY_TBL,  'eproc_store_ets$router_key').
 -define(TAG_TBL,  'eproc_store_ets$meta_tag').
 -define(CNT_TBL,  'eproc_store_ets$counter').
+-define(ATT_TBL,  'eproc_store_ets$attachments').
 
 -define(NODE_REF, main).
 
@@ -514,6 +521,35 @@ get_message(_StoreArgs, MsgId, _Query) ->
 %%
 get_node(_StoreArgs) ->
     {ok, ?NODE_REF}.
+
+
+%%
+%%
+%%
+attachment_save(_StoreArgs, Key, Value, Owner, _Opts) ->
+    ok. % ok | {error, Reason :: term()}.
+
+
+%%
+%%
+%%
+attachment_load(_StoreArgs, Key) ->
+    {ok, undefined}.  % {ok, Value :: term()} | {error, Reason :: term()}.
+
+
+%%
+%%
+%%
+attachment_delete(_StoreArgs, Key) ->
+    ok. % ok | {error, Reason :: term()}.
+
+
+%%
+%%
+%%
+attachment_cleanup(_StoreArgs, Owner) ->
+    ok.
+
 
 
 

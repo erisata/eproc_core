@@ -72,6 +72,12 @@
     member_in_all/2,
     intersect_lists/1
 ]).
+-export([
+    attachment_save/5,
+    attachment_load/2,
+    attachment_delete/2,
+    attachment_cleanup/2
+]).
 -export_type([ref/0]).
 -include("eproc.hrl").
 
@@ -389,6 +395,53 @@
     ) ->
         {ok, node_ref()} |
         {error, Reason :: term()}.
+
+
+%%
+%%  This callback should save attachment using Key as key and Value as value.
+%%  If Owner is provided, the attacment should be associated with the fsm and
+%%  deleted, when fsm terminates. If Owner is undefined, attachment should be
+%%  stored until it is explicitelly deleted. No options can currently be provided.
+%%
+-callback attachment_save(
+        StoreArgs   :: term(),
+        Key         :: term(),
+        Value       :: term(),
+        Owner       :: fsm_ref() | undefined,
+        Opts        :: proplists:proplist()
+    ) ->
+        ok | {error, Reason :: term()}.
+
+
+%%
+%%  This callback should return attachment value associated with given Key.
+%%
+-callback attachment_load(
+        StoreArgs   :: term(),
+        Key         :: term()
+    ) ->
+        {ok, Value :: term()} |
+        {error, Reason :: term()}.
+
+
+%%
+%%  This callback should delete attachment value associated with given Key.
+%%
+-callback attachment_delete(
+        StoreArgs   :: term(),
+        Key         :: term()
+    ) ->
+        ok | {error, Reason :: term()}.
+
+
+%%
+%%  This callback should delete all attachments associated with given fsm.
+%%
+-callback attachment_cleanup(
+        StoreArgs   :: term(),
+        Owner       :: fsm_ref()
+    ) ->
+        ok.
 
 
 
@@ -1149,6 +1202,75 @@ message_peer_filter_to_guard({any, EventSrc}) ->
         message_peer_filter_to_guard({sender, EventSrc}),
         message_peer_filter_to_guard({receiver, EventSrc})
     }.
+
+
+%% =============================================================================
+%%  Attachment related functions
+%% =============================================================================
+
+%%
+%%  This function saves attachment using Key as key and Value as value.
+%%  If Owner is provided, the attacment is associated with the fsm and  deleted,
+%%  when fsm terminates. If Owner is undefined, attachment is stored until it is
+%%  explicitelly deleted with attachment_delete/2 (NOTE: a possible source of memory
+%%  leak). No options can currently be provided.
+%%
+-spec attachment_save(
+        Store   :: store_ref(),
+        Key     :: term(),
+        Value   :: term(),
+        Owner   :: fsm_ref() | undefined,
+        Opts    :: proplists:proplist()
+    ) ->
+        ok | {error, Reason :: term()}.
+
+attachment_save(Store, Key, Value, Owner, Opts) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
+    StoreMod:attachment_save(StoreArgs, Key, Value, Owner, Opts).
+
+
+%%
+%%  This function returns attachment value associated with given Key.
+%%
+-spec attachment_load(
+        Store   :: store_ref(),
+        Key     :: term()
+    ) ->
+        {ok, Value :: term()} |
+        {error, Reason :: term()}.
+
+attachment_load(Store, Key) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
+    StoreMod:attachment_load(StoreArgs, Key).
+
+
+%%
+%%  This function deletes attachment value associated with given Key.
+%%
+-spec attachment_delete(
+        Store   :: store_ref(),
+        Key     :: term()
+    ) ->
+        ok | {error, Reason :: term()}.
+
+attachment_delete(Store, Key) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
+    StoreMod:attachment_delete(StoreArgs, Key).
+
+
+%%
+%%  This function deletes all attachments associated with given fsm.
+%%
+-spec attachment_cleanup(
+        Store   :: store_ref(),
+        Owner   :: fsm_ref()
+    ) ->
+        ok.
+
+attachment_cleanup(Store, Key) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
+    StoreMod:attachment_cleanup(StoreArgs, Key).
+
 
 
 %% =============================================================================
