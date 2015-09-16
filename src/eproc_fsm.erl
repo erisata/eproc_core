@@ -159,6 +159,7 @@
     send_event/3, send_event/2,
     self_send_event/2, self_send_event/1,
     sync_send_event/3, sync_send_event/2,
+    trigger_event/4,
     kill/2, suspend/2, resume/2, update/5,
     is_online/2, is_online/1
 ]).
@@ -1370,6 +1371,23 @@ sync_send_event(FsmRef, Event, Options) ->
 
 sync_send_event(FsmRef, Event) ->
     sync_send_event(FsmRef, Event, []).
+
+
+%%
+%%  TODO: Docs
+%%  TODO: Support sync events.
+%%
+trigger_event(FsmRef, Type, Event, Options) ->
+    {ok, EventSrc}     = resolve_event_src(Options),
+    {ok, EventDst}     = resolve_event_dst(FsmRef),
+    {ok, EventTypeFun} = resolve_event_type_fun(Options),
+    {ok, ResolvedFsmRef} = resolve_fsm_ref(FsmRef, Options),
+    SendFun = fun (SentMsgCId) ->
+        CastMsg = {'eproc_fsm$send_event', Event, Type, EventTypeFun, EventSrc, SentMsgCId},
+        ok = gen_server:cast(ResolvedFsmRef, CastMsg)
+    end,
+    {ok, _SentMsgCId} = registered_send(EventSrc, EventDst, EventTypeFun, Event, SendFun),
+    ok.
 
 
 %%

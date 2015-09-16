@@ -26,7 +26,7 @@
 -behaviour(eproc_fsm_attr).
 -compile([{parse_transform, lager_transform}]).
 -export([set/4, set/3, set/2, cancel/1]).
--export([force_fire/2]).
+-export([trigger/2]).
 -export([
     duration_to_ms/1,
     duration_format/2,
@@ -152,17 +152,17 @@ cancel(Name) ->
 %%  for use in unit tests as well as for manual actions from the process
 %%  web console.
 %%
--spec force_fire(
+-spec trigger(
         FsmRef  :: fsm_ref(),
         AttrRef :: {id, integer()} | {name, term()}
     ) ->
         ok |
         {error, Reason :: term()}.
 
-force_fire(FsmRef, AttrRef) ->
+trigger(FsmRef, AttrRef) ->
     case eproc_registry:whereis_fsm(undefined, FsmRef) of
         FsmPid when is_pid(FsmPid) ->
-            {ok, EventMsg} = eproc_fsm_attr:make_event(AttrRef, force_fire),
+            {ok, EventMsg} = eproc_fsm_attr:make_event(AttrRef, trigger),
             FsmPid ! EventMsg,
             ok;
         undefined ->
@@ -616,7 +616,7 @@ handle_event(_InstId, Attribute, _State, fired) ->
     Action = {remove, fired},
     {trigger, Trigger, Action, false};
 
-handle_event(InstId, Attribute, AttrState, force_fire) ->
+handle_event(InstId, Attribute, AttrState, trigger) ->
     ok = stop_timer(AttrState),
     lager:info("Forcing triggering of a timer ~p for fsm=~p", [Attribute, InstId]),
     handle_event(InstId, Attribute, AttrState, fired).

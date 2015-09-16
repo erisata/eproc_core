@@ -224,7 +224,12 @@ test_timers(_Config) ->
     %% Check manual firing of the timer.
     ok = eproc_fsm__sched:set(P, {1, year}),
     ok = receive tick -> bad after 1000 -> ok end,
-    ok = eproc_timer:force_fire(P, {name, main}),
+    ok = eproc_timer:trigger(P, {name, main}),
+    ok = receive tick -> ok after 500 -> timeout end,
+    %% Check manual triggering of the timer event.
+    ok = eproc_fsm__sched:set(P, {1, year}),
+    ok = receive tick -> bad after 1000 -> ok end,
+    ok = eproc_fsm:trigger_event(P, timer, tick, []),
     ok = receive tick -> ok after 500 -> timeout end,
     %% Cleanup.
     ok = eproc_fsm__sched:stop(P),
