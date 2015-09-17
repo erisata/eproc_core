@@ -579,6 +579,9 @@ attachment_delete(_StoreArgs, Key) ->
     case ets:lookup(?ATT_TBL, Key) of
         [] ->
             ok;
+        [{Key, _Value, undefined}] ->
+            true = ets:delete(?ATT_TBL, Key),
+            ok;
         [{Key, _Value, Owner}] ->
             true = ets:delete_object(?ITOA_TBL, {Owner, Key}),
             true = ets:delete(?ATT_TBL, Key),
