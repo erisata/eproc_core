@@ -34,7 +34,9 @@
     eproc_store_core_test_get_state/1,
     eproc_store_core_test_attrs/1,
     eproc_store_router_test_attrs/1,
-    eproc_store_meta_test_attrs/1
+    eproc_store_meta_test_attrs/1,
+    eproc_store_attachment_test_instid/1,
+    eproc_store_attachment_test_name/1
 ]).
 -include_lib("common_test/include/ct.hrl").
 -include_lib("hamcrest/include/hamcrest.hrl").
@@ -62,6 +64,11 @@ testcases(router) -> [
 
 testcases(meta) -> [
     eproc_store_meta_test_attrs
+    ];
+
+testcases(attachment) -> [
+    eproc_store_attachment_test_instid,
+    eproc_store_attachment_test_name
     ].
 
 
@@ -1351,6 +1358,112 @@ eproc_store_meta_test_attrs(Config) ->
     %% Check, if taks are available after instance is terminated.
     ?assertThat(eproc_store:set_instance_killed(Store, {inst, IID1}, #user_action{}),           is({ok, IID1})),
     ?assertThat(eproc_meta:get_instances({tags, [{Tag1, undefined}, {Tag3, undefined}]}, Opts), is({ok, [IID1]})),
+    ok.
+
+
+%% =============================================================================
+%%  Testcases: Attachments
+%% =============================================================================
+
+%%
+%%  Check if attachments handling works. Only InstIds are used to identify owners.
+%%
+eproc_store_attachment_test_instid(Config) ->
+    % Initialise
+    Store = store(Config),
+    {ok, IID1} = eproc_store:add_instance(Store, inst_value()),
+    {ok, IID2} = eproc_store:add_instance(Store, inst_value()),
+    Inst1 = {inst, IID1},
+    Inst2 = {inst, IID2},
+    Key1 = key1,
+    Key2 = key2,
+    Key3 = {[complicated, long], key, 3, res},
+    Key4 = key4,
+    Value1  = value1,
+    Value1o = value1_other,
+    Value2  = {complicated, [value], 2},
+    Value3  = value3,
+    Value4  = value4,
+    % Test cases
+    ?assertThat(eproc_store:attachment_load(Store, Key1), is({error, not_found})),
+    ?assertThat(eproc_store:attachment_save(Store, Key1, Value1, Inst1, [{overwrite, true}]), is(ok)),
+    ?assertThat(eproc_store:attachment_save(Store, Key2, Value2, Inst2, [{overwrite, false}]), is(ok)),
+    ?assertThat(eproc_store:attachment_save(Store, Key3, Value3, Inst1, []), is(ok)),
+    ?assertThat(eproc_store:attachment_save(Store, Key4, Value4, undefined, []), is(ok)),
+    ?assertThat(eproc_store:attachment_load(Store, Key1), is({ok, Value1})),
+    ?assertThat(eproc_store:attachment_load(Store, Key2), is({ok, Value2})),
+    ?assertThat(eproc_store:attachment_load(Store, Key3), is({ok, Value3})),
+    ?assertThat(eproc_store:attachment_load(Store, Key4), is({ok, Value4})),
+    ?assertThat(eproc_store:attachment_delete(Store, Key1), is(ok)),
+    ?assertThat(eproc_store:attachment_delete(Store, Key2), is(ok)),
+    ?assertThat(eproc_store:attachment_load(Store, Key1), is({error, not_found})),
+    ?assertThat(eproc_store:attachment_load(Store, Key2), is({error, not_found})),
+    ?assertThat(eproc_store:attachment_load(Store, Key3), is({ok, Value3})),
+    ?assertThat(eproc_store:attachment_load(Store, Key4), is({ok, Value4})),
+    ?assertThat(eproc_store:attachment_save(Store, Key1, Value1, Inst1, []), is(ok)),
+    ?assertThat(eproc_store:attachment_save(Store, Key2, Value2, Inst2, []), is(ok)),
+    ?assertThat(eproc_store:attachment_load(Store, Key1), is({ok, Value1})),
+    ?assertThat(eproc_store:attachment_load(Store, Key2), is({ok, Value2})),
+    ?assertThat(eproc_store:attachment_save(Store, Key1, Value1o, Inst2, []), is({error, duplicate})),
+    ?assertThat(eproc_store:attachment_load(Store, Key1), is({ok, Value1})),
+    ?assertThat(eproc_store:attachment_save(Store, Key1, Value1o, Inst2, [{overwrite, false}]), is({error, duplicate})),
+    ?assertThat(eproc_store:attachment_load(Store, Key1), is({ok, Value1})),
+    ?assertThat(eproc_store:attachment_save(Store, Key1, Value1o, Inst2, [{overwrite, true}]), is(ok)),
+    ?assertThat(eproc_store:attachment_load(Store, Key1), is({ok, Value1o})),
+    ?assertThat(eproc_store:attachment_load(Store, Key2), is({ok, Value2})),
+    ?assertThat(eproc_store:attachment_load(Store, Key3), is({ok, Value3})),
+    ?assertThat(eproc_store:attachment_load(Store, Key4), is({ok, Value4})),
+    ?assertThat(eproc_store:attachment_cleanup(Store, Inst2), is(ok)),
+    ?assertThat(eproc_store:attachment_load(Store, Key1), is({error, not_found})),
+    ?assertThat(eproc_store:attachment_load(Store, Key2), is({error, not_found})),
+    ?assertThat(eproc_store:attachment_load(Store, Key3), is({ok, Value3})),
+    ?assertThat(eproc_store:attachment_load(Store, Key4), is({ok, Value4})),
+    ?assertThat(eproc_store:attachment_cleanup(Store, Inst1), is(ok)),
+    ?assertThat(eproc_store:attachment_load(Store, Key3), is({error, not_found})),
+    ?assertThat(eproc_store:attachment_load(Store, Key4), is({ok, Value4})),
+    ok.
+
+
+%%
+%%  Check if owners can be referenced by name as well as by inst id.
+%%
+eproc_store_attachment_test_name(Config) ->
+    % Initialise
+    Store = store(Config),
+    Inst = inst_value(),
+    Name1 = name1,
+    Name2 = name2,
+    Name3 = name3,
+    {ok, _IID1} = eproc_store:add_instance(Store, Inst#instance{name = Name1}),
+    {ok,  IID2} = eproc_store:add_instance(Store, Inst#instance{name = Name2}),
+    {ok,  IID3} = eproc_store:add_instance(Store, Inst#instance{name = Name3}),
+    Key1 = key1,
+    Key2 = key2,
+    Key3 = key3,
+    Value1  = value1,
+    Value2  = value3,
+    Value3  = value3,
+    % Test cases
+    ?assertThat(eproc_store:attachment_save(Store, Key1, Value1, {name, Name1}, []), is(ok)),
+    ?assertThat(eproc_store:attachment_save(Store, Key2, Value2, {name, Name2}, []), is(ok)),
+    ?assertThat(eproc_store:attachment_save(Store, Key3, Value3, {inst, IID3}, []), is(ok)),
+    ?assertThat(eproc_store:attachment_load(Store, Key1), is({ok, Value1})),
+    ?assertThat(eproc_store:attachment_load(Store, Key2), is({ok, Value2})),
+    ?assertThat(eproc_store:attachment_load(Store, Key3), is({ok, Value3})),
+    ?assertThat(eproc_store:attachment_cleanup(Store, {name, Name1}), is(ok)),
+    ?assertThat(eproc_store:attachment_load(Store, Key1), is({error, not_found})),
+    ?assertThat(eproc_store:attachment_load(Store, Key2), is({ok, Value2})),
+    ?assertThat(eproc_store:attachment_load(Store, Key3), is({ok, Value3})),
+    ?assertThat(eproc_store:attachment_cleanup(Store, {inst, IID2}), is(ok)),
+    ?assertThat(eproc_store:attachment_load(Store, Key2), is({error, not_found})),
+    ?assertThat(eproc_store:attachment_load(Store, Key3), is({ok, Value3})),
+    ?assertThat(eproc_store:attachment_cleanup(Store, {name, Name3}), is(ok)),
+    ?assertThat(eproc_store:attachment_load(Store, Key3), is({error, not_found})),
+    % Bad cases
+    ?assertThat(eproc_store:attachment_save(Store, Key1, Value1, {name, not_existing_name}, []), is(ok)),
+    ?assertThat(eproc_store:attachment_load(Store, Key1), is({ok, Value1})),
+    {error, _} = eproc_store:attachment_cleanup(Store, {name, not_existing_name}),
+    ?assertThat(eproc_store:attachment_delete(Store, Key1), is(ok)),
     ok.
 
 

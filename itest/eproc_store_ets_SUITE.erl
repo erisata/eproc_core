@@ -30,7 +30,9 @@
     eproc_store_core_test_get_state/1,
     eproc_store_core_test_attrs/1,
     eproc_store_router_test_attrs/1,
-    eproc_store_meta_test_attrs/1
+    eproc_store_meta_test_attrs/1,
+    eproc_store_attachment_test_instid/1,
+    eproc_store_attachment_test_name/1
 ]).
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eproc_core/include/eproc.hrl").
@@ -42,7 +44,8 @@ all() ->
     lists:append([
         eproc_store_tck:testcases(core),
         eproc_store_tck:testcases(router),
-        eproc_store_tck:testcases(meta)
+        eproc_store_tck:testcases(meta),
+        eproc_store_tck:testcases(attachment)
     ]).
 
 %%
@@ -79,5 +82,7 @@ end_per_suite(Config) ->
 ?MAP_TCK_TEST(eproc_store_core_test_attrs).
 ?MAP_TCK_TEST(eproc_store_router_test_attrs).
 ?MAP_TCK_TEST(eproc_store_meta_test_attrs).
+?MAP_TCK_TEST(eproc_store_attachment_test_instid).
+?MAP_TCK_TEST(eproc_store_attachment_test_name).
 
 
