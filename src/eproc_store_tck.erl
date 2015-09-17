@@ -1460,10 +1460,9 @@ eproc_store_attachment_test_name(Config) ->
     ?assertThat(eproc_store:attachment_cleanup(Store, {name, Name3}), is(ok)),
     ?assertThat(eproc_store:attachment_load(Store, Key3), is({error, not_found})),
     % Bad cases
-    ?assertThat(eproc_store:attachment_save(Store, Key1, Value1, {name, not_existing_name}, []), is(ok)),
-    ?assertThat(eproc_store:attachment_load(Store, Key1), is({ok, Value1})),
+    {error, _} = eproc_store:attachment_save(Store, Key1, Value1, {name, not_existing_name}, []),
+    ?assertThat(eproc_store:attachment_load(Store, Key1), is({error, not_found})),
     {error, _} = eproc_store:attachment_cleanup(Store, {name, not_existing_name}),
-    ?assertThat(eproc_store:attachment_delete(Store, Key1), is(ok)),
     ok.
 
 

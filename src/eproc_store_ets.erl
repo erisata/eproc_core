@@ -531,19 +531,16 @@ get_node(_StoreArgs) ->
 %%
 attachment_save(_StoreArgs, Key, Value, Owner, Opts) ->
     Overwrite = proplists:get_value(overwrite, Opts, false),
-    OwnerId = case Owner of
-        undefined -> undefined;
-        _         -> case resolve_inst_id(Owner) of
-            {ok, OId}        -> OId;
-            {error, _Reason} -> undefined
-        end
+    OwnerResolved = case Owner of
+        undefined -> {ok, undefined};
+        _         -> resolve_inst_id(Owner)
     end,
     InsertOwnerKeyFun = fun
         (undefined, _K) -> true;
         (OId,        K) -> ets:insert(?ITOA_TBL, {OId, K})
     end,
-    case Overwrite of
-        true ->
+    case {OwnerResolved, Overwrite} of
+        {{ok, OwnerId}, true} ->
             true = case ets:lookup(?ATT_TBL, Key) of
                 []                            -> true;
                 [{Key, _OldValue, undefined}] -> true;
@@ -552,14 +549,16 @@ attachment_save(_StoreArgs, Key, Value, Owner, Opts) ->
             true = ets:insert(?ATT_TBL, {Key, Value, OwnerId}),
             true = InsertOwnerKeyFun(OwnerId, Key),
             ok;
-        false ->
+        {{ok, OwnerId}, false} ->
             case ets:insert_new(?ATT_TBL, {Key, Value, OwnerId}) of
                 true ->
                     true = InsertOwnerKeyFun(OwnerId, Key),
                     ok;
                 false ->
                     {error, duplicate}
-            end
+            end;
+        {{error, Reason}, _} ->
+            {error, Reason}
     end.
 
 
