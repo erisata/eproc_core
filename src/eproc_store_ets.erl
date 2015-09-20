@@ -47,7 +47,7 @@
 ]).
 -export([
     attachment_save/5,
-    attachment_load/2,
+    attachment_read/2,
     attachment_delete/2,
     attachment_cleanup/2
 ]).
@@ -565,7 +565,7 @@ attachment_save(_StoreArgs, Key, Value, Owner, Opts) ->
 %%
 %%
 %%
-attachment_load(_StoreArgs, Key) ->
+attachment_read(_StoreArgs, Key) ->
     case ets:lookup(?ATT_TBL, Key) of
         []                     -> {error, not_found};
         [{Key, Value, _Owner}] -> {ok, Value}

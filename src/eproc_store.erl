@@ -74,7 +74,7 @@
 ]).
 -export([
     attachment_save/5,
-    attachment_load/2,
+    attachment_read/2,
     attachment_delete/2,
     attachment_cleanup/2
 ]).
@@ -419,7 +419,7 @@
 %%  This callback should return attachment value associated with given Key.
 %%  If Key is not registered, {error, not_found} should be returned.
 %%
--callback attachment_load(
+-callback attachment_read(
         StoreArgs   :: term(),
         Key         :: term()
     ) ->
@@ -1232,7 +1232,7 @@ attachment_save(Store, Key, Value, Owner, Opts) ->
 %%
 %%  See eproc_attachment:load/2
 %%
--spec attachment_load(
+-spec attachment_read(
         Store   :: store_ref(),
         Key     :: term()
     ) ->
@@ -1240,9 +1240,9 @@ attachment_save(Store, Key, Value, Owner, Opts) ->
         {error, not_found} |
         {error, Reason :: term()}.
 
-attachment_load(Store, Key) ->
+attachment_read(Store, Key) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:attachment_load(StoreArgs, Key).
+    StoreMod:attachment_read(StoreArgs, Key).
 
 
 %%

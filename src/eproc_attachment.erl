@@ -14,27 +14,38 @@
 %| limitations under the License.
 %\--------------------------------------------------------------------
 
-%%
-%%  Interface for storing fsm attachments. Attachment is a key value pair (possibly)
-%%  belonging to some fsm.
-%%
+%%%
+%%% An attachment is a large chunk of data, that is manipulated by the FSM as
+%%% a single value (unstructured, at least from the viewpoint of the FSM).
+%%%
+%%% In order to avoid duplication of such data in the store, it should
+%%% not be stored in the FSM state or its messages. I.e. the attachment
+%%% should not be passed as a value to the FSM. A typical solution for such
+%%% problem is to store the value of the attachment and to pass around only
+%%% a reference to it.
+%%%
+%%% This module provides an interface for storing fsm attachments. In this
+%%% module, an attachment is refereced by a key, and can be associated with
+%%% some FSM.
+%%%
 -module(eproc_attachment).
 -compile([{parse_transform, lager_transform}]).
--export([save/5, load/2, delete/2, cleanup/2]).
+-export([save/5, read/2, delete/2, cleanup/2]).
 -include("eproc.hrl").
 
 
-%% =============================================================================
-%%  Public API.
-%% =============================================================================
+%%% ============================================================================
+%%% Public API.
+%%% ============================================================================
 
 %%
 %%  This function saves attachment using Key as key and Value as value.
 %%  If Owner is provided, the attacment is associated with the fsm and therefore
 %%  may be deleted some time after fsm terminates or explicitelly by calling cleanup/2.
 %%  If Owner is undefined, attachment is stored until it is explicitelly deleted
-%%  using delete/2. (NOTE: a possible source of memory leak). A single option
-%%  {overwrite, boolean()} is handled. Default is {overwrite, false}.
+%%  using delete/2. (NOTE: a possible source of memory leak).
+%%
+%%  A single option {overwrite, boolean()} is handled. Default is {overwrite, false}.
 %%  When overwrite is false and the attachment with key Key is already registered,
 %%  the function responds with {error, duplicate}. If however overwrite is true,
 %%  then previous value and owner are reset with Value and Owner.
@@ -46,7 +57,9 @@
         Owner :: fsm_ref() | undefined,
         Opts  :: proplists:proplist()
     ) ->
-        ok | {error, duplicate} | {error, Reason :: term()}.
+        ok |
+        {error, duplicate} |
+        {error, Reason :: term()}.
 
 save(Store, Key, Value, Owner, Opts) ->
     eproc_store:attachment_save(Store, Key, Value, Owner, Opts).
@@ -56,7 +69,7 @@ save(Store, Key, Value, Owner, Opts) ->
 %%  This function returns attachment value associated with given Key.
 %%  If Key is not registered, {error, not_found} is returned.
 %%
--spec load(
+-spec read(
         Store :: store_ref(),
         Key   :: term()
     ) ->
@@ -64,8 +77,8 @@ save(Store, Key, Value, Owner, Opts) ->
         {error, not_found} |
         {error, Reason :: term()}.
 
-load(Store, Key) ->
-    eproc_store:attachment_load(Store, Key).
+read(Store, Key) ->
+    eproc_store:attachment_read(Store, Key).
 
 
 %%
