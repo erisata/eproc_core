@@ -45,6 +45,12 @@
     attr_task/3
 ]).
 -export([
+    attachment_save/5,
+    attachment_read/2,
+    attachment_delete/2,
+    attachment_cleanup/2
+]).
+-export([
     is_instance_terminated/1,
     apply_transition/3,
     make_resume_attempt/3,
@@ -71,12 +77,6 @@
     make_list/1,
     member_in_all/2,
     intersect_lists/1
-]).
--export([
-    attachment_save/5,
-    attachment_read/2,
-    attachment_delete/2,
-    attachment_cleanup/2
 ]).
 -export_type([ref/0]).
 -include("eproc.hrl").
@@ -412,7 +412,9 @@
         Owner       :: fsm_ref() | undefined,
         Opts        :: proplists:proplist()
     ) ->
-        ok | {error, duplicate} | {error, Reason :: term()}.
+        ok |
+        {error, duplicate} |
+        {error, Reason :: term()}.
 
 
 %%
@@ -445,7 +447,8 @@
         StoreArgs   :: term(),
         Owner       :: fsm_ref()
     ) ->
-        ok | {error, Reason :: term()}.
+        ok |
+        {error, Reason :: term()}.
 
 
 
@@ -1213,7 +1216,7 @@ message_peer_filter_to_guard({any, EventSrc}) ->
 %% =============================================================================
 
 %%
-%%  See eproc_attachment:save/5
+%%  See `eproc_attachment:save/5`.
 %%
 -spec attachment_save(
         Store   :: store_ref(),
@@ -1222,7 +1225,9 @@ message_peer_filter_to_guard({any, EventSrc}) ->
         Owner   :: fsm_ref() | undefined,
         Opts    :: proplists:proplist()
     ) ->
-        ok | {error, duplicate} | {error, Reason :: term()}.
+        ok |
+        {error, duplicate} |
+        {error, Reason :: term()}.
 
 attachment_save(Store, Key, Value, Owner, Opts) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
@@ -1230,7 +1235,7 @@ attachment_save(Store, Key, Value, Owner, Opts) ->
 
 
 %%
-%%  See eproc_attachment:load/2
+%%  See `eproc_attachment:read/2`.
 %%
 -spec attachment_read(
         Store   :: store_ref(),
@@ -1246,7 +1251,7 @@ attachment_read(Store, Key) ->
 
 
 %%
-%%  See eproc_attachment:delete/2
+%%  See `eproc_attachment:delete/2`.
 %%
 -spec attachment_delete(
         Store   :: store_ref(),
@@ -1260,13 +1265,14 @@ attachment_delete(Store, Key) ->
 
 
 %%
-%%  See eproc_attachment:cleanup/2
+%%  See `eproc_attachment:cleanup/2`.
 %%
 -spec attachment_cleanup(
         Store   :: store_ref(),
         Owner   :: fsm_ref()
     ) ->
-        ok | {error, Reason :: term()}.
+        ok |
+        {error, Reason :: term()}.
 
 attachment_cleanup(Store, Key) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),

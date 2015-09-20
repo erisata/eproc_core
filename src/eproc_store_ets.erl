@@ -61,8 +61,8 @@
 -define(KEY_TBL,  'eproc_store_ets$router_key').
 -define(TAG_TBL,  'eproc_store_ets$meta_tag').
 -define(CNT_TBL,  'eproc_store_ets$counter').
--define(ATT_TBL,  'eproc_store_ets$attachments').
--define(ITOA_TBL, 'eproc_store_ets$inst_to_attachments').
+-define(ATT_TBL,  'eproc_store_ets$attachment').
+-define(ATI_TBL,  'eproc_store_ets$att_inst').
 
 -define(NODE_REF, main).
 
@@ -122,7 +122,7 @@ init({}) ->
     ets:new(?TAG_TBL,  [bag, public, named_table, {keypos, #meta_tag.tag},       WC]),
     ets:new(?CNT_TBL,  [set, public, named_table, {keypos, 1}]),
     ets:new(?ATT_TBL,  [set, public, named_table, {keypos, 1},                   WC]),
-    ets:new(?ITOA_TBL, [bag, public, named_table, {keypos, 1},                   WC]),
+    ets:new(?ATI_TBL,  [bag, public, named_table, {keypos, 1},                   WC]),
     ets:insert(?CNT_TBL, {inst, 0}),
     State = undefined,
     {ok, State}.
@@ -537,14 +537,14 @@ attachment_save(_StoreArgs, Key, Value, Owner, Opts) ->
     end,
     InsertOwnerKeyFun = fun
         (undefined, _K) -> true;
-        (OId,        K) -> ets:insert(?ITOA_TBL, {OId, K})
+        (OwnerIID,   K) -> ets:insert(?ATI_TBL, {OwnerIID, K})
     end,
     case {OwnerResolved, Overwrite} of
         {{ok, OwnerId}, true} ->
             true = case ets:lookup(?ATT_TBL, Key) of
                 []                            -> true;
                 [{Key, _OldValue, undefined}] -> true;
-                [{Key, _OldValue, OldOwner}]  -> ets:delete_object(?ITOA_TBL, {OldOwner, Key})
+                [{Key, _OldValue, OldOwner}]  -> ets:delete_object(?ATI_TBL, {OldOwner, Key})
             end,
             true = ets:insert(?ATT_TBL, {Key, Value, OwnerId}),
             true = InsertOwnerKeyFun(OwnerId, Key),
@@ -583,7 +583,7 @@ attachment_delete(_StoreArgs, Key) ->
             true = ets:delete(?ATT_TBL, Key),
             ok;
         [{Key, _Value, Owner}] ->
-            true = ets:delete_object(?ITOA_TBL, {Owner, Key}),
+            true = ets:delete_object(?ATI_TBL, {Owner, Key}),
             true = ets:delete(?ATT_TBL, Key),
             ok
     end.
@@ -595,7 +595,7 @@ attachment_delete(_StoreArgs, Key) ->
 attachment_cleanup(_StoreArgs, Owner) ->
     case resolve_inst_id(Owner) of
         {ok, OwnerId} ->
-            Objects = ets:take(?ITOA_TBL, OwnerId),
+            Objects = ets:take(?ATI_TBL, OwnerId),
             lists:foreach(fun({_, Key}) ->
                 true = ets:delete(?ATT_TBL, Key)
             end, Objects),
