@@ -45,6 +45,12 @@
     load_running/2,
     attr_task/3
 ]).
+-export([
+    attachment_save/5,
+    attachment_read/2,
+    attachment_delete/2,
+    attachment_cleanup/2
+]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -include("eproc.hrl").
 
@@ -55,6 +61,8 @@
 -define(KEY_TBL,  'eproc_store_ets$router_key').
 -define(TAG_TBL,  'eproc_store_ets$meta_tag').
 -define(CNT_TBL,  'eproc_store_ets$counter').
+-define(ATT_TBL,  'eproc_store_ets$attachment').
+-define(ATI_TBL,  'eproc_store_ets$att_inst').
 
 -define(NODE_REF, main).
 
@@ -113,6 +121,8 @@ init({}) ->
     ets:new(?KEY_TBL,  [bag, public, named_table, {keypos, #router_key.key},     WC]),
     ets:new(?TAG_TBL,  [bag, public, named_table, {keypos, #meta_tag.tag},       WC]),
     ets:new(?CNT_TBL,  [set, public, named_table, {keypos, 1}]),
+    ets:new(?ATT_TBL,  [set, public, named_table, {keypos, 1},                   WC]),
+    ets:new(?ATI_TBL,  [bag, public, named_table, {keypos, 1},                   WC]),
     ets:insert(?CNT_TBL, {inst, 0}),
     State = undefined,
     {ok, State}.
@@ -514,6 +524,85 @@ get_message(_StoreArgs, MsgId, _Query) ->
 %%
 get_node(_StoreArgs) ->
     {ok, ?NODE_REF}.
+
+
+%%
+%%
+%%
+attachment_save(_StoreArgs, Key, Value, Owner, Opts) ->
+    Overwrite = proplists:get_value(overwrite, Opts, false),
+    OwnerResolved = case Owner of
+        undefined -> {ok, undefined};
+        _         -> resolve_inst_id(Owner)
+    end,
+    InsertOwnerKeyFun = fun
+        (undefined, _K) -> true;
+        (OwnerIID,   K) -> ets:insert(?ATI_TBL, {OwnerIID, K})
+    end,
+    case {OwnerResolved, Overwrite} of
+        {{ok, OwnerId}, true} ->
+            true = case ets:lookup(?ATT_TBL, Key) of
+                []                            -> true;
+                [{Key, _OldValue, undefined}] -> true;
+                [{Key, _OldValue, OldOwner}]  -> ets:delete_object(?ATI_TBL, {OldOwner, Key})
+            end,
+            true = ets:insert(?ATT_TBL, {Key, Value, OwnerId}),
+            true = InsertOwnerKeyFun(OwnerId, Key),
+            ok;
+        {{ok, OwnerId}, false} ->
+            case ets:insert_new(?ATT_TBL, {Key, Value, OwnerId}) of
+                true ->
+                    true = InsertOwnerKeyFun(OwnerId, Key),
+                    ok;
+                false ->
+                    {error, duplicate}
+            end;
+        {{error, Reason}, _} ->
+            {error, Reason}
+    end.
+
+
+%%
+%%
+%%
+attachment_read(_StoreArgs, Key) ->
+    case ets:lookup(?ATT_TBL, Key) of
+        []                     -> {error, not_found};
+        [{Key, Value, _Owner}] -> {ok, Value}
+    end.
+
+
+%%
+%%
+%%
+attachment_delete(_StoreArgs, Key) ->
+    case ets:lookup(?ATT_TBL, Key) of
+        [] ->
+            ok;
+        [{Key, _Value, undefined}] ->
+            true = ets:delete(?ATT_TBL, Key),
+            ok;
+        [{Key, _Value, Owner}] ->
+            true = ets:delete_object(?ATI_TBL, {Owner, Key}),
+            true = ets:delete(?ATT_TBL, Key),
+            ok
+    end.
+
+
+%%
+%%
+%%
+attachment_cleanup(_StoreArgs, Owner) ->
+    case resolve_inst_id(Owner) of
+        {ok, OwnerId} ->
+            Objects = ets:take(?ATI_TBL, OwnerId),
+            lists:foreach(fun({_, Key}) ->
+                true = ets:delete(?ATT_TBL, Key)
+            end, Objects),
+            ok;
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 
 

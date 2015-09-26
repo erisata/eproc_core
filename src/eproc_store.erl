@@ -45,6 +45,12 @@
     attr_task/3
 ]).
 -export([
+    attachment_save/5,
+    attachment_read/2,
+    attachment_delete/2,
+    attachment_cleanup/2
+]).
+-export([
     is_instance_terminated/1,
     apply_transition/3,
     make_resume_attempt/3,
@@ -388,6 +394,60 @@
         StoreArgs   :: term()
     ) ->
         {ok, node_ref()} |
+        {error, Reason :: term()}.
+
+
+%%
+%%  This callback should save attachment using Key as key and Value as value.
+%%  The key should be associated with Owner (if provided). A single option
+%%  {overwrite, boolean()} should be handled. Default should be {overwrite, false}.
+%%  When overwrite is false and the attachment with key Key is already registered,
+%%  the function should respond with {error, duplicate}. If however overwrite is true,
+%%  then previous value and owner should be reset with Value and Owner.
+%%
+-callback attachment_save(
+        StoreArgs   :: term(),
+        Key         :: term(),
+        Value       :: term(),
+        Owner       :: fsm_ref() | undefined,
+        Opts        :: proplists:proplist()
+    ) ->
+        ok |
+        {error, duplicate} |
+        {error, Reason :: term()}.
+
+
+%%
+%%  This callback should return attachment value associated with given Key.
+%%  If Key is not registered, {error, not_found} should be returned.
+%%
+-callback attachment_read(
+        StoreArgs   :: term(),
+        Key         :: term()
+    ) ->
+        {ok, Value :: term()} |
+        {error, not_found} |
+        {error, Reason :: term()}.
+
+
+%%
+%%  This callback should delete attachment value associated with given Key.
+%%
+-callback attachment_delete(
+        StoreArgs   :: term(),
+        Key         :: term()
+    ) ->
+        ok.
+
+
+%%
+%%  This callback should delete all attachments associated with given fsm.
+%%
+-callback attachment_cleanup(
+        StoreArgs   :: term(),
+        Owner       :: fsm_ref()
+    ) ->
+        ok |
         {error, Reason :: term()}.
 
 
@@ -1149,6 +1209,75 @@ message_peer_filter_to_guard({any, EventSrc}) ->
         message_peer_filter_to_guard({sender, EventSrc}),
         message_peer_filter_to_guard({receiver, EventSrc})
     }.
+
+
+%% =============================================================================
+%%  Attachment related functions
+%% =============================================================================
+
+%%
+%%  See `eproc_attachment:save/5`.
+%%
+-spec attachment_save(
+        Store   :: store_ref(),
+        Key     :: term(),
+        Value   :: term(),
+        Owner   :: fsm_ref() | undefined,
+        Opts    :: proplists:proplist()
+    ) ->
+        ok |
+        {error, duplicate} |
+        {error, Reason :: term()}.
+
+attachment_save(Store, Key, Value, Owner, Opts) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
+    StoreMod:attachment_save(StoreArgs, Key, Value, Owner, Opts).
+
+
+%%
+%%  See `eproc_attachment:read/2`.
+%%
+-spec attachment_read(
+        Store   :: store_ref(),
+        Key     :: term()
+    ) ->
+        {ok, Value :: term()} |
+        {error, not_found} |
+        {error, Reason :: term()}.
+
+attachment_read(Store, Key) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
+    StoreMod:attachment_read(StoreArgs, Key).
+
+
+%%
+%%  See `eproc_attachment:delete/2`.
+%%
+-spec attachment_delete(
+        Store   :: store_ref(),
+        Key     :: term()
+    ) ->
+        ok.
+
+attachment_delete(Store, Key) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
+    StoreMod:attachment_delete(StoreArgs, Key).
+
+
+%%
+%%  See `eproc_attachment:cleanup/2`.
+%%
+-spec attachment_cleanup(
+        Store   :: store_ref(),
+        Owner   :: fsm_ref()
+    ) ->
+        ok |
+        {error, Reason :: term()}.
+
+attachment_cleanup(Store, Key) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
+    StoreMod:attachment_cleanup(StoreArgs, Key).
+
 
 
 %% =============================================================================
