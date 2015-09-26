@@ -1,14 +1,26 @@
 {git,
     [
+        {"1.4.1", [
+            {load_module, eproc_attachment},
+            {load_module, eproc_store}
+        ]},
         {"1.4.0", [
             {load_module, eproc_fsm},
-            {load_module, eproc_timer}
+            {load_module, eproc_timer},
+            {load_module, eproc_attachment},
+            {load_module, eproc_store}
         ]}
     ],
     [
+        {"1.4.1", [
+            {load_module, eproc_attachment},
+            {load_module, eproc_store}
+        ]},
         {"1.4.0", [
             {load_module, eproc_fsm},
-            {load_module, eproc_timer}
+            {load_module, eproc_timer},
+            {load_module, eproc_attachment},
+            {load_module, eproc_store}
         ]}
     ]
 }.
