@@ -282,12 +282,12 @@ transition_end(InstId, TrnNr, NextSName, State = #state{last_nr = LastAttrNr, at
 event(InstId, {'eproc_fsm_attr$event', AttrRef, Event}, State = #state{attrs = AttrCtxs}) ->
     Found = case AttrRef of
         {name, undefined} ->
-            lager:debug("Ignoring attribute event with name=undefined for inst_id=~p", [InstId]),
+            lager:error("Ignoring attribute event with name=undefined for inst_id=~p", [InstId]),
             {error, not_found};
         {name, Name} ->
             case [ AC || AC = #attr_ctx{attr = #attribute{name = N}} <- AttrCtxs, N =:= Name ] of
                 [] ->
-                    lager:debug("Ignoring attribute event with unknown name=~p for inst_id=~p", [Name, InstId]),
+                    lager:error("Ignoring attribute event with unknown name=~p for inst_id=~p", [Name, InstId]),
                     {error, not_found};
                 [AC] ->
                     {ok, AC}
@@ -295,7 +295,7 @@ event(InstId, {'eproc_fsm_attr$event', AttrRef, Event}, State = #state{attrs = A
         {id, RefAttrNr} ->
             case lists:keyfind(RefAttrNr, #attr_ctx.attr_nr, AttrCtxs) of
                 false ->
-                    lager:debug("Ignoring attribute event with unknown id=~p for inst_id=~p", [RefAttrNr, InstId]),
+                    lager:error("Ignoring attribute event with unknown id=~p for inst_id=~p", [RefAttrNr, InstId]),
                     {error, not_found};
                  AC ->
                     {ok, AC}
