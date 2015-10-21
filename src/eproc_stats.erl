@@ -23,6 +23,10 @@
 -export([
     info/1,
     instance_created/1,
+    instance_started/1,
+    instance_suspended/1,
+    instance_resumed/1,
+    instance_killed/2,
     instance_completed/2,
     transition_completed/1,
     message_registered/1,
@@ -49,13 +53,26 @@ info(list) ->
 %%  Updates execution stats.
 %%
 instance_created(Module) ->
-    ok = inc_spiral([?APP, inst, Module, count]).
+    ok = inc_spiral([?APP, inst, Module, created]).
 
-instance_completed(Module, error) ->
-    ok = inc_spiral([?APP, inst, Module, err]);
+instance_started(Module) ->
+    ok = inc_spiral([?APP, inst, Module, started]).
 
-instance_completed(Module, DurationUS) when is_integer(DurationUS) ->
-    ok = update_spiral([?APP, inst, Module, dur], DurationUS).
+instance_suspended(Module) ->
+    ok = inc_spiral([?APP, inst, Module, suspended]).
+
+instance_resumed(Module) ->
+    ok = inc_spiral([?APP, inst, Module, resumed]).
+
+instance_killed(Module, Created) ->
+    DurationUS = get_duration(Created),
+    ok =    inc_spiral([?APP, inst, Module, killed]),
+    ok = update_spiral([?APP, inst, Module, duration], DurationUS).
+
+instance_completed(Module, Created) ->
+    DurationUS = get_duration(Created),
+    ok =    inc_spiral([?APP, inst, Module, completed]),
+    ok = update_spiral([?APP, inst, Module, duration], DurationUS).
 
 transition_completed(Module) ->
     ok = inc_spiral([?APP, trans, Module, count]).
@@ -109,3 +126,9 @@ get_value_spiral(MatchHead) ->
     end, 0, Entries).
 
 
+%%
+%%
+%%
+get_duration(Created) ->
+    Now = erlang:timestamp(),
+    eproc_timer:timestamp_diff_us(Created, Now).

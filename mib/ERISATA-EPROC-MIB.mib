@@ -47,40 +47,68 @@ ERISATA-AXB-MIB DEFINITIONS ::= BEGIN
     --  Object types, providing stats calculated at runtime.
     --  Starts at 100.
     --
+    instCreated OBJECT-TYPE
+        SYNTAX      INTEGER
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Number of instances created in last 60 seconds"
+        ::= { eprocObjects 100 }
+
     instStarted OBJECT-TYPE
         SYNTAX      INTEGER
         MAX-ACCESS  read-only
         STATUS      current
-        DESCRIPTION "Number of instances, started in last 60 seconds"
-        ::= { eprocObjects 100 }
+        DESCRIPTION "Number of instances started in last 60 seconds"
+        ::= { eprocObjects 101 }
 
-    instErr OBJECT-TYPE
+    instSuspended OBJECT-TYPE
         SYNTAX      INTEGER
         MAX-ACCESS  read-only
         STATUS      current
-        DESCRIPTION "Number of instances, failed in last 60 seconds"
-        ::= { eprocObjects 101 }
+        DESCRIPTION "Number of instances suspended in last 60 seconds"
+        ::= { eprocObjects 102 }
+
+    instResumed OBJECT-TYPE
+        SYNTAX      INTEGER
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Number of instances resumed in last 60 seconds"
+        ::= { eprocObjects 103 }
+
+    instKilled OBJECT-TYPE
+        SYNTAX      INTEGER
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Number of instances killed in last 60 seconds"
+        ::= { eprocObjects 104 }
+
+    instCompleted OBJECT-TYPE
+        SYNTAX      INTEGER
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Number of instances completed in last 60 seconds"
+        ::= { eprocObjects 105 }
 
     instDuration OBJECT-TYPE
         SYNTAX      INTEGER
         MAX-ACCESS  read-only
         STATUS      current
-        DESCRIPTION "Total time in seconds spent executing all instances, during last 60 seconds"
-        ::= { eprocObjects 102 }
+        DESCRIPTION "Total time in seconds spent executing all instances, completed during last 60 seconds"
+        ::= { eprocObjects 106 }
 
     transCount OBJECT-TYPE
         SYNTAX      INTEGER
         MAX-ACCESS  read-only
         STATUS      current
         DESCRIPTION "Number of transitions, completed in last 60 seconds"
-        ::= { eprocObjects 103 }
+        ::= { eprocObjects 110 }
 
     msgCount OBJECT-TYPE
         SYNTAX      INTEGER
         MAX-ACCESS  read-only
         STATUS      current
         DESCRIPTION "Number of messages, registered in last 60 seconds"
-        ::= { eprocObjects 104 }
+        ::= { eprocObjects 120 }
 
 
     ----------------------------------------------------------------------------
@@ -108,7 +136,9 @@ ERISATA-AXB-MIB DEFINITIONS ::= BEGIN
         ::= { eprocMibGroups 1 }
 
     eprocRTStatsOG OBJECT-GROUP
-        OBJECTS {instStarted, instErr, instDuration, transCount, msgCount}
+        OBJECTS {instCreated, instStarted, instSuspended, instResumed,
+            instKilled, instCompleted, instDuration,
+            transCount, msgCount}
         STATUS current
         DESCRIPTION "Statistics collected at runtime."
         ::= { eprocMibGroups 2 }

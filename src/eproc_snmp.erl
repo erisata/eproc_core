@@ -4,11 +4,9 @@
 -module(eproc_snmp).
 -export([
     ot_engine_name/1,
-    ot_inst_count/1,
-    ot_inst_errors/1,
-    ot_inst_duration/1,
-    ot_trans_count/1,
-    ot_msg_count/1
+    ot_inst_stats/2,
+    ot_trans_stats/2,
+    ot_msg_stats/2
 ]).
 
 -define(ANY, '_').
@@ -24,35 +22,21 @@ ot_engine_name(get) ->
 %%
 %%
 %%
-ot_inst_count(get) ->
-    {value, eproc_stats:get_value(inst, ?ANY, count)}.
+ot_inst_stats(get, Type) ->
+    {value, eproc_stats:get_value(inst, ?ANY, Type)}.
 
 
 %%
 %%
 %%
-ot_inst_errors(get) ->
-    {value, eproc_stats:get_value(inst, ?ANY, err)}.
+ot_trans_stats(get, Type) ->
+    {value, eproc_stats:get_value(trans, ?ANY, Type)}.
 
 
 %%
 %%
 %%
-ot_inst_duration(get) ->
-    {value, eproc_stats:get_value(inst, ?ANY, dur)}.
-
-
-%%
-%%
-%%
-ot_trans_count(get) ->
-    {value, eproc_stats:get_value(trans, ?ANY, count)}.
-
-
-%%
-%%
-%%
-ot_msg_count(get) ->
-    {value, eproc_stats:get_value(msg, ?ANY, count)}.
+ot_msg_stats(get, Type) ->
+    {value, eproc_stats:get_value(msg, ?ANY, Type)}.
 
 

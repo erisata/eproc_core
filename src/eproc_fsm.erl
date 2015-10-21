@@ -330,6 +330,7 @@
 -record(state, {
     inst_id     :: inst_id(),       %% Id of the current instance.
     module      :: module(),        %% Implementation of the user FSM.
+    created     :: timestamp(),     %% Current instance creation time.
     sname       :: state_name(),    %% User FSM state name.
     sdata       :: state_data(),    %% User FSM state data.
     rt_field    :: integer(),       %% Runtime data field in the sdata.
@@ -1581,8 +1582,10 @@ resume(FsmRef, Options) ->
             StartAction = proplists:get_value(start, Options, yes),
             case eproc_store:set_instance_resuming(Store, FsmRefInStore, StateAction, UserAction) of
                 {ok, InstId, StoredStartSpec} ->
+                    % TODO: how to obtain Module for eproc_stats?
                     case StartAction of
                         no ->
+                            % eproc_stats:instance_resumed(Module),
                             {ok, {inst, InstId}};
                         _ ->
                             StartSpec = case StartAction of
@@ -1592,7 +1595,9 @@ resume(FsmRef, Options) ->
                             Registry = resolve_registry(Options),
                             {ok, ResolvedFsmRef} = eproc_registry:make_new_fsm_ref(Registry, {inst, InstId}, StartSpec),
                             try gen_server:call(ResolvedFsmRef, {'eproc_fsm$is_online'}) of
-                                true -> {ok, {inst, InstId}}
+                                true ->
+                                    % eproc_stats:instance_resumed(Module),
+                                    {ok, {inst, InstId}}
                             catch
 %                               TODO:  exit:{normal, Reason} ->
 %                                   Race condition is here because of is_online. The process can be already
@@ -1992,12 +1997,19 @@ handle_cast({'eproc_fsm$send_event', Event, EventType, EventTypeFun, EventSrc, M
         {error, Reason}  -> {stop, {error, Reason}, State}
     end;
 
-handle_cast({'eproc_fsm$kill'}, State = #state{inst_id = InstId}) ->
+handle_cast({'eproc_fsm$kill'}, State) ->
+    #state{
+        inst_id = InstId,
+        module  = Module,
+        created = Created
+    } = State,
     lager:notice("FSM id=~p killed.", [InstId]),
+    eproc_stats:instance_killed(Module, Created),
     shutdown(State);
 
-handle_cast({'eproc_fsm$suspend'}, State = #state{inst_id = InstId}) ->
+handle_cast({'eproc_fsm$suspend'}, State = #state{inst_id = InstId, module = Module}) ->
     lager:notice("FSM id=~p suspended.", [InstId]),
+    eproc_stats:instance_suspended(Module),
     shutdown(State).
 
 
@@ -2316,6 +2328,7 @@ handle_create(Module, Args, CreateOpts, CustomOpts) ->
         arch_state  = undefined,
         transitions = undefined
     },
+    eproc_stats:instance_created(Module),
     eproc_store:add_instance(Store, Instance).
 
 
@@ -2324,7 +2337,11 @@ handle_create(Module, Args, CreateOpts, CustomOpts) ->
 %%
 handle_start(FsmRef, StartOpts, State = #state{store = Store}) ->
     case eproc_store:load_instance(Store, FsmRef) of
-        {ok, Instance = #instance{inst_id = InstId, status = Status}} when Status =:= running; Status =:= resuming ->
+        {ok, Instance = #instance{status = Status}} when Status =:= running; Status =:= resuming ->
+            #instance{
+                inst_id = InstId,
+                module = Module
+            } = Instance,
             StateWithInstId = State#state{inst_id = InstId},
             ok = limits_setup(StateWithInstId),
             LimitsResult = case limits_notify_res(StateWithInstId) of
@@ -2340,6 +2357,7 @@ handle_start(FsmRef, StartOpts, State = #state{store = Store}) ->
                     case start_loaded(Instance, StartOpts, StateWithInstId) of
                         {ok, NewState} ->
                             lager:debug("FSM started, ref=~p, pid=~p.", [FsmRef, self()]),
+                            eproc_stats:instance_started(Module),
                             {online, NewState};
                         {error, Reason} ->
                             lager:warning("Failed to start FSM, ref=~p, error=~p.", [FsmRef, Reason]),
@@ -2447,6 +2465,7 @@ init_loaded(Instance, SName, SData, State) ->
     #instance{
         inst_id = InstId,
         module = Module,
+        created = Created,
         curr_state = InstState
     } = Instance,
     #inst_state{
@@ -2466,7 +2485,8 @@ init_loaded(Instance, SName, SData, State) ->
                 rt_field    = RTField,
                 rt_default  = RTDefault,
                 trn_nr      = LastTrnNr,
-                attrs       = AttrState
+                attrs       = AttrState,
+                created     = Created
             },
             {ok, NewState};
         {error, Reason} ->
@@ -2701,6 +2721,7 @@ perform_event_transition(Trigger, TrnNr, InitAttrActions, State) ->
     #state{
         inst_id = InstId,
         module = Module,
+        created = Created,
         sname = SName,
         sdata = SData
     } = State,
@@ -2761,6 +2782,7 @@ perform_event_transition(Trigger, TrnNr, InitAttrActions, State) ->
                 1 -> {ok, NewSData};    % Do not exit for the initial state.
                 _ -> perform_exit(SName, NewSName, NewSData, State)
             end,
+            eproc_stats:instance_completed(Module, Created),
             {stop, DerivedSName, SDataAfterExit}
     end,
     {ok, ProcAction, SNameAfterTrn, SDataAfterTrn, Reply, InitAttrActions}.
