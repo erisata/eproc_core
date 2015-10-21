@@ -20,9 +20,12 @@
 -module(eproc_test_SUITE).
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([
-    test_wait_term/1
+    test_wait_term/1,
+    test_stats/1
 ]).
+-define(namespaced_types, ok).
 -include_lib("common_test/include/ct.hrl").
+-include_lib("hamcrest/include/hamcrest.hrl").
 -include_lib("eproc_core/include/eproc.hrl").
 
 
@@ -30,7 +33,8 @@
 %%  CT API.
 %%
 all() -> [
-    test_wait_term
+    test_wait_term,
+    test_stats
 ].
 
 
@@ -108,5 +112,34 @@ test_wait_term(_Config) ->
     {error, timeout} = eproc_test:wait_term([{id, InstId}], {1,s}),
     {ok, running, [incrementing], _} = eproc_test:get_state({inst, InstId}),
     true = eproc_fsm:is_online(Ref).
+
+
+%%
+%%  Tests if FSM stats are collected
+%%
+test_stats(_Config) ->
+    % Initialise
+    ResetStatsFun = fun(Type) -> exometer:reset([eproc_core, inst, eproc_fsm__seq, Type]) end,
+    lists:foreach(ResetStatsFun, [created, started, suspended, resumed, killed, completed]),
+    % Test case
+    {ok, FsmRef1} = eproc_fsm__seq:new(),   % Suspend/resume instance
+    {ok, FsmRef2} = eproc_fsm__seq:new(),   % Instance to be completed
+    {ok, FsmRef3} = eproc_fsm__seq:new(),   % Instance to kill
+    {ok, FsmRef4} = eproc_fsm__seq:new(),   % Instance to do nothing
+    {ok, FsmRef1} = eproc_fsm:suspend(FsmRef1, []),
+    {ok, FsmRef1} = eproc_fsm:resume(FsmRef1, []),
+    {ok, FsmRef1} = eproc_fsm:suspend(FsmRef1, []),
+    {ok, FsmRef1} = eproc_fsm:resume(FsmRef1, [{start, no}]),
+    ok = eproc_fsm__seq:close(FsmRef2),
+    {ok, FsmRef3} = eproc_fsm:kill(FsmRef3, []),
+    ?assertThat(eproc_stats:get_value(inst, eproc_fsm__seq, started), is(5)),
+    {ok, _Pid} = eproc_fsm:start_link(FsmRef1, []),
+    % Test results
+    ?assertThat(eproc_stats:get_value(inst, eproc_fsm__seq, created), is(4)),
+    ?assertThat(eproc_stats:get_value(inst, eproc_fsm__seq, started), is(6)),
+    ?assertThat(eproc_stats:get_value(inst, eproc_fsm__seq, suspended), is(2)),
+    %?assertThat(eproc_stats:get_value(inst, eproc_fsm__seq, resumed), is(?)),
+    ?assertThat(eproc_stats:get_value(inst, eproc_fsm__seq, killed), is(1)),
+    ?assertThat(eproc_stats:get_value(inst, eproc_fsm__seq, completed), is(1)).
 
 
