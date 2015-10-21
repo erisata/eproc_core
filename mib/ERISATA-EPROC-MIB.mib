@@ -1,0 +1,122 @@
+ERISATA-AXB-MIB DEFINITIONS ::= BEGIN
+
+    IMPORTS
+        DisplayString                                   FROM RFC1213-MIB
+        MODULE-IDENTITY, OBJECT-TYPE, NOTIFICATION-TYPE FROM SNMPv2-SMI
+        erisata, erisataMibs                            FROM ERISATA-MIB
+        MODULE-COMPLIANCE, OBJECT-GROUP,
+        NOTIFICATION-GROUP                              FROM SNMPv2-CONF
+        ;
+
+    eprocMib MODULE-IDENTITY
+        LAST-UPDATED "201510070000Z"
+        ORGANIZATION "UAB Erisata"
+        CONTACT-INFO
+            "Karolis Petrauskas
+             UAB Erisata
+             Vivulskio 15-3, Vilnius
+             karolis.petrauskas@erisata.lt"
+        DESCRIPTION "SNMP module for the EProc core."
+        ::= { erisataMibs 3 }
+
+    --
+    --  MIB metadata.
+    --
+    eprocMibGroups   OBJECT IDENTIFIER ::= { eprocMib 1 }
+    eprocMibCompls   OBJECT IDENTIFIER ::= { eprocMib 2 }
+
+    --
+    --  Structure for all metrics.
+    --
+    eproc            OBJECT IDENTIFIER ::= { erisata 10200 }
+    eprocObjects     OBJECT IDENTIFIER ::= { eproc 1 }
+    eprocEvents      OBJECT IDENTIFIER ::= { eproc 2 }
+
+    --
+    --  Object types, providing generic information.
+    --
+    engineName OBJECT-TYPE
+        SYNTAX      DisplayString
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "EProc instance name."
+        ::= { eprocObjects 1 }
+
+
+    --
+    --  Object types, providing stats calculated at runtime.
+    --  Starts at 100.
+    --
+    instStarted OBJECT-TYPE
+        SYNTAX      INTEGER
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Number of instances, started in last 60 seconds"
+        ::= { eprocObjects 100 }
+
+    instErr OBJECT-TYPE
+        SYNTAX      INTEGER
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Number of instances, failed in last 60 seconds"
+        ::= { eprocObjects 101 }
+
+    instDuration OBJECT-TYPE
+        SYNTAX      INTEGER
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Total time in seconds spent executing all instances, during last 60 seconds"
+        ::= { eprocObjects 102 }
+
+    transCount OBJECT-TYPE
+        SYNTAX      INTEGER
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Number of transitions, completed in last 60 seconds"
+        ::= { eprocObjects 103 }
+
+    msgCount OBJECT-TYPE
+        SYNTAX      INTEGER
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Number of messages, registered in last 60 seconds"
+        ::= { eprocObjects 104 }
+
+
+    ----------------------------------------------------------------------------
+    --  Notifications
+    --
+
+    --
+    --  This is here just for example of a notification (SNMP trap).
+    --
+--     engineNameChanged NOTIFICATION-TYPE
+--         OBJECTS     { engineName }
+--         STATUS      current
+--         DESCRIPTION "This event is sent, when the instance name changes."
+--         ::= { axbEvents 1 }
+
+
+    ----------------------------------------------------------------------------
+    --  Groups
+    --
+
+    eprocGenericOG OBJECT-GROUP
+        OBJECTS {engineName}
+        STATUS current
+        DESCRIPTION "Generic node information."
+        ::= { eprocMibGroups 1 }
+
+    eprocRTStatsOG OBJECT-GROUP
+        OBJECTS {instStarted, instErr, instDuration, transCount, msgCount}
+        STATUS current
+        DESCRIPTION "Statistics collected at runtime."
+        ::= { eprocMibGroups 2 }
+
+--     esbGenericNG NOTIFICATION-GROUP
+--         NOTIFICATIONS { engineNameChanged }
+--         STATUS        current
+--         DESCRIPTION   "Main ESB notifications."
+--         ::= { esbMibGroups 3 }
+
+END

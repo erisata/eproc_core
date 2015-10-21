@@ -12,6 +12,8 @@ doc/edoc-info
 doc/erlang.png
 doc/stylesheet.css
 doc/utf8/
+include/*-MIB.hrl
+priv/mibs/*-MIB.bin
 *.swp
 *.beam
 *~

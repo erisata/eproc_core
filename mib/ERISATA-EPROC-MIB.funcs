@@ -1,0 +1,14 @@
+%%%
+%%% Mapping of MIB objects types to functions implementing them.
+%%%
+
+%% Generic info.
+{engineName,   {eproc_snmp, ot_engine_name, []}}.
+
+%% Runtime stats.
+{instStarted,  {eproc_snmp, ot_inst_count, []}}.
+{instErr,      {eproc_snmp, ot_inst_errors, []}}.
+{instDuration, {eproc_snmp, ot_inst_duration, []}}.
+{transCount,   {eproc_snmp, ot_trans_count, []}}.
+{msgCount,     {eproc_snmp, ot_msg_count, []}}.
+
