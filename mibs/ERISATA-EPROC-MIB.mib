@@ -1,4 +1,4 @@
-ERISATA-AXB-MIB DEFINITIONS ::= BEGIN
+ERISATA-EPROC-MIB DEFINITIONS ::= BEGIN
 
     IMPORTS
         DisplayString                                   FROM RFC1213-MIB
