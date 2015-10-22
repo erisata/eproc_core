@@ -2563,6 +2563,7 @@ perform_transition(Trigger, TransitionFun, State) ->
     #state{
         inst_id = InstId,
         sname = SName,
+        module = Module,
         trn_nr = LastTrnNr,
         rt_field = RuntimeField,
         rt_default = RuntimeDefault,
@@ -2659,6 +2660,7 @@ perform_transition(Trigger, TransitionFun, State) ->
         inst_status  = InstStatus,
         interrupts   = Interrupts
     },
+    eproc_stats:transition_completed(Module),
     % TODO: add_transition can reply with suggestion to stop the process.
     {ok, InstId, TrnNr} = eproc_store:add_transition(Store, InstId, Transition, TransitionMsgs),
 

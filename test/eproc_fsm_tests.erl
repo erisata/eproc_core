@@ -590,6 +590,7 @@ send_event_final_state_from_init_test() ->
     end),
     ok = meck:expect(eproc_stats, instance_started, fun(_) -> ok end),
     ok = meck:expect(eproc_stats, instance_completed, fun(_, _) -> ok end),
+    ok = meck:expect(eproc_stats, transition_completed, fun(_) -> ok end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
     Mon = erlang:monitor(process, PID),
@@ -632,6 +633,7 @@ send_event_final_state_from_ordinary_test() ->
     end),
     ok = meck:expect(eproc_stats, instance_started, fun(_) -> ok end),
     ok = meck:expect(eproc_stats, instance_completed, fun(_, _) -> ok end),
+    ok = meck:expect(eproc_stats, transition_completed, fun(_) -> ok end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
     Mon = erlang:monitor(process, PID),
@@ -675,6 +677,7 @@ send_event_next_state_from_init_test() ->
             {ok, InstId, TrnNr}
     end),
     ok = meck:expect(eproc_stats, instance_started, fun(_) -> ok end),
+    ok = meck:expect(eproc_stats, transition_completed, fun(_) -> ok end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
     ?assertEqual(ok, eproc_fsm:send_event(PID, reset, [{source, {test, test}}])),
@@ -720,6 +723,7 @@ send_event_next_state_from_ordinary_test() ->
             {ok, InstId, TrnNr}
     end),
     ok = meck:expect(eproc_stats, instance_started, fun(_) -> ok end),
+    ok = meck:expect(eproc_stats, transition_completed, fun(_) -> ok end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
     ?assertEqual(ok, eproc_fsm:send_event(PID, flip, [{source, {test, test}}])),
@@ -806,6 +810,7 @@ send_event_same_state_from_ordinary_test() ->
             {ok, InstId, TrnNr}
     end),
     ok = meck:expect(eproc_stats, instance_started, fun(_) -> ok end),
+    ok = meck:expect(eproc_stats, transition_completed, fun(_) -> ok end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
     ?assertEqual(ok, eproc_fsm:send_event(PID, skip, [{source, {test, test}}])),
@@ -851,6 +856,7 @@ send_event_entry_next_state_test() ->
             {ok, InstId, TrnNr}
     end),
     ok = meck:expect(eproc_stats, instance_started, fun(_) -> ok end),
+    ok = meck:expect(eproc_stats, transition_completed, fun(_) -> ok end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
     Mon = erlang:monitor(process, PID),
@@ -938,6 +944,7 @@ send_event_save_runtime_test() ->
     end),
     ok = meck:expect(eproc_stats, instance_started, fun(_) -> ok end),
     ok = meck:expect(eproc_stats, instance_completed, fun(_, _) -> ok end),
+    ok = meck:expect(eproc_stats, transition_completed, fun(_) -> ok end),
     {ok, PID} = eproc_fsm:start_link({inst, 1000}, []),
     ?assert(eproc_fsm:is_online(PID)),
     Mon = erlang:monitor(process, PID),
@@ -985,6 +992,7 @@ send_event_handle_attrs_test() ->
             {ok, InstId, TrnNr}
     end),
     ok = meck:expect(eproc_stats, instance_started, fun(_) -> ok end),
+    ok = meck:expect(eproc_stats, transition_completed, fun(_) -> ok end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
     ?assertEqual(ok, eproc_fsm:send_event(PID, flip, [{source, {test, test}}])),
@@ -1038,6 +1046,7 @@ send_event_restart_unreg_test() ->
     end),
     ok = meck:expect(eproc_stats, instance_started, fun(_) -> ok end),
     ok = meck:expect(eproc_stats, instance_completed, fun(_,_) -> ok end),
+    ok = meck:expect(eproc_stats, transition_completed, fun(_) -> ok end),
     {ok, PID1} = eproc_fsm:start_link({inst, 100}, [{store, store}, {limit_restarts, {series, some, 100, 1000, notify}}]),
     {ok, PID2} = eproc_fsm:start_link({inst, 200}, [{store, store}, {limit_restarts, {series, some, 100, 1000, notify}}]),
     ?assert(eproc_fsm:is_online(PID1)),
@@ -1096,6 +1105,7 @@ send_event_suspend_by_user_test() ->
             {ok, S}
     end),
     ok = meck:expect(eproc_stats, instance_started, fun(_) -> ok end),
+    ok = meck:expect(eproc_stats, transition_completed, fun(_) -> ok end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
     OldTrapExit = erlang:process_flag(trap_exit, true),
@@ -1147,6 +1157,7 @@ send_event_limit_suspend_test() ->
         ({'eproc_fsm$limits', 100}, trn) -> ok
     end),
     ok = meck:expect(eproc_stats, instance_started, fun(_) -> ok end),
+    ok = meck:expect(eproc_stats, transition_completed, fun(_) -> ok end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}, {limit_transitions, {series, some, 100, 0, notify}}]),
     ?assert(eproc_fsm:is_online(PID)),
     OldTrapExit = erlang:process_flag(trap_exit, true),
@@ -1196,6 +1207,7 @@ send_event_limit_delay_test() ->
         ({'eproc_fsm$limits', 100}, [{trn, 1}]) -> {delay, 300}
     end),
     ok = meck:expect(eproc_stats, instance_started, fun(_) -> ok end),
+    ok = meck:expect(eproc_stats, transition_completed, fun(_) -> ok end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}, {limit_transitions, {series, some, 100, 0, {delay, 300}}}]),
     ?assert(eproc_fsm:is_online(PID)),
     ?assertEqual(ok, eproc_fsm:send_event(PID, skip, [{source, {test, test}}])),
@@ -1257,6 +1269,7 @@ self_send_event_test() ->
     end),
     ok = meck:expect(eproc_stats, instance_started, fun(_) -> ok end),
     ok = meck:expect(eproc_stats, instance_completed, fun(_,_) -> ok end),
+    ok = meck:expect(eproc_stats, transition_completed, fun(_) -> ok end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
     Mon = erlang:monitor(process, PID),
@@ -1308,6 +1321,7 @@ sync_send_event_final_state_from_ordinary_test() ->
     end),
     ok = meck:expect(eproc_stats, instance_started, fun(_) -> ok end),
     ok = meck:expect(eproc_stats, instance_completed, fun(_,_) -> ok end),
+    ok = meck:expect(eproc_stats, transition_completed, fun(_) -> ok end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
     Mon = erlang:monitor(process, PID),
@@ -1355,6 +1369,7 @@ sync_send_event_next_state_from_ordinary_test() ->
             {ok, InstId, TrnNr}
     end),
     ok = meck:expect(eproc_stats, instance_started, fun(_) -> ok end),
+    ok = meck:expect(eproc_stats, transition_completed, fun(_) -> ok end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
     ?assertEqual({ok, 5}, eproc_fsm:sync_send_event(PID, next, [{source, {test, test}}])),
@@ -1401,6 +1416,7 @@ sync_send_event_same_state_from_ordinary_test() ->
             {ok, InstId, TrnNr}
     end),
     ok = meck:expect(eproc_stats, instance_started, fun(_) -> ok end),
+    ok = meck:expect(eproc_stats, transition_completed, fun(_) -> ok end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
     ?assertEqual({ok, 5}, eproc_fsm:sync_send_event(PID, get, [{source, {test, test}}])),
@@ -1450,6 +1466,7 @@ sync_send_event_reply_test() ->
             {same_state, StateData}
     end),
     ok = meck:expect(eproc_stats, instance_started, fun(_) -> ok end),
+    ok = meck:expect(eproc_stats, transition_completed, fun(_) -> ok end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
     ?assertEqual({ok, something}, eproc_fsm:sync_send_event(PID, get, [{source, {test, test}}])),
@@ -1498,6 +1515,7 @@ unknown_message_test() ->
             {same_state, StateData}
     end),
     ok = meck:expect(eproc_stats, instance_started, fun(_) -> ok end),
+    ok = meck:expect(eproc_stats, transition_completed, fun(_) -> ok end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
     PID ! some_unknown_message,
@@ -1802,6 +1820,7 @@ resume_and_start_test() ->
         ([s4],   {state, b}) -> ok
     end),
     ok = meck:expect(eproc_stats, instance_started, fun(_) -> ok end),
+    ok = meck:expect(eproc_stats, transition_completed, fun(_) -> ok end),
     {ok, {inst, 101}}      = eproc_fsm:resume(resume_and_start_test_1, [{start, {default, [aaa]}}, {fsm_ref, {inst, 101}}, {state, unchanged} | Opts]),
     {ok, {inst, 102}}      = eproc_fsm:resume(resume_and_start_test_2, [{start, yes}, {fsm_ref, {inst, 102}}, {state, {set, [s2], d2, []}} | Opts]),
     {error, resume_failed} = eproc_fsm:resume(resume_and_start_test_3, [{start, yes}, {fsm_ref, {inst, 103}}, {state, {set, [s3], d3, []}} | Opts]),
@@ -1884,6 +1903,7 @@ register_outgoing_message_test() ->
         ([decrementing], {entry, [incrementing]}, St) -> {ok, St}
     end),
     ok = meck:expect(eproc_stats, instance_started, fun(_) -> ok end),
+    ok = meck:expect(eproc_stats, transition_completed, fun(_) -> ok end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
     ?assertEqual(ok, eproc_fsm:send_event(PID, flip, [{source, {test, test}}])),
@@ -1962,6 +1982,7 @@ register_incoming_message_test() ->
         ([sb], {entry, [sa]},  St) -> {ok, St}
     end),
     ok = meck:expect(eproc_stats, instance_started, fun(_) -> ok end),
+    ok = meck:expect(eproc_stats, transition_completed, fun(_) -> ok end),
     %% Execute the test.
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
