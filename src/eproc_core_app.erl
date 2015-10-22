@@ -72,13 +72,16 @@ registry_cfg() ->
 %%
 start(_StartType, _StartArgs) ->
     ok = validate_env(application:get_all_env()),
-    eproc_core_sup:start_link().
+    SnmpAgent = enomon_snmp:load_application_mib(?APP, ?MODULE, "ERISATA-EPROC-MIB"),
+    {ok, Pid} = eproc_core_sup:start_link(),
+    {ok, Pid, {SnmpAgent}}.
 
 
 %%
 %% Stop the application.
 %%
-stop(_State) ->
+stop({SnmpAgent}) ->
+    enomon:unload_application_mib(?APP, SnmpAgent, "ERISATA-EPROC-MIB"),
     ok.
 
 
