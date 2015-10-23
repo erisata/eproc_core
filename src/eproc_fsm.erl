@@ -1797,6 +1797,8 @@ register_sent_msg({inst, SrcInstId}, Dst, SentMsgCId, SentMsgType, SentMsg, Time
         sent_time = Timestamp
     },
     NewRegistered = [NewMsgReg | Registered],
+    % TODO: how to obtain Module for eproc_stats?
+    % eproc_stats:message_created(Module), % or even eproc_stats:message_created(Module, sent),
     erlang:put('eproc_fsm$msg_regs', MsgRegs#msg_regs{next_msg_nr = NewNextMsgNr, registered = NewRegistered}),
     {ok, NewMsgCId};
 
@@ -1848,6 +1850,8 @@ register_resp_msg({inst, SrcInstId}, Dst, SentMsgCId, RespMsgCId, RespMsgType, R
                 resp_time = Timestamp
             },
             NewRegistered = lists:keyreplace(SentMsgCId, #msg_reg.sent_cid, Registered, NewMsgReg),
+            % TODO: how to obtain Module for eproc_stats?
+            % eproc_stats:message_created(Module), % or even eproc_stats:message_created(Module, recv),
             erlang:put('eproc_fsm$msg_regs', MsgRegs#msg_regs{next_msg_nr = NewNextMsgNr, registered = NewRegistered}),
             {ok, NewMsgCId}
     end.
@@ -2606,6 +2610,8 @@ perform_transition(Trigger, TransitionFun, State) ->
         date     = TrnStart,
         body     = TriggerMsg
     },
+    % TODO: this is the only counted case of message creation
+    eproc_stats:message_created(Module), % or even eproc_stats:message_created(Module, recv),
     {ResponseMsgRef, TransitionMsgs} = case Reply of
         noreply ->
             {undefined, [RequestMsg | RegisteredMsgs]};

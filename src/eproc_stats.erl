@@ -29,7 +29,7 @@
     instance_killed/2,
     instance_completed/2,
     transition_completed/1,
-    message_registered/1,
+    message_created/1,
     get_value/3
 ]).
 
@@ -77,7 +77,7 @@ instance_completed(Module, Created) ->
 transition_completed(Module) ->
     ok = inc_spiral([?APP, trans, Module, count]).
 
-message_registered(Module) ->
+message_created(Module) ->
     ok = inc_spiral([?APP, msg, Module, count]).
 
 
