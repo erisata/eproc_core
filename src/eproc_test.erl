@@ -18,7 +18,7 @@
 %%% This module is helpful for testing FSM implementations.
 %%%
 -module(eproc_test).
--export([get_state/1, wait_term/1, wait_term/2]).
+-export([get_state/1, get_state/2, wait_term/1, wait_term/2]).
 -include("eproc.hrl").
 
 -define(WAIT_TERM_REPEAT, 10).
@@ -35,11 +35,19 @@
 -spec get_state(FsmRef :: fsm_ref()) -> {ok, Status :: inst_status(), StateName :: term(), StateData :: term()}.
 
 get_state(FsmRef) ->
+    get_state(FsmRef, []).
+
+get_state(FsmRef, Opts) ->
     FilterClause = case FsmRef of
         {inst, InstId} -> {id, InstId};
         {name, Name}   -> {name, Name}
     end,
-    case eproc_store:get_instance(undefined, {filter, {1, 2}, [FilterClause]}, current) of
+    RunningOnly = case proplists:get_value(running_only, Opts) of
+        undefined -> [];
+        true      -> [{status, running}]
+    end,
+    FilterClauses = [FilterClause] ++ RunningOnly,
+    case eproc_store:get_instance(undefined, {filter, {1, 2}, FilterClauses}, current) of
         {ok, {0, _, []}} ->
             {error, not_found};
         {ok, {1, _, [Instance]}} ->
