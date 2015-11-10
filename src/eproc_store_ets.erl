@@ -25,7 +25,7 @@
 -behaviour(eproc_store).
 -behaviour(gen_server).
 -compile([{parse_transform, lager_transform}]).
--export([start_link/1, ref/0]).
+-export([start_link/1, ref/0, truncate/0]).
 -export([
     supervisor_child_specs/1,
     get_instance/3,
@@ -103,6 +103,24 @@ start_link(Name) ->
 ref() ->
     eproc_store:ref(?MODULE, {}).
 
+
+%%
+%%  Truncate all the tables of the EProc ETS store.
+%%  This function can be usefull when writing integration
+%%  tests, to prepare clean environment for each test case.
+%%
+%%  Counters are left unchanged.
+%%
+truncate() ->
+    true = ets:delete_all_objects(?INST_TBL),
+    true = ets:delete_all_objects(?NAME_TBL),
+    true = ets:delete_all_objects(?TRN_TBL),
+    true = ets:delete_all_objects(?MSG_TBL),
+    true = ets:delete_all_objects(?KEY_TBL),
+    true = ets:delete_all_objects(?TAG_TBL),
+    true = ets:delete_all_objects(?ATT_TBL),
+    true = ets:delete_all_objects(?ATI_TBL),
+    ok.
 
 
 %% =============================================================================

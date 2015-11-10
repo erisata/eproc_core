@@ -32,7 +32,8 @@
     eproc_store_router_test_attrs/1,
     eproc_store_meta_test_attrs/1,
     eproc_store_attachment_test_instid/1,
-    eproc_store_attachment_test_name/1
+    eproc_store_attachment_test_name/1,
+    test_ets_truncate/1
 ]).
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eproc_core/include/eproc.hrl").
@@ -45,7 +46,8 @@ all() ->
         eproc_store_tck:testcases(core),
         eproc_store_tck:testcases(router),
         eproc_store_tck:testcases(meta),
-        eproc_store_tck:testcases(attachment)
+        eproc_store_tck:testcases(attachment),
+        [test_ets_truncate]
     ]).
 
 %%
@@ -84,5 +86,14 @@ end_per_suite(Config) ->
 ?MAP_TCK_TEST(eproc_store_meta_test_attrs).
 ?MAP_TCK_TEST(eproc_store_attachment_test_instid).
 ?MAP_TCK_TEST(eproc_store_attachment_test_name).
+
+
+%%
+%%  Check if truncate works.
+%%
+test_ets_truncate(_Config) ->
+    ok = eproc_store_ets:truncate(),
+    0 = ets:info('eproc_store_ets$instance', size),
+    ok.
 
 
