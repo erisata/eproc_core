@@ -3,7 +3,9 @@
 %%%
 
 %% Generic info.
-{engineName,    {eproc_snmp, ot_engine_name, []}}.
+{storeModule,   {eproc_snmp, ot_store_module,    []}}.
+{registryModule,{eproc_snmp, ot_registry_module, []}}.
+{limitCount,    {eproc_snmp, ot_limit_count,     []}}.
 
 %% Runtime stats.
 {instCreated,   {eproc_snmp, ot_inst_stats, [created]}}.

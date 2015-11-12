@@ -69,7 +69,7 @@
 %%
 -module(eproc_limits).
 -behaviour(gen_server).
--export([start_link/0, setup/3, notify/3, notify/2, reset/2, reset/1, cleanup/2, cleanup/1]).
+-export([start_link/0, setup/3, notify/3, notify/2, reset/2, reset/1, cleanup/2, cleanup/1, info/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -include("eproc.hrl").
 
@@ -384,6 +384,13 @@ cleanup(ProcessName, CounterName) ->
 cleanup(ProcessName) ->
     true = ets:match_delete(?MODULE, #counter{proc = ProcessName, _ = '_'}),
     ok.
+
+
+%%
+%%  Get some info on the limits subsystem.
+%%
+info(count) ->
+    ets:info(?MODULE, size).
 
 
 

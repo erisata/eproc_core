@@ -35,13 +35,26 @@ ERISATA-EPROC-MIB DEFINITIONS ::= BEGIN
     --
     --  Object types, providing generic information.
     --
-    engineName OBJECT-TYPE
+    storeModule OBJECT-TYPE
         SYNTAX      DisplayString
         MAX-ACCESS  read-only
         STATUS      current
-        DESCRIPTION "EProc instance name."
-        ::= { eprocObjects 1 }
+        DESCRIPTION "Store implementation used by the EProc."
+        ::= { eprocObjects 10 }
 
+    registryModule OBJECT-TYPE
+        SYNTAX      DisplayString
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Registry implementation used by the EProc."
+        ::= { eprocObjects 11 }
+
+    limitCount OBJECT-TYPE
+        SYNTAX      INTEGER
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Number currently maintained limits."
+        ::= { eprocObjects 50 }
 
     --
     --  Object types, providing stats calculated at runtime.
@@ -100,7 +113,7 @@ ERISATA-EPROC-MIB DEFINITIONS ::= BEGIN
         SYNTAX      INTEGER
         MAX-ACCESS  read-only
         STATUS      current
-        DESCRIPTION "Number of transitions, completed in last 60 seconds"
+        DESCRIPTION "Number of transitions, performed in last 60 seconds"
         ::= { eprocObjects 110 }
 
     msgCount OBJECT-TYPE
@@ -118,11 +131,11 @@ ERISATA-EPROC-MIB DEFINITIONS ::= BEGIN
     --
     --  This is here just for example of a notification (SNMP trap).
     --
---     engineNameChanged NOTIFICATION-TYPE
---         OBJECTS     { engineName }
---         STATUS      current
---         DESCRIPTION "This event is sent, when the instance name changes."
---         ::= { axbEvents 1 }
+    limitCountChanged NOTIFICATION-TYPE
+        OBJECTS     { limitCount }
+        STATUS      current
+        DESCRIPTION "This event is sent, when the limit count changes."
+        ::= { eprocEvents 1 }
 
 
     ----------------------------------------------------------------------------
@@ -130,9 +143,9 @@ ERISATA-EPROC-MIB DEFINITIONS ::= BEGIN
     --
 
     eprocGenericOG OBJECT-GROUP
-        OBJECTS {engineName}
+        OBJECTS {storeModule, registryModule, limitCount}
         STATUS current
-        DESCRIPTION "Generic node information."
+        DESCRIPTION "Generic EProc information."
         ::= { eprocMibGroups 1 }
 
     eprocRTStatsOG OBJECT-GROUP
@@ -143,10 +156,11 @@ ERISATA-EPROC-MIB DEFINITIONS ::= BEGIN
         DESCRIPTION "Statistics collected at runtime."
         ::= { eprocMibGroups 2 }
 
---     esbGenericNG NOTIFICATION-GROUP
---         NOTIFICATIONS { engineNameChanged }
---         STATUS        current
---         DESCRIPTION   "Main ESB notifications."
---         ::= { esbMibGroups 3 }
+    eprocGenericNG NOTIFICATION-GROUP
+        NOTIFICATIONS {limitCountChanged}
+        STATUS        current
+        DESCRIPTION   "Main notifications."
+        ::= { eprocMibGroups 3 }
+
 
 END
