@@ -159,6 +159,7 @@
     send_event/3, send_event/2,
     self_send_event/2, self_send_event/1,
     sync_send_event/3, sync_send_event/2,
+    orthogonal/4,
     trigger_event/4,
     kill/2, suspend/2, resume/2, update/5,
     is_online/2, is_online/1
@@ -330,7 +331,7 @@
 -record(state, {
     inst_id     :: inst_id(),       %% Id of the current instance.
     module      :: module(),        %% Implementation of the user FSM.
-    created     :: timestamp(),     %% Current instance creation time.
+    created     :: timestamp(),     %% Current instance creation time.  TODO: HM.
     sname       :: state_name(),    %% User FSM state name.
     sdata       :: state_data(),    %% User FSM state data.
     rt_field    :: integer(),       %% Runtime data field in the sdata.
@@ -1372,6 +1373,62 @@ sync_send_event(FsmRef, Event, Options) ->
 
 sync_send_event(FsmRef, Event) ->
     sync_send_event(FsmRef, Event, []).
+
+
+%%
+%%  Helper function for handling events in orthogonal states explicitly.
+%%  This function should be in the context of the `handle_state/3` callback.
+%%
+%%  NOTE: In the case of the entry trigger, the FSM will receive the
+%%  entry events after executing the orthogonal state (apart from the
+%%  entries, incoked by this function). This is because of the standard
+%%  behaviour for the case, when the entry returns the `next_state` tuple.
+%%
+%%  TODO: Add support for sync and async events here.
+%%
+-spec orthogonal(
+        StateName :: state_name(),
+        Trigger   :: {entry, PrevStateName},
+        StateData :: state_data(),
+        OptsOrMod :: module() | list()
+    ) ->
+        {next_state, NextStateName, NewStateData}
+    when
+        NewStateData    :: state_data(),
+        NextStateName   :: state_name(),
+        PrevStateName   :: state_name().
+
+orthogonal(InitialState, {entry, PrevSN}, StateData, OptsOrMod) ->
+    {Module, Opts} = case is_atom(OptsOrMod) of
+        true  -> {OptsOrMod, []};
+        false -> {module, M} = proplists:lookup(module, OptsOrMod), {M, OptsOrMod}
+    end,
+    Function = proplists:get_value(function, Opts, handle_state),
+    %
+    MainStateName = erlang:element(1, InitialState),
+    RegionCount = erlang:tuple_size(InitialState) - 1,
+    RegionIndexes = lists:seq(2, RegionCount + 1),
+    WildcardState = erlang:list_to_tuple([MainStateName | lists:duplicate(RegionCount, '_')]),
+    EnterRegion = fun (RegionIndex, {SN, SD}) ->
+        RegionIS = erlang:element(RegionIndex, InitialState),
+        RegionSN = erlang:setelement(RegionIndex, WildcardState, RegionIS),
+        {NewRegionSN, NewSD} = orthogonal_enter_region(RegionIndex, RegionSN, PrevSN, SD, WildcardState, Module, Function),
+        NewRegionSNElem = erlang:element(RegionIndex, NewRegionSN),
+        {erlang:setelement(RegionIndex, SN, NewRegionSNElem), NewSD}
+    end,
+    {NextStateName, NewStateData} = lists:foldl(EnterRegion, {WildcardState, StateData}, RegionIndexes),
+    {next_state, NextStateName, NewStateData}.
+
+orthogonal_enter_region(RegionIndex, RegionSN, PrevSN, SD, WildcardSN, Module, Function) ->
+    case Module:Function(RegionSN, {entry, PrevSN}, SD) of
+        {ok, NewSD} ->
+            {RegionSN, NewSD};
+        {same_state, NewSD} ->
+            {RegionSN, NewSD};
+        {next_state, NextRegionSN, NewSD} ->
+            WildcardSN = erlang:setelement(RegionIndex, NextRegionSN, '_'), % Assert single region was changed.
+            orthogonal_enter_region(RegionIndex, NextRegionSN, PrevSN, NewSD, WildcardSN, Module, Function)
+    end.
 
 
 %%

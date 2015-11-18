@@ -2059,6 +2059,25 @@ resolve_event_type_const_test_() -> [
     ].
 
 
+%%
+%%  Check if orthogonal with a trigger of the form `{entry, _}` works.
+%%
+orthogonal_entry_test() ->
+    meck:new(eproc_fsm__mock, [non_strict]),
+    meck:expect(eproc_fsm__mock, handle_state, fun
+        ({orth, a1,  '_'}, {entry, from}, SD) -> {ok,                          [a1 | SD]};
+        ({orth, '_', b1 }, {entry, from}, SD) -> {next_state, {orth, '_', b2}, [b1 | SD]};
+        ({orth, '_', b2 }, {entry, from}, SD) -> {next_state, {orth, '_', b3}, [b2 | SD]};
+        ({orth, '_', b3 }, {entry, from}, SD) -> {same_state,                  [b3 | SD]}
+    end),
+    ?assertEqual(
+        {next_state, {orth, a1, b3}, [b3, b2, b1, a1]},
+        eproc_fsm:orthogonal({orth, a1, b1}, {entry, from}, [], eproc_fsm__mock)
+    ),
+    ?assert(meck:validate(eproc_fsm__mock)),
+    ok = meck:unload(eproc_fsm__mock).
+
+
 % TODO: Test handling of crashes in callbacks in sync and async calls.
 
 
