@@ -73,6 +73,7 @@ registry_cfg() ->
 start(_StartType, _StartArgs) ->
     ok = validate_env(application:get_all_env()),
     SnmpAgent = enomon_snmp:load_application_mib(?APP, ?MODULE, "ERISATA-EPROC-MIB"),
+    ok = eproc_error_logger:register(),
     {ok, Pid} = eproc_core_sup:start_link(),
     {ok, Pid, {SnmpAgent}}.
 

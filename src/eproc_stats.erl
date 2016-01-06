@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2015 Erisata, UAB (Ltd.)
+%| Copyright 2015-2016 Erisata, UAB (Ltd.)
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -21,71 +21,127 @@
 -module(eproc_stats).
 -compile([{parse_transform, lager_transform}]).
 -export([
+    i/0,
     info/1,
-    instance_created/1,
-    instance_started/1,
-    instance_suspended/1,
-    instance_resumed/1,
-    instance_killed/2,
-    instance_completed/2,
-    transition_completed/1,
-    message_created/1,
+    reset/1,
+    add_instance_created/1,
+    add_instance_started/1,
+    add_instance_suspended/1,
+    add_instance_resumed/1,
+    add_instance_killed/2,
+    add_instance_completed/2,
+    add_instance_crashed/1,
+    add_transition_completed/6,
     get_value/3
 ]).
 
--define(APP, eproc_core).
+-define(ROOT, eproc_core).
 
 
 %%% ============================================================================
 %%% API functions.
 %%% ============================================================================
 
+%%
+%%  Print main statistics.
+%%
+i() ->
+    info(list).
+
 
 %%
-%%
+%%  Return statistics by the specified query.
 %%
 info(list) ->
-    Entries = exometer:find_entries([axb]),
+    Entries = exometer:find_entries([?ROOT]),
     {ok, [ Name || {Name, _Type, enabled} <- Entries ]}.
 
 
 %%
-%%  Updates execution stats.
+%%  Reset statistic counters.
+%%  This function is mainly usefull for testing.
 %%
-instance_created(Module) ->
-    ok = inc_spiral([?APP, inst, Module, created]).
+reset(all) ->
+    Entries = exometer:find_entries([?ROOT]),
+    [ ok = exometer:reset(Name) || {Name, _Type, enabled} <- Entries ],
+    ok.
 
-instance_started(Module) ->
-    ok = inc_spiral([?APP, inst, Module, started]).
 
-instance_suspended(Module) ->
-    ok = inc_spiral([?APP, inst, Module, suspended]).
+%%
+%%  Records the instance created events.
+%%
+add_instance_created(InstType) ->
+    ok = inc_spiral([?ROOT, inst, InstType, created]).
 
-instance_resumed(Module) ->
-    ok = inc_spiral([?APP, inst, Module, resumed]).
 
-instance_killed(Module, Created) ->
+%%
+%%  Records the instance started events.
+%%
+add_instance_started(InstType) ->
+    ok = inc_spiral([?ROOT, inst, InstType, started]).
+
+
+%%
+%%  Records the instance suspend events.
+%%
+add_instance_suspended(InstType) ->
+    ok = inc_spiral([?ROOT, inst, InstType, suspended]).
+
+
+%%
+%%  Records the instace resumes.
+%%
+add_instance_resumed(InstType) ->
+    ok = inc_spiral([?ROOT, inst, InstType, resumed]).
+
+
+%%
+%%  Records the instance kill events.
+%%
+add_instance_killed(InstType, Created) ->
     DurationUS = get_duration(Created),
-    ok =    inc_spiral([?APP, inst, Module, killed]),
-    ok = update_spiral([?APP, inst, Module, duration], DurationUS).
+    ok =    inc_spiral([?ROOT, inst, InstType, killed]),
+    ok = update_spiral([?ROOT, inst, InstType, duration], DurationUS).
 
-instance_completed(Module, Created) ->
+
+%%
+%%  Records instance successfull completion events.
+%%
+add_instance_completed(InstType, Created) ->
     DurationUS = get_duration(Created),
-    ok =    inc_spiral([?APP, inst, Module, completed]),
-    ok = update_spiral([?APP, inst, Module, duration], DurationUS).
+    ok =    inc_spiral([?ROOT, inst, InstType, completed]),
+    ok = update_spiral([?ROOT, inst, InstType, duration], DurationUS).
 
-transition_completed(Module) ->
-    ok = inc_spiral([?APP, trans, Module, count]).
 
-message_created(Module) ->
-    ok = inc_spiral([?APP, msg, Module, count]).
+%%
+%%  Records instance crashes.
+%%
+add_instance_crashed(InstType) ->
+    ok = inc_spiral([?ROOT, inst, InstType, crashed]).
+
+
+%%
+%%  Records transitions made by the instances of particular type.
+%%
+add_transition_completed(InstType, DurationUS, _ReqMsgType, HadReplyMsg, OutMsgAsync, OutMsgSync) ->
+    InMsgCount = case HadReplyMsg of true -> 2 ; false -> 1 end,
+    ok = inc_spiral([?ROOT, trn, InstType, count]),
+    ok = update_spiral([?ROOT, trn, InstType, duration], DurationUS),
+    case HadReplyMsg of
+        false -> ok = update_spiral([?ROOT, msg, InstType, in_async], InMsgCount);
+        true  -> ok = update_spiral([?ROOT, msg, InstType, in_sync], InMsgCount)
+    end,
+    ok = update_spiral([?ROOT, msg, InstType, out_async], OutMsgAsync),
+    ok = update_spiral([?ROOT, msg, InstType, out_sync], OutMsgSync),
+    ok.
 
 
 %%
 %%
 %%
-get_value(Object, Module, Type) ->
-    get_value_spiral([?APP, Object, Module, Type]).
+get_value(Object, InstType, StatType) ->
+    get_value_spiral([?ROOT, Object, InstType, StatType]).
+
 
 
 %%% ============================================================================
@@ -132,3 +188,5 @@ get_value_spiral(MatchHead) ->
 get_duration(Created) ->
     Now = erlang:timestamp(),
     eproc_timer:timestamp_diff_us(Created, Now).
+
+

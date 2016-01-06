@@ -41,6 +41,7 @@
     set_instance_suspended/3,
     set_instance_resuming/4,
     set_instance_resumed/3,
+    add_inst_crash/6,
     load_instance/2,
     load_running/2,
     attr_task/3
@@ -342,6 +343,14 @@ set_instance_resumed(_StoreArgs, InstId, TrnNr) ->
                 {error, Reason} -> {error, Reason}
             end
     end.
+
+
+%%
+%%  Register a crash, occured with the specified instance.
+%%
+add_inst_crash(_StoreArgs, _InstId, _LastTrnNr, _Pid, _Msg, _Reason) ->
+    % TODO: Implement it.
+    ok.
 
 
 %%

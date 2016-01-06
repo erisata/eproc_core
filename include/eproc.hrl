@@ -44,6 +44,8 @@
 -type fsm_ref()         :: {inst, InstId :: inst_id()} | {name, Name :: term()}.
 -type fsm_key()         :: {key, Key :: term()} | {key, Key :: term(), Opts :: list()}.
 -type fsm_start_spec()  :: eproc_fsm:start_spec().
+-type inst_app()        :: atom().
+-type inst_type()       :: atom().
 -type inst_name()       :: term().
 -type inst_group()      :: eproc_fsm:group().
 -type inst_status()     :: running | suspended | resuming | completed | killed | failed.
@@ -275,6 +277,8 @@
 -record(instance, {
     inst_id     :: inst_id(),                           %% Unique auto-generated instance identifier.
     group       :: inst_group(),                        %% Group the instance belongs to.
+    type        :: inst_type(),                         %% Type of the process (can differ from the module).
+    app         :: inst_app(),                          %% Application to which the instance belongs.
     name        :: inst_name(),                         %% Initial name - unique user-specified identifier.
     module      :: module(),                            %% Callback module implementing the FSM.
     args        :: term(),                              %% Arguments, passed when creating the FSM.

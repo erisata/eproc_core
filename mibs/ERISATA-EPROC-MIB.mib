@@ -109,19 +109,54 @@ ERISATA-EPROC-MIB DEFINITIONS ::= BEGIN
         DESCRIPTION "Total time in seconds spent executing all instances, completed during last 60 seconds"
         ::= { eprocObjects 106 }
 
-    transCount OBJECT-TYPE
+    instCrashed OBJECT-TYPE
+        SYNTAX      INTEGER
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Number of FSM instance crashes in last 60 seconds"
+        ::= { eprocObjects 107 }
+
+    trnCount OBJECT-TYPE
         SYNTAX      INTEGER
         MAX-ACCESS  read-only
         STATUS      current
         DESCRIPTION "Number of transitions, performed in last 60 seconds"
         ::= { eprocObjects 110 }
 
-    msgCount OBJECT-TYPE
+    trnDuration OBJECT-TYPE
         SYNTAX      INTEGER
         MAX-ACCESS  read-only
         STATUS      current
-        DESCRIPTION "Number of messages, registered in last 60 seconds"
+        DESCRIPTION "Total time in seconds spent executing all transitions, completed during last 60 seconds"
+        ::= { eprocObjects 111 }
+
+    msgInAsyncCount OBJECT-TYPE
+        SYNTAX      INTEGER
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Number of async messages handled by FSMs in last 60 seconds"
         ::= { eprocObjects 120 }
+
+    msgInSyncCount OBJECT-TYPE
+        SYNTAX      INTEGER
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Number of sync messages handled by FSMs in last 60 seconds"
+        ::= { eprocObjects 121 }
+
+    msgOutAsyncCount OBJECT-TYPE
+        SYNTAX      INTEGER
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Number of async messages sent by FSMs in last 60 seconds"
+        ::= { eprocObjects 122 }
+
+    msgOutSyncCount OBJECT-TYPE
+        SYNTAX      INTEGER
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Number of sync messages sent by FSMs in last 60 seconds"
+        ::= { eprocObjects 123 }
 
 
     ----------------------------------------------------------------------------
@@ -150,8 +185,9 @@ ERISATA-EPROC-MIB DEFINITIONS ::= BEGIN
 
     eprocRTStatsOG OBJECT-GROUP
         OBJECTS {instCreated, instStarted, instSuspended, instResumed,
-            instKilled, instCompleted, instDuration,
-            transCount, msgCount}
+            instKilled, instCompleted, instDuration, instCrashed,
+            trnCount, trnDuration, msgInAsyncCount, msgInSyncCount,
+            msgOutAsyncCount, msgOutSyncCount}
         STATUS current
         DESCRIPTION "Statistics collected at runtime."
         ::= { eprocMibGroups 2 }

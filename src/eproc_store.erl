@@ -40,6 +40,7 @@
     set_instance_suspended/3,
     set_instance_resuming/4,
     set_instance_resumed/3,
+    add_inst_crash/6,
     load_instance/2,
     load_running/2,
     attr_task/3
@@ -214,6 +215,20 @@
         ok |
         {error, Reason :: term()}.
 
+
+%%
+%%  Register a crash occured in the FSM.
+%%
+-callback add_inst_crash(
+        StoreArgs   :: term(),
+        InstId      :: inst_id(),
+        LastTrnNr   :: trn_nr() | undefined,
+        Pid         :: pid() | undefined,
+        Msg         :: term(),
+        Reason      :: term()
+    ) ->
+        ok |
+        {error, Reason :: term()}.
 
 %%
 %%  Get instance with its current state and active interrupt.
@@ -584,6 +599,14 @@ set_instance_resuming(Store, FsmRef, StateAction, UserAction) ->
 set_instance_resumed(Store, InstId, TrnNr) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
     StoreMod:set_instance_resumed(StoreArgs, InstId, TrnNr).
+
+
+%%
+%%  Register an FSM crash to the store.
+%%
+add_inst_crash(Store, InstId, LastTrnNr, Pid, Msg, Reason) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
+    StoreMod:add_inst_crash(StoreArgs, InstId, LastTrnNr, Pid, Msg, Reason).
 
 
 %%

@@ -7,7 +7,7 @@
     ot_registry_module/1,
     ot_limit_count/1,
     ot_inst_stats/2,
-    ot_trans_stats/2,
+    ot_trn_stats/2,
     ot_msg_stats/2
 ]).
 
@@ -43,21 +43,21 @@ ot_limit_count(get) ->
 %%
 %%
 %%
-ot_inst_stats(get, Type) ->
-    {value, eproc_stats:get_value(inst, ?ANY, Type)}.
+ot_inst_stats(get, StatType) ->
+    {value, eproc_stats:get_value(inst, ?ANY, StatType)}.
 
 
 %%
 %%
 %%
-ot_trans_stats(get, Type) ->
-    {value, eproc_stats:get_value(trans, ?ANY, Type)}.
+ot_trn_stats(get, StatType) ->
+    {value, eproc_stats:get_value(trn, ?ANY, StatType)}.
 
 
 %%
 %%
 %%
-ot_msg_stats(get, Type) ->
-    {value, eproc_stats:get_value(msg, ?ANY, Type)}.
+ot_msg_stats(get, StatType) ->
+    {value, eproc_stats:get_value(msg, ?ANY, StatType)}.
 
 

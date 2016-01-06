@@ -88,6 +88,8 @@ inst_value() ->
         inst_id = undefined,
         group = new,
         name = undefined,
+        app = test,
+        type = some_fsm,
         module = some_fsm,
         args = [arg1],
         opts = [{o, p}],

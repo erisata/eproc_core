@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013-2015 Erisata, UAB (Ltd.)
+%| Copyright 2013-2016 Erisata, UAB (Ltd.)
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -154,7 +154,8 @@
 %%  I.e. they should be used in API functions of the specific FSM.
 %%
 -export([
-    create/3, start_link/3, start_link/2, id/0, group/0, name/0,
+    create/3, start_link/3, start_link/2,
+    id/0, group/0, name/0, type/0,
     send_create_event/4, sync_send_create_event/4,
     send_event/3, send_event/2,
     self_send_event/2, self_send_event/1,
@@ -189,13 +190,14 @@
     registered_sync_send/5,
     resolve_start_spec/2,
     resolve_event_type/2,
-    resolve_event_type_const/3
+    resolve_event_type_const/3,
+    handle_crash_msg/4
 ]).
 
 %%
 %%  Callbacks for `gen_server`.
 %%
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3, format_status/2]).
 
 %%
 %%  Type exports.
@@ -330,8 +332,9 @@
 %%
 -record(state, {
     inst_id     :: inst_id(),       %% Id of the current instance.
+    type        :: inst_type(),     %% Type of the instance. In simple cases, it will match the module.
     module      :: module(),        %% Implementation of the user FSM.
-    created     :: timestamp(),     %% Current instance creation time.  TODO: HM.
+    created     :: timestamp(),     %% Current instance creation time.
     sname       :: state_name(),    %% User FSM state name.
     sdata       :: state_data(),    %% User FSM state data.
     rt_field    :: integer(),       %% Runtime data field in the sdata.
@@ -683,6 +686,18 @@
 %%      Name is valid for the entire FSM lifecycle, including
 %%      the `completed` state.
 %%
+%%  `{type, Type}`
+%%  :   Type of the FSM. By default, it will match the module of the FSM,
+%%      that is provided to this module as a callback. In some cases, the
+%%      type can differ from the module. It could be the case for some
+%%      parametrized modules, or modules, that provide higher level of
+%%      abstraction for implementing business specific processes.
+%%
+%%  `{app, Application}`
+%%  :   Application, that owns the process. If not specified, OTP application
+%%      name is used instead. The OTP application name is derived from the
+%%      callback module.
+%%
 %%  `{start_spec, StartSpec :: start_spec()}`
 %%  :   Tells, how the FSM should be started. Default is `{default, []}`.
 %%      This option is used by `eproc_registry` therefore will be ignored,
@@ -843,6 +858,19 @@ name() ->
     case erlang:get('eproc_fsm$name') of
         undefined -> {error, not_fsm};
         Name      -> {ok, Name}
+    end.
+
+
+%%
+%%  Returns callback module, used by this FSM.
+%%  This funtion can be called only from an FSM process.
+%%
+-spec type() -> {ok, atom()} | {error, not_fsm}.
+
+type() ->
+    case erlang:get('eproc_fsm$type') of
+        undefined -> {error, not_fsm};
+        Type      -> {ok, Type}
     end.
 
 
@@ -1639,10 +1667,8 @@ resume(FsmRef, Options) ->
             StartAction = proplists:get_value(start, Options, yes),
             case eproc_store:set_instance_resuming(Store, FsmRefInStore, StateAction, UserAction) of
                 {ok, InstId, StoredStartSpec} ->
-                    % TODO: how to obtain Module for eproc_stats?
                     case StartAction of
                         no ->
-                            % eproc_stats:instance_resumed(Module),
                             {ok, {inst, InstId}};
                         _ ->
                             StartSpec = case StartAction of
@@ -1653,7 +1679,6 @@ resume(FsmRef, Options) ->
                             {ok, ResolvedFsmRef} = eproc_registry:make_new_fsm_ref(Registry, {inst, InstId}, StartSpec),
                             try gen_server:call(ResolvedFsmRef, {'eproc_fsm$is_online'}) of
                                 true ->
-                                    % eproc_stats:instance_resumed(Module),
                                     {ok, {inst, InstId}}
                             catch
 %                               TODO:  exit:{normal, Reason} ->
@@ -1854,8 +1879,6 @@ register_sent_msg({inst, SrcInstId}, Dst, SentMsgCId, SentMsgType, SentMsg, Time
         sent_time = Timestamp
     },
     NewRegistered = [NewMsgReg | Registered],
-    % TODO: how to obtain Module for eproc_stats?
-    % eproc_stats:message_created(Module), % or even eproc_stats:message_created(Module, sent),
     erlang:put('eproc_fsm$msg_regs', MsgRegs#msg_regs{next_msg_nr = NewNextMsgNr, registered = NewRegistered}),
     {ok, NewMsgCId};
 
@@ -1907,8 +1930,6 @@ register_resp_msg({inst, SrcInstId}, Dst, SentMsgCId, RespMsgCId, RespMsgType, R
                 resp_time = Timestamp
             },
             NewRegistered = lists:keyreplace(SentMsgCId, #msg_reg.sent_cid, Registered, NewMsgReg),
-            % TODO: how to obtain Module for eproc_stats?
-            % eproc_stats:message_created(Module), % or even eproc_stats:message_created(Module, recv),
             erlang:put('eproc_fsm$msg_regs', MsgRegs#msg_regs{next_msg_nr = NewNextMsgNr, registered = NewRegistered}),
             {ok, NewMsgCId}
     end.
@@ -1980,6 +2001,21 @@ resolve_start_spec(FsmRef, {mfa, {Module, Function, Args}}) when is_atom(Module)
     ResolvedArgs = lists:map(FsmRefMapFun, Args),
     {start_link_mfa, {Module, Function, ResolvedArgs}}.
 
+
+%%
+%%  This function should be called when crash of the fsm is detected.
+%%  It registers it.
+%%
+%%  This function is designed to be used from an `error_logger` handler,
+%%  (`eproc_error_logger`) and is tied to the data, returned by the `format_status/2`.
+%%
+handle_crash_msg(Pid, Msg, {?MODULE, #state{inst_id = InstId, type = Type, trn_nr = LastTrnNr, store = StoreRef}}, Reason) ->
+    _ = eproc_stats:add_instance_crashed(Type),
+    _ = eproc_store:add_inst_crash(StoreRef, InstId, LastTrnNr, Pid, Msg, Reason),
+    ok;
+
+handle_crash_msg(_Pid, _Msg, _State, _Reason) ->
+    {error, not_fsm}.
 
 
 %% =============================================================================
@@ -2061,16 +2097,16 @@ handle_cast({'eproc_fsm$send_event', Event, EventType, EventTypeFun, EventSrc, M
 handle_cast({'eproc_fsm$kill'}, State) ->
     #state{
         inst_id = InstId,
-        module  = Module,
+        type    = Type,
         created = Created
     } = State,
+    eproc_stats:add_instance_killed(Type, Created),
     lager:notice("FSM id=~p killed.", [InstId]),
-    eproc_stats:instance_killed(Module, Created),
     shutdown(State);
 
-handle_cast({'eproc_fsm$suspend'}, State = #state{inst_id = InstId, module = Module}) ->
+handle_cast({'eproc_fsm$suspend'}, State = #state{inst_id = InstId, type = Type}) ->
+    eproc_stats:add_instance_suspended(Type),
     lager:notice("FSM id=~p suspended.", [InstId]),
-    eproc_stats:instance_suspended(Module),
     shutdown(State).
 
 
@@ -2131,7 +2167,20 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.    % TODO: Call CB:code_change.
 
 
-% TODO: Call format_status from somewhere.
+%%
+%%  Invoked when printing server state.
+%%
+format_status(terminate, [_PDict, State]) ->
+    % This structure is used in the `handle_crash_msg/4` function, to detect crashes.
+    % The `handle_crash_msg/4` is called from the `eproc_error_logger` handler, it
+    % gets more of the context info to register the error properly.
+    % This "loop" could be eliminated, if this module would be implemented
+    % as a special_process instead of gen_server.
+    {?MODULE, State};
+
+format_status(_Opt, [_PDict, State]) ->
+    % TODO: Call format_status from somewhere.
+    [{data, [{"State", State}]}].
 
 
 
@@ -2355,9 +2404,15 @@ resolve_user_action(CommonOpts) ->
 %%  Creates new instance, initializes its initial state.
 %%
 handle_create(Module, Args, CreateOpts, CustomOpts) ->
+    ModuleApp = case application:get_application(Module) of
+        {ok, ModApp} -> ModApp;
+        undefined    -> undefined
+    end,
     Now         = eproc:now(),
     Group       = proplists:get_value(group,      CreateOpts, new),
     Name        = proplists:get_value(name,       CreateOpts, undefined),
+    App         = proplists:get_value(app,        CreateOpts, ModuleApp),
+    Type        = proplists:get_value(type,       CreateOpts, Module),
     Store       = proplists:get_value(store,      CreateOpts, undefined),
     StartSpec   = proplists:get_value(start_spec, CreateOpts, undefined),
     {ok, InitSName, InitSData} = call_init_persistent(Module, Args),
@@ -2374,6 +2429,8 @@ handle_create(Module, Args, CreateOpts, CustomOpts) ->
         inst_id     = undefined,
         group       = Group,
         name        = Name,
+        app         = App,
+        type        = Type,
         module      = Module,
         args        = Args,
         opts        = CustomOpts,
@@ -2389,7 +2446,7 @@ handle_create(Module, Args, CreateOpts, CustomOpts) ->
         arch_state  = undefined,
         transitions = undefined
     },
-    eproc_stats:instance_created(Module),
+    eproc_stats:add_instance_created(Type),
     eproc_store:add_instance(Store, Instance).
 
 
@@ -2401,7 +2458,7 @@ handle_start(FsmRef, StartOpts, State = #state{store = Store}) ->
         {ok, Instance = #instance{status = Status}} when Status =:= running; Status =:= resuming ->
             #instance{
                 inst_id = InstId,
-                module = Module
+                type = Type
             } = Instance,
             StateWithInstId = State#state{inst_id = InstId},
             ok = limits_setup(StateWithInstId),
@@ -2416,9 +2473,9 @@ handle_start(FsmRef, StartOpts, State = #state{store = Store}) ->
             case LimitsResult of
                 ok ->
                     case start_loaded(Instance, StartOpts, StateWithInstId) of
-                        {ok, NewState} ->
+                        {ok, NewState = #state{type = Type}} ->
                             lager:debug("FSM started, ref=~p, pid=~p.", [FsmRef, self()]),
-                            eproc_stats:instance_started(Module),
+                            eproc_stats:add_instance_started(Type),
                             {online, NewState};
                         {error, Reason} ->
                             lager:warning("Failed to start FSM, ref=~p, error=~p.", [FsmRef, Reason]),
@@ -2426,6 +2483,7 @@ handle_start(FsmRef, StartOpts, State = #state{store = Store}) ->
                     end;
                 {reached, Limits} ->
                     {ok, InstId} = eproc_store:set_instance_suspended(Store, FsmRef, {fault, restart_limit}),
+                    eproc_stats:add_instance_suspended(Type),
                     lager:notice(
                         "Suspending FSM on startup, give up restarting, ref=~p, id=~p, limits ~p reached.",
                         [FsmRef, InstId, Limits]
@@ -2446,6 +2504,7 @@ start_loaded(Instance, StartOpts, State) ->
         inst_id = InstId,
         group = Group,
         name = Name,
+        type = Type,
         curr_state = InstState,
         interrupt = Interrupt
     } = Instance,
@@ -2460,6 +2519,7 @@ start_loaded(Instance, StartOpts, State) ->
     } = State,
 
     undefined = erlang:put('eproc_fsm$id', InstId),
+    undefined = erlang:put('eproc_fsm$type', Type),
     undefined = erlang:put('eproc_fsm$group', Group),
     undefined = erlang:put('eproc_fsm$name', Name),
 
@@ -2478,6 +2538,7 @@ start_loaded(Instance, StartOpts, State) ->
                         {ok, NewState} ->
                             ok = limits_reset(State),
                             ok = eproc_store:set_instance_resumed(Store, InstId, LastTrnNr),
+                            eproc_stats:add_instance_resumed(Type),
                             {ok, NewState};
                         {error, Reason} ->
                             {error, Reason}
@@ -2506,8 +2567,11 @@ start_loaded(Instance, StartOpts, State) ->
                             },
                             TransitionFun = fun (_T, _TN, S) -> perform_resume_transition(ResumeAttempt, S) end,
                             case perform_transition(Trigger, TransitionFun, NewState) of
-                                {cont, ResumedState} -> {ok, ResumedState};
-                                {error, Reason}      -> {error, Reason}
+                                {cont, ResumedState} ->
+                                    eproc_stats:add_instance_resumed(Type),
+                                    {ok, ResumedState};
+                                {error, Reason} ->
+                                    {error, Reason}
                             end;
                         {error, Reason} ->
                             {error, Reason}
@@ -2525,6 +2589,7 @@ init_loaded(Instance, SName, SData, State) ->
     } = State,
     #instance{
         inst_id = InstId,
+        type = Type,
         module = Module,
         created = Created,
         curr_state = InstState
@@ -2540,6 +2605,7 @@ init_loaded(Instance, SName, SData, State) ->
             {ok, UpgradedSDataWithRT, RTField, RTDefault} = call_init_runtime(UpgradedSName, UpgradedSData, Module),
             NewState = State#state{
                 inst_id     = InstId,
+                type        = Type,
                 module      = Module,
                 sname       = UpgradedSName,
                 sdata       = UpgradedSDataWithRT,
@@ -2624,7 +2690,8 @@ perform_transition(Trigger, TransitionFun, State) ->
     #state{
         inst_id = InstId,
         sname = SName,
-        module = Module,
+        type = Type,
+        created = Created,
         trn_nr = LastTrnNr,
         rt_field = RuntimeField,
         rt_default = RuntimeDefault,
@@ -2651,7 +2718,12 @@ perform_transition(Trigger, TransitionFun, State) ->
 
     %%  Collect all messages.
     #msg_regs{registered = MsgRegs} = erlang:erase('eproc_fsm$msg_regs'),
-    {RegisteredMsgs, RegisteredMsgRefs, InstId} = lists:foldr(fun registered_messages/2, {[], [], InstId}, MsgRegs),
+    {RegisteredMsgs, RegisteredMsgRefs, OutAsyncCount, OutSyncCount, InstId} = lists:foldr(
+        fun registered_messages/2,
+        {[], [], 0, 0, InstId},
+        MsgRegs
+    ),
+
     RequestMsgCId = case TriggerMsgCId of
         undefined             -> ?MSGCID_REQUEST(InstId, TrnNr);
         ?MSGCID_SENT(I, T, M) -> ?MSGCID_RECV(I, T, M)
@@ -2667,8 +2739,6 @@ perform_transition(Trigger, TransitionFun, State) ->
         date     = TrnStart,
         body     = TriggerMsg
     },
-    % TODO: this is the only counted case of message creation
-    eproc_stats:message_created(Module), % or even eproc_stats:message_created(Module, recv),
     {ResponseMsgRef, TransitionMsgs} = case Reply of
         noreply ->
             {undefined, [RequestMsg | RegisteredMsgs]};
@@ -2693,6 +2763,7 @@ perform_transition(Trigger, TransitionFun, State) ->
             case erlang:erase('eproc_fsm$suspend') of
                 {true, SuspReason} ->
                     lager:notice("FSM id=~p suspended, impl reason ~p.", [InstId, SuspReason]),
+                    eproc_stats:add_instance_suspended(Type),
                     {stop, suspended, [#interrupt{reason = {impl, SuspReason}}], undefined};
                 false ->
                     case limits_notify_trn(State, TransitionMsgs) of
@@ -2702,18 +2773,21 @@ perform_transition(Trigger, TransitionFun, State) ->
                             {cont, running, undefined, D};
                         {reached, Reached} ->
                             lager:notice("FSM id=~p suspended, limits ~p reached.", [InstId, Reached]),
+                            eproc_stats:add_instance_suspended(Type),
                             {stop, suspended, [#interrupt{reason = {fault, {limits, Reached}}}], undefined}
                     end
             end;
         stop ->
+            eproc_stats:add_instance_completed(Type, Created),
             {stop, completed, undefined, undefined}
     end,
+    Duration = timer:now_diff(TrnEnd, TrnStart),
     Transition = #transition{
         trn_id = TrnNr,
         sname = NewSName,
         sdata = cleanup_runtime_data(NewSData, RuntimeField, RuntimeDefault),
         timestamp = TrnStart,
-        duration = timer:now_diff(TrnEnd, TrnStart),
+        duration = Duration,
         trigger_type = TriggerType,
         trigger_msg  = RequestMsgRef,
         trigger_resp = ResponseMsgRef,
@@ -2723,7 +2797,6 @@ perform_transition(Trigger, TransitionFun, State) ->
         inst_status  = InstStatus,
         interrupts   = Interrupts
     },
-    eproc_stats:transition_completed(Module),
     % TODO: add_transition can reply with suggestion to stop the process.
     {ok, InstId, TrnNr} = eproc_store:add_transition(Store, InstId, Transition, TransitionMsgs),
 
@@ -2735,13 +2808,15 @@ perform_transition(Trigger, TransitionFun, State) ->
             ReplyFun(InstId, ReplyMsgCIdToSend, ReplyMsgToSend)
     end,
 
-    %% Wait a bit, if needed.
+    %% Wait a bit, if some limits were reached.
     case Delay of
         undefined -> ok;
         _ ->
             lager:debug("FSM id=~p is going to sleep for ~p ms on transition.", [InstId, Delay]),
             timer:sleep(Delay)
     end,
+
+    eproc_stats:add_transition_completed(Type, Duration, RequestMsgType, Reply =/= noreply, OutAsyncCount, OutSyncCount),
 
     %% Ok, save changes in the state.
     NewState = State#state{
@@ -2786,7 +2861,6 @@ perform_event_transition(Trigger, TrnNr, InitAttrActions, State) ->
     #state{
         inst_id = InstId,
         module = Module,
-        created = Created,
         sname = SName,
         sdata = SData
     } = State,
@@ -2847,7 +2921,6 @@ perform_event_transition(Trigger, TrnNr, InitAttrActions, State) ->
                 1 -> {ok, NewSData};    % Do not exit for the initial state.
                 _ -> perform_exit(SName, NewSName, NewSData, State)
             end,
-            eproc_stats:instance_completed(Module, Created),
             {stop, DerivedSName, SDataAfterExit}
     end,
     {ok, ProcAction, SNameAfterTrn, SDataAfterTrn, Reply, InitAttrActions}.
@@ -2885,7 +2958,7 @@ perform_entry(PrevSName, NextSName, DerivedSName, SData, State = #state{module =
 %%  Resolves messages and references that were registered during
 %%  particular transition.
 %%
-registered_messages(MsgReg = #msg_reg{resp_cid = undefined}, {Msgs, Refs, InstId}) ->
+registered_messages(MsgReg = #msg_reg{resp_cid = undefined}, {Msgs, Refs, AsyncCount, SyncCount, InstId}) ->
     #msg_reg{
         dst = Destication,
         sent_cid = SentMsgCId,
@@ -2903,9 +2976,9 @@ registered_messages(MsgReg = #msg_reg{resp_cid = undefined}, {Msgs, Refs, InstId
         date     = SentTime,
         body     = SentMsgBody
     },
-    {[NewMsg | Msgs], [NewRef | Refs], InstId};
+    {[NewMsg | Msgs], [NewRef | Refs], AsyncCount + 1, SyncCount, InstId};
 
-registered_messages(MsgReg, {Msgs, Refs, InstId}) ->
+registered_messages(MsgReg, {Msgs, Refs, AsyncCount, SyncCount, InstId}) ->
     #msg_reg{
         dst = Destication,
         sent_cid  = SentMsgCId,
@@ -2937,7 +3010,7 @@ registered_messages(MsgReg, {Msgs, Refs, InstId}) ->
         date     = RespTime,
         body     = RespMsgBody
     },
-    {[NewReqMsg, NewResMsg | Msgs], [NewReqRef, NewResRef | Refs], InstId}.
+    {[NewReqMsg, NewResMsg | Msgs], [NewReqRef, NewResRef | Refs], AsyncCount, SyncCount + 1, InstId}.
 
 
 %%
@@ -2965,6 +3038,8 @@ split_options(Options) ->
 split_options(Prop = {N, _}, {Create, Start, Send, Common, Unknown}) when
         N =:= group;
         N =:= name;
+        N =:= app;
+        N =:= type;
         N =:= start_spec
         ->
     {[Prop | Create], Start, Send, Common, Unknown};
