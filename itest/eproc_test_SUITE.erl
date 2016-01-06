@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013-2015 Erisata, UAB (Ltd.)
+%| Copyright 2013-2016 Erisata, UAB (Ltd.)
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@
 %%% Testcases for EProc FSM test support functions.
 %%%
 -module(eproc_test_SUITE).
+-compile([{parse_transform, lager_transform}]).
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([
     test_wait_term/1

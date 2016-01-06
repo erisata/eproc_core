@@ -23,7 +23,7 @@
 -module(eproc_error_logger).
 -behaviour(gen_event).
 -compile([{parse_transform, lager_transform}]).
--export([register/0]).
+-export([register/0, unregister/0]).
 -export([init/1, handle_event/2, handle_call/2, handle_info/2, terminate/2, code_change/3]).
 
 
@@ -38,12 +38,20 @@ register() ->
     ok = error_logger:add_report_handler(?MODULE, []).
 
 
+%%
+%%
+%%
+unregister() ->
+    ok = error_logger:delete_report_handler(?MODULE).
+
+
 
 %%% ============================================================================
 %%% Internal data structures.
 %%% ============================================================================
 
 -record(state, {
+    id :: integer()
 }).
 
 
@@ -55,7 +63,9 @@ register() ->
 %%
 %%
 init([]) ->
-    {ok, #state{}}.
+    HandlerId = erlang:unique_integer([positive, monotonic]),
+    lager:debug("Registering eproc_error_logger, id=~p.", [HandlerId]),
+    {ok, #state{id = HandlerId}}.
 
 
 %%
@@ -93,7 +103,8 @@ handle_info(_Info, State) ->
 %%
 %%
 %%
-terminate(_Arg, _State) ->
+terminate(_Arg, #state{id = HandlerId}) ->
+    lager:debug("Unregistering eproc_error_logger, id=~p.", [HandlerId]),
     ok.
 
 

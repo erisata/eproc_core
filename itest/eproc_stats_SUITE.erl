@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013-2015 Erisata, UAB (Ltd.)
+%| Copyright 2013-2016 Erisata, UAB (Ltd.)
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -18,9 +18,12 @@
 %%% Testcases for `eproc_stats` module.
 %%%
 -module(eproc_stats_SUITE).
--export([all/0, init_per_suite/1, end_per_suite/1]).
+-compile([{parse_transform, lager_transform}]).
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 -export([
-    test_stats/1
+    test_lifecycle_stats/1,
+    test_crash_stats/1,
+    test_msg_stats/1
 ]).
 -define(namespaced_types, ok).
 -include_lib("common_test/include/ct.hrl").
@@ -32,7 +35,9 @@
 %%  CT API.
 %%
 all() -> [
-    test_stats
+    test_lifecycle_stats,
+    test_crash_stats,
+    test_msg_stats
 ].
 
 
@@ -60,20 +65,33 @@ end_per_suite(_Config) ->
     ok = application:stop(eproc_core).
 
 
+%%
+%%  Log test case name at start
+%%
+init_per_testcase(TestCase, Config) ->
+    lager:debug("-------------------------------------- ~p start", [TestCase]),
+    Config.
+
+
+%%
+%%  Log test case name at end
+%%
+end_per_testcase(TestCase, _Config) ->
+    lager:debug("-------------------------------------- ~p end", [TestCase]),
+    ok.
+
+
 
 %%% ============================================================================
 %%% Testcases.
 %%% ============================================================================
 
 %%
-%%  Tests if FSM stats are collected
+%%  Tests if FSM lifecycle stats are collected.
 %%
-test_stats(_Config) ->
+test_lifecycle_stats(_Config) ->
     % Initialise
-    ResetStatsFun = fun(Object, Type) -> exometer:reset([eproc_core, Object, eproc_fsm__seq, Type]) end,
-    ResetInstStatsFun = fun(Type) -> ResetStatsFun(inst, Type) end,
-    lists:foreach(ResetInstStatsFun, [created, started, suspended, resumed, killed, completed]),
-    ResetStatsFun(trn, count),
+    ok = eproc_stats:reset(all),
     % ---------
     % Test cases
     % ---------
@@ -122,9 +140,55 @@ test_stats(_Config) ->
     ?assertThat(eproc_stats:get_value(inst, eproc_fsm__seq, created), is(4)),
     ?assertThat(eproc_stats:get_value(inst, eproc_fsm__seq, started), is(7)),
     ?assertThat(eproc_stats:get_value(inst, eproc_fsm__seq, suspended), is(3)),
-    %?assertThat(eproc_stats:get_value(inst, eproc_fsm__seq, resumed), is(?)),
+    ?assertThat(eproc_stats:get_value(inst, eproc_fsm__seq, resumed), is(3)),
     ?assertThat(eproc_stats:get_value(inst, eproc_fsm__seq, killed), is(1)),
     ?assertThat(eproc_stats:get_value(inst, eproc_fsm__seq, completed), is(2)),
+    ?assertThat(eproc_stats:get_value(inst, eproc_fsm__seq, crashed), is(0)),
     ?assertThat(eproc_stats:get_value(trn,  eproc_fsm__seq, count), is(11)).
+
+
+%%
+%%  Check, if crashes are detected and counted.
+%%
+test_crash_stats(_Config) ->
+    ok = eproc_stats:reset(all),
+    {ok, FsmRef} = eproc_fsm__cache:new(),
+    ok = eproc_fsm__cache:crash(FsmRef),
+    ok = eproc_fsm__cache:stop(FsmRef),
+    % ------------
+    % Test results
+    timer:sleep(50),
+    ?assertThat(eproc_stats:get_value(inst, eproc_fsm__cache, crashed), is(1)),
+    ok.
+
+
+%%
+%%  Check if messages are counted correctly.
+%%
+test_msg_stats(_Config) ->
+    ok = eproc_stats:reset(all),
+    {ok, P1} = eproc_fsm__chain:new(),      %               1 in casts
+    {ok, P2} = eproc_fsm__chain:new(P1),    %               1 in casts
+    {ok, P3} = eproc_fsm__chain:new(P2),    %               1 in casts
+    ok = timer:sleep(50),
+    0 = eproc_fsm__chain:sum(P3, 2),        % 3 in calls,               2 out calls.
+    ok = eproc_fsm__chain:add(P3, 1, 2),    %               3 in casts,              2 out cast.
+    ok = eproc_fsm__chain:add(P3, 1, 1),    %               2 in casts,              1 out cast.
+    5 = eproc_fsm__chain:sum(P3, 2),        % 3 in calls,               2 out calls.
+    3 = eproc_fsm__chain:sum(P2, 1),        % 2 in calls,               1 out calls.
+    ok = eproc_fsm__chain:stop(P3),         %               1 in casts
+    ok = eproc_fsm__chain:stop(P2),         %               1 in casts
+    ok = eproc_fsm__chain:stop(P1),         %               1 in casts
+    ok = timer:sleep(50),
+    11 = eproc_stats:get_value(msg, eproc_fsm__chain, in_async),
+    8  = eproc_stats:get_value(msg, eproc_fsm__chain, in_sync),
+    3  = eproc_stats:get_value(msg, eproc_fsm__chain, out_async),
+    5  = eproc_stats:get_value(msg, eproc_fsm__chain, out_sync),
+    11 = eproc_stats:get_value(msg, '_', in_async),
+    8  = eproc_stats:get_value(msg, '_', in_sync),
+    3  = eproc_stats:get_value(msg, '_', out_async),
+    5  = eproc_stats:get_value(msg, '_', out_sync),
+    0  = eproc_stats:get_value(inst, '_', crashed),
+    ok.
 
 

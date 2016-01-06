@@ -2010,6 +2010,7 @@ resolve_start_spec(FsmRef, {mfa, {Module, Function, Args}}) when is_atom(Module)
 %%  (`eproc_error_logger`) and is tied to the data, returned by the `format_status/2`.
 %%
 handle_crash_msg(Pid, Msg, {?MODULE, #state{inst_id = InstId, type = Type, trn_nr = LastTrnNr, store = StoreRef}}, Reason) ->
+    lager:debug("FSM crash detected, instId=~p, pid=~p, reason=~p", [InstId, Pid, Reason]),
     _ = eproc_stats:add_instance_crashed(Type),
     _ = eproc_store:add_inst_crash(StoreRef, InstId, LastTrnNr, Pid, Msg, Reason),
     ok;

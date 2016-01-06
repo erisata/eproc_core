@@ -124,12 +124,11 @@ add_instance_crashed(InstType) ->
 %%  Records transitions made by the instances of particular type.
 %%
 add_transition_completed(InstType, DurationUS, _ReqMsgType, HadReplyMsg, OutMsgAsync, OutMsgSync) ->
-    InMsgCount = case HadReplyMsg of true -> 2 ; false -> 1 end,
     ok = inc_spiral([?ROOT, trn, InstType, count]),
     ok = update_spiral([?ROOT, trn, InstType, duration], DurationUS),
     case HadReplyMsg of
-        false -> ok = update_spiral([?ROOT, msg, InstType, in_async], InMsgCount);
-        true  -> ok = update_spiral([?ROOT, msg, InstType, in_sync], InMsgCount)
+        false -> ok = inc_spiral([?ROOT, msg, InstType, in_async]);
+        true  -> ok = inc_spiral([?ROOT, msg, InstType, in_sync])
     end,
     ok = update_spiral([?ROOT, msg, InstType, out_async], OutMsgAsync),
     ok = update_spiral([?ROOT, msg, InstType, out_sync], OutMsgSync),

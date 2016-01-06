@@ -35,6 +35,7 @@
 -export([start/2, stop/1]).
 
 -define(APP, eproc_core).
+-define(MIB, "ERISATA-EPROC-MIB").
 
 
 %% =============================================================================
@@ -72,7 +73,7 @@ registry_cfg() ->
 %%
 start(_StartType, _StartArgs) ->
     ok = validate_env(application:get_all_env()),
-    SnmpAgent = enomon_snmp:load_application_mib(?APP, ?MODULE, "ERISATA-EPROC-MIB"),
+    SnmpAgent = enomon_snmp:load_application_mib(?APP, ?MODULE, ?MIB),
     ok = eproc_error_logger:register(),
     {ok, Pid} = eproc_core_sup:start_link(),
     {ok, Pid, {SnmpAgent}}.
@@ -82,7 +83,8 @@ start(_StartType, _StartArgs) ->
 %% Stop the application.
 %%
 stop({SnmpAgent}) ->
-    enomon:unload_application_mib(?APP, SnmpAgent, "ERISATA-EPROC-MIB"),
+    _ = eproc_error_logger:unregister(),
+    _ = enomon_snmp:unload_application_mib(?APP, SnmpAgent, ?MIB),
     ok.
 
 
