@@ -1,202 +1,21 @@
 ERISATA-EPROC-MIB DEFINITIONS ::= BEGIN
 
     IMPORTS
-        DisplayString                                   FROM RFC1213-MIB
-        MODULE-IDENTITY, OBJECT-TYPE, NOTIFICATION-TYPE FROM SNMPv2-SMI
-        erisata, erisataMibs                            FROM ERISATA-MIB
-        MODULE-COMPLIANCE, OBJECT-GROUP,
-        NOTIFICATION-GROUP                              FROM SNMPv2-CONF
+        MODULE-IDENTITY     FROM SNMPv2-SMI
+        erisata             FROM ERISATA-MIB
         ;
 
-    eprocMib MODULE-IDENTITY
-        LAST-UPDATED "201510070000Z"
+    eproc MODULE-IDENTITY
+        LAST-UPDATED "201601070000Z"
         ORGANIZATION "UAB Erisata"
         CONTACT-INFO
             "Karolis Petrauskas
              UAB Erisata
              Vivulskio 15-3, Vilnius
              karolis.petrauskas@erisata.lt"
-        DESCRIPTION "SNMP module for the EProc core."
-        ::= { erisataMibs 3 }
-
-    --
-    --  MIB metadata.
-    --
-    eprocMibGroups   OBJECT IDENTIFIER ::= { eprocMib 1 }
-    eprocMibCompls   OBJECT IDENTIFIER ::= { eprocMib 2 }
-
-    --
-    --  Structure for all metrics.
-    --
-    eproc            OBJECT IDENTIFIER ::= { erisata 10200 }
-    eprocObjects     OBJECT IDENTIFIER ::= { eproc 1 }
-    eprocEvents      OBJECT IDENTIFIER ::= { eproc 2 }
-
-    --
-    --  Object types, providing generic information.
-    --
-    storeModule OBJECT-TYPE
-        SYNTAX      DisplayString
-        MAX-ACCESS  read-only
-        STATUS      current
-        DESCRIPTION "Store implementation used by the EProc."
-        ::= { eprocObjects 10 }
-
-    registryModule OBJECT-TYPE
-        SYNTAX      DisplayString
-        MAX-ACCESS  read-only
-        STATUS      current
-        DESCRIPTION "Registry implementation used by the EProc."
-        ::= { eprocObjects 11 }
-
-    limitCount OBJECT-TYPE
-        SYNTAX      INTEGER
-        MAX-ACCESS  read-only
-        STATUS      current
-        DESCRIPTION "Number currently maintained limits."
-        ::= { eprocObjects 50 }
-
-    --
-    --  Object types, providing stats calculated at runtime.
-    --  Starts at 100.
-    --
-    instCreated OBJECT-TYPE
-        SYNTAX      INTEGER
-        MAX-ACCESS  read-only
-        STATUS      current
-        DESCRIPTION "Number of instances created in last 60 seconds"
-        ::= { eprocObjects 100 }
-
-    instStarted OBJECT-TYPE
-        SYNTAX      INTEGER
-        MAX-ACCESS  read-only
-        STATUS      current
-        DESCRIPTION "Number of instances started in last 60 seconds"
-        ::= { eprocObjects 101 }
-
-    instSuspended OBJECT-TYPE
-        SYNTAX      INTEGER
-        MAX-ACCESS  read-only
-        STATUS      current
-        DESCRIPTION "Number of instances suspended in last 60 seconds"
-        ::= { eprocObjects 102 }
-
-    instResumed OBJECT-TYPE
-        SYNTAX      INTEGER
-        MAX-ACCESS  read-only
-        STATUS      current
-        DESCRIPTION "Number of instances resumed in last 60 seconds"
-        ::= { eprocObjects 103 }
-
-    instKilled OBJECT-TYPE
-        SYNTAX      INTEGER
-        MAX-ACCESS  read-only
-        STATUS      current
-        DESCRIPTION "Number of instances killed in last 60 seconds"
-        ::= { eprocObjects 104 }
-
-    instCompleted OBJECT-TYPE
-        SYNTAX      INTEGER
-        MAX-ACCESS  read-only
-        STATUS      current
-        DESCRIPTION "Number of instances completed in last 60 seconds"
-        ::= { eprocObjects 105 }
-
-    instDuration OBJECT-TYPE
-        SYNTAX      INTEGER
-        MAX-ACCESS  read-only
-        STATUS      current
-        DESCRIPTION "Total time in seconds spent executing all instances, completed during last 60 seconds"
-        ::= { eprocObjects 106 }
-
-    instCrashed OBJECT-TYPE
-        SYNTAX      INTEGER
-        MAX-ACCESS  read-only
-        STATUS      current
-        DESCRIPTION "Number of FSM instance crashes in last 60 seconds"
-        ::= { eprocObjects 107 }
-
-    trnCount OBJECT-TYPE
-        SYNTAX      INTEGER
-        MAX-ACCESS  read-only
-        STATUS      current
-        DESCRIPTION "Number of transitions, performed in last 60 seconds"
-        ::= { eprocObjects 110 }
-
-    trnDuration OBJECT-TYPE
-        SYNTAX      INTEGER
-        MAX-ACCESS  read-only
-        STATUS      current
-        DESCRIPTION "Total time in seconds spent executing all transitions, completed during last 60 seconds"
-        ::= { eprocObjects 111 }
-
-    msgInAsyncCount OBJECT-TYPE
-        SYNTAX      INTEGER
-        MAX-ACCESS  read-only
-        STATUS      current
-        DESCRIPTION "Number of async messages handled by FSMs in last 60 seconds"
-        ::= { eprocObjects 120 }
-
-    msgInSyncCount OBJECT-TYPE
-        SYNTAX      INTEGER
-        MAX-ACCESS  read-only
-        STATUS      current
-        DESCRIPTION "Number of sync messages handled by FSMs in last 60 seconds"
-        ::= { eprocObjects 121 }
-
-    msgOutAsyncCount OBJECT-TYPE
-        SYNTAX      INTEGER
-        MAX-ACCESS  read-only
-        STATUS      current
-        DESCRIPTION "Number of async messages sent by FSMs in last 60 seconds"
-        ::= { eprocObjects 122 }
-
-    msgOutSyncCount OBJECT-TYPE
-        SYNTAX      INTEGER
-        MAX-ACCESS  read-only
-        STATUS      current
-        DESCRIPTION "Number of sync messages sent by FSMs in last 60 seconds"
-        ::= { eprocObjects 123 }
-
-
-    ----------------------------------------------------------------------------
-    --  Notifications
-    --
-
-    --
-    --  This is here just for example of a notification (SNMP trap).
-    --
-    limitCountChanged NOTIFICATION-TYPE
-        OBJECTS     { limitCount }
-        STATUS      current
-        DESCRIPTION "This event is sent, when the limit count changes."
-        ::= { eprocEvents 1 }
-
-
-    ----------------------------------------------------------------------------
-    --  Groups
-    --
-
-    eprocGenericOG OBJECT-GROUP
-        OBJECTS {storeModule, registryModule, limitCount}
-        STATUS current
-        DESCRIPTION "Generic EProc information."
-        ::= { eprocMibGroups 1 }
-
-    eprocRTStatsOG OBJECT-GROUP
-        OBJECTS {instCreated, instStarted, instSuspended, instResumed,
-            instKilled, instCompleted, instDuration, instCrashed,
-            trnCount, trnDuration, msgInAsyncCount, msgInSyncCount,
-            msgOutAsyncCount, msgOutSyncCount}
-        STATUS current
-        DESCRIPTION "Statistics collected at runtime."
-        ::= { eprocMibGroups 2 }
-
-    eprocGenericNG NOTIFICATION-GROUP
-        NOTIFICATIONS {limitCountChanged}
-        STATUS        current
-        DESCRIPTION   "Main notifications."
-        ::= { eprocMibGroups 3 }
-
+        DESCRIPTION "Root SNMP module for the EProc application (and all its modules)."
+        REVISION "201601070000Z"
+        DESCRIPTION "Initial revision."
+        ::= { erisata 2 }
 
 END

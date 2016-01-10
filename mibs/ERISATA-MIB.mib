@@ -1,0 +1,28 @@
+ERISATA-MIB DEFINITIONS ::= BEGIN
+
+    IMPORTS
+        MODULE-IDENTITY, enterprises FROM SNMPv2-SMI
+        ;
+
+    erisata MODULE-IDENTITY
+        LAST-UPDATED "201601070000Z"
+        ORGANIZATION "UAB Erisata"
+        CONTACT-INFO
+            "Karolis Petrauskas
+             UAB Erisata
+             Vivulskio 15-3, Vilnius
+             karolis.petrauskas@erisata.lt"
+        DESCRIPTION
+            "This module is only used to define the Erisata OID, as it is issued by IANA.
+            The OID was obtained via http://pen.iana.org/pen/PenApplication.page. Please
+            refer to http://www.iana.org/assignments/enterprise-numbers/enterprise-numbers
+            for complete list of valid OIDs.
+            This OID will be used as a base OID for all the other Erisata applications.
+            "
+        REVISION "201601070000Z"
+        DESCRIPTION "All the OIDs reorganized to simplify the OID tree."
+        REVISION "201510070000Z"
+        DESCRIPTION "Initial version."
+        ::= { enterprises 46599 }
+
+END
