@@ -1414,6 +1414,8 @@ sync_send_event(FsmRef, Event) ->
 %%
 %%  TODO: Add support for sync and async events here.
 %%
+%%  TODO: Add support for orthogonal state as a substate of other state.
+%%
 -spec orthogonal(
         StateName :: state_name(),
         Trigger   :: {entry, PrevStateName},
