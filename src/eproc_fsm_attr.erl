@@ -20,6 +20,9 @@
 %%  Several extensions are provided within `eproc_core`, and other
 %%  implementations can also be provided by an user.
 %%
+%%  TODO: Better error messages: duplicate attr in one trn.
+%%  TODO: Better error messages: attr created out of scope.
+%%
 -module(eproc_fsm_attr).
 -compile([{parse_transform, lager_transform}]).
 -export([describe/2]).
