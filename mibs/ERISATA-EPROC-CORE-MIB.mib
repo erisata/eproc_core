@@ -184,6 +184,9 @@ ERISATA-EPROC-CORE-MIB DEFINITIONS ::= BEGIN
 
 
 
+    -- TODO: Store operation counts and durations.
+
+
     ----------------------------------------------------------------------------
     --  MIB Conformance definitions.
     --
@@ -195,22 +198,22 @@ ERISATA-EPROC-CORE-MIB DEFINITIONS ::= BEGIN
             which implement the ERISATA-EPROC-CORE-MIB."
         MODULE
             MANDATORY-GROUPS {
-                eprocGenericOG,
-                eprocRTStatsOG }
-            GROUP eprocGenericOG
+                eprocCoreGenericOG,
+                eprocCoreRTStatsOG }
+            GROUP eprocCoreGenericOG
             DESCRIPTION "This group is mandatory."
-            GROUP eprocRTStatsOG
+            GROUP eprocCoreRTStatsOG
             DESCRIPTION "This group is mandatory."
         ::= { eprocCoreMibCompls 1 }
 
 
-    eprocGenericOG OBJECT-GROUP
+    eprocCoreGenericOG OBJECT-GROUP
         OBJECTS {storeModule, registryModule, limitCount}
         STATUS current
         DESCRIPTION "Generic EProc information."
         ::= { eprocCoreMibGroups 1 }
 
-    eprocRTStatsOG OBJECT-GROUP
+    eprocCoreRTStatsOG OBJECT-GROUP
         OBJECTS {instCreated, instStarted, instSuspended, instResumed,
             instKilled, instCompleted, instDuration, instCrashed,
             trnCount, trnDuration, msgInAsyncCount, msgInSyncCount,
