@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013-2015 Erisata, UAB (Ltd.)
+%| Copyright 2013-2016 Erisata, UAB (Ltd.)
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -14,10 +14,10 @@
 %| limitations under the License.
 %\--------------------------------------------------------------------
 
-%%
-%%  Void EProc archive. Just prints all data to log and discards it.
-%%  This implementation can be used if no archiving is needed.
-%%
+%%%
+%%% Void EProc archive. Just prints all data to log and discards it.
+%%% This implementation can be used if no archiving is needed.
+%%%
 -module(eproc_archive_void).
 -behaviour(eproc_archive).
 -compile([{parse_transform, lager_transform}]).
@@ -26,9 +26,9 @@
 -include("eproc.hrl").
 
 
-%% =============================================================================
-%%  Public API.
-%% =============================================================================
+%%% ============================================================================
+%%% Public API.
+%%% ============================================================================
 
 %%
 %%  Returns a reference to this archive.
@@ -40,17 +40,17 @@ ref() ->
 
 
 
-%% =============================================================================
-%%  Callbacks for `eproc_codec`.
-%% =============================================================================
+%%% ============================================================================
+%%% Callbacks for `eproc_codec`.
+%%% ============================================================================
 
 %%
 %%  Archive entire FSM instance.
 %%
-archive_instance(_ArchArgs, Instance, Transitions, Messages) ->
+archive_instance(_ArchArgs, #instance{inst_id = InstId, name = Name, type = Type}, Transitions, Messages) ->
     lager:debug(
-        "Discarding instance: ~p, transitions=~p, messages=~p",
-        [Instance, Transitions, Messages]
+        "Discarding instance: instId=~p, type=~p, name=~p, count(trn)=~p, count(msg)=~p",
+        [InstId, Type, Name, length(Transitions), length(Messages)]
     ),
     ok.
 
@@ -58,10 +58,10 @@ archive_instance(_ArchArgs, Instance, Transitions, Messages) ->
 %%
 %%  Archive part of FSM instance transitions.
 %%
-archive_transitions(_ArchArgs, Instance, Transitions, Messages) ->
+archive_transitions(_ArchArgs, #instance{inst_id = InstId, name = Name, type = Type}, Transitions, Messages) ->
     lager:debug(
-        "Discarding instance transitions: instance=~p, transitions=~p, messages=~p",
-        [Instance, Transitions, Messages]
+        "Discarding instance transitions: instId=~p, type=~p, name=~p, count(trn)=~p, count(msg)=~p",
+        [InstId, Type, Name, length(Transitions), length(Messages)]
     ),
     ok.
 
