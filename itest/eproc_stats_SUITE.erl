@@ -23,7 +23,8 @@
 -export([
     test_lifecycle_stats/1,
     test_crash_stats/1,
-    test_msg_stats/1
+    test_msg_stats/1,
+    test_store_stats/1
 ]).
 -define(namespaced_types, ok).
 -include_lib("common_test/include/ct.hrl").
@@ -37,7 +38,8 @@
 all() -> [
     test_lifecycle_stats,
     test_crash_stats,
-    test_msg_stats
+    test_msg_stats,
+    test_store_stats
 ].
 
 
@@ -94,36 +96,35 @@ test_lifecycle_stats(_Config) ->
     ok = eproc_stats:reset(all),
     % ---------
     % Test cases
-    % ---------
     {ok, FsmRef1} = eproc_fsm__seq:new(),   % Suspend/resume instance
     {ok, FsmRef2} = eproc_fsm__seq:new(),   % Instance to be completed
     {ok, FsmRef3} = eproc_fsm__seq:new(),   % Instance to kill
     {ok, FsmRef4} = eproc_fsm__seq:new(),   % Instance for transitions
     timer:sleep(5),
-    ?assertThat(eproc_stats:get_value(inst, eproc_fsm__seq, started), is(4)),
-    ?assertThat(eproc_stats:get_value(trn, eproc_fsm__seq, count), is(4)),
+    ?assertThat(eproc_stats:get_fsm_stats(inst, eproc_fsm__seq, started), is(4)),
+    ?assertThat(eproc_stats:get_fsm_stats(trn, eproc_fsm__seq, count), is(4)),
     % Suspend,resume no state change -> no transition
     {ok, FsmRef1} = eproc_fsm:suspend(FsmRef1, []),
     {ok, FsmRef1} = eproc_fsm:resume(FsmRef1, []),
     timer:sleep(5),
-    ?assertThat(eproc_stats:get_value(inst, eproc_fsm__seq, started), is(5)),
-    ?assertThat(eproc_stats:get_value(trn, eproc_fsm__seq, count), is(4)),
+    ?assertThat(eproc_stats:get_fsm_stats(inst, eproc_fsm__seq, started), is(5)),
+    ?assertThat(eproc_stats:get_fsm_stats(trn, eproc_fsm__seq, count), is(4)),
     % Suspend,resume with state changed -> transition
     {ok, FsmRef1} = eproc_fsm:suspend(FsmRef1, []),
     {ok, FsmRef1} = eproc_fsm:resume(FsmRef1, [{state, {set, decrementing, {state, 20}, undefined}}]),
     timer:sleep(5),
-    ?assertThat(eproc_stats:get_value(inst, eproc_fsm__seq, started), is(6)),
-    ?assertThat(eproc_stats:get_value(trn, eproc_fsm__seq, count), is(5)),
+    ?assertThat(eproc_stats:get_fsm_stats(inst, eproc_fsm__seq, started), is(6)),
+    ?assertThat(eproc_stats:get_fsm_stats(trn, eproc_fsm__seq, count), is(5)),
     % Suspend,resume no state change no start -> no transition
     {ok, FsmRef1} = eproc_fsm:suspend(FsmRef1, []),
     {ok, FsmRef1} = eproc_fsm:resume(FsmRef1, [{start, no}]),
     timer:sleep(5),
-    ?assertThat(eproc_stats:get_value(inst, eproc_fsm__seq, started), is(6)),
-    ?assertThat(eproc_stats:get_value(trn, eproc_fsm__seq, count), is(5)),
+    ?assertThat(eproc_stats:get_fsm_stats(inst, eproc_fsm__seq, started), is(6)),
+    ?assertThat(eproc_stats:get_fsm_stats(trn, eproc_fsm__seq, count), is(5)),
     % Instance completion -> final transition
     ok = eproc_fsm__seq:close(FsmRef2),
     timer:sleep(5),
-    ?assertThat(eproc_stats:get_value(trn, eproc_fsm__seq, count), is(6)),
+    ?assertThat(eproc_stats:get_fsm_stats(trn, eproc_fsm__seq, count), is(6)),
     % Instance kill -> no transition
     {ok, FsmRef3} = eproc_fsm:kill(FsmRef3, []),
     % Generate transitions
@@ -137,14 +138,14 @@ test_lifecycle_stats(_Config) ->
     % ------------
     % Test results
     timer:sleep(50),
-    ?assertThat(eproc_stats:get_value(inst, eproc_fsm__seq, created), is(4)),
-    ?assertThat(eproc_stats:get_value(inst, eproc_fsm__seq, started), is(7)),
-    ?assertThat(eproc_stats:get_value(inst, eproc_fsm__seq, suspended), is(3)),
-    ?assertThat(eproc_stats:get_value(inst, eproc_fsm__seq, resumed), is(3)),
-    ?assertThat(eproc_stats:get_value(inst, eproc_fsm__seq, killed), is(1)),
-    ?assertThat(eproc_stats:get_value(inst, eproc_fsm__seq, completed), is(2)),
-    ?assertThat(eproc_stats:get_value(inst, eproc_fsm__seq, crashed), is(0)),
-    ?assertThat(eproc_stats:get_value(trn,  eproc_fsm__seq, count), is(11)).
+    ?assertThat(eproc_stats:get_fsm_stats(inst, eproc_fsm__seq, created), is(4)),
+    ?assertThat(eproc_stats:get_fsm_stats(inst, eproc_fsm__seq, started), is(7)),
+    ?assertThat(eproc_stats:get_fsm_stats(inst, eproc_fsm__seq, suspended), is(3)),
+    ?assertThat(eproc_stats:get_fsm_stats(inst, eproc_fsm__seq, resumed), is(3)),
+    ?assertThat(eproc_stats:get_fsm_stats(inst, eproc_fsm__seq, killed), is(1)),
+    ?assertThat(eproc_stats:get_fsm_stats(inst, eproc_fsm__seq, completed), is(2)),
+    ?assertThat(eproc_stats:get_fsm_stats(inst, eproc_fsm__seq, crashed), is(0)),
+    ?assertThat(eproc_stats:get_fsm_stats(trn,  eproc_fsm__seq, count), is(11)).
 
 
 %%
@@ -158,7 +159,7 @@ test_crash_stats(_Config) ->
     % ------------
     % Test results
     timer:sleep(50),
-    ?assertThat(eproc_stats:get_value(inst, eproc_fsm__cache, crashed), is(1)),
+    ?assertThat(eproc_stats:get_fsm_stats(inst, eproc_fsm__cache, crashed), is(1)),
     ok.
 
 
@@ -180,15 +181,36 @@ test_msg_stats(_Config) ->
     ok = eproc_fsm__chain:stop(P2),         %               1 in casts
     ok = eproc_fsm__chain:stop(P1),         %               1 in casts
     ok = timer:sleep(50),
-    11 = eproc_stats:get_value(msg, eproc_fsm__chain, in_async),
-    8  = eproc_stats:get_value(msg, eproc_fsm__chain, in_sync),
-    3  = eproc_stats:get_value(msg, eproc_fsm__chain, out_async),
-    5  = eproc_stats:get_value(msg, eproc_fsm__chain, out_sync),
-    11 = eproc_stats:get_value(msg, '_', in_async),
-    8  = eproc_stats:get_value(msg, '_', in_sync),
-    3  = eproc_stats:get_value(msg, '_', out_async),
-    5  = eproc_stats:get_value(msg, '_', out_sync),
-    0  = eproc_stats:get_value(inst, '_', crashed),
+    11 = eproc_stats:get_fsm_stats(msg, eproc_fsm__chain, in_async),
+    8  = eproc_stats:get_fsm_stats(msg, eproc_fsm__chain, in_sync),
+    3  = eproc_stats:get_fsm_stats(msg, eproc_fsm__chain, out_async),
+    5  = eproc_stats:get_fsm_stats(msg, eproc_fsm__chain, out_sync),
+    11 = eproc_stats:get_fsm_stats(msg, '_', in_async),
+    8  = eproc_stats:get_fsm_stats(msg, '_', in_sync),
+    3  = eproc_stats:get_fsm_stats(msg, '_', out_async),
+    5  = eproc_stats:get_fsm_stats(msg, '_', out_sync),
+    0  = eproc_stats:get_fsm_stats(inst, '_', crashed),
+    ok.
+
+
+%%
+%%  Check if store statistics are collected.
+%%
+test_store_stats(_Config) ->
+    % Initialise
+    ok = eproc_stats:reset(all),
+    ?assertThat(eproc_stats:get_store_stats(add_instance, mean), is(0)),
+    % ---------
+    % Test cases
+    {ok, FsmRef} = eproc_fsm__seq:new(),   % Suspend/resume instance
+    timer:sleep(5),
+    {ok, _} = eproc_fsm__seq:next(FsmRef),
+    ok = eproc_fsm__seq:close(FsmRef),
+    timer:sleep(5),
+    % ------------
+    % Test results
+    timer:sleep(50),
+    ?assertThat(eproc_stats:get_store_stats(add_instance, mean), greater_than(0)),
     ok.
 
 

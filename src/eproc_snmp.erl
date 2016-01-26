@@ -24,7 +24,8 @@
     ot_limit_count/1,
     ot_inst_stats/2,
     ot_trn_stats/2,
-    ot_msg_stats/2
+    ot_msg_stats/2,
+    ot_store_stats/3
 ]).
 
 -define(ANY, '_').
@@ -60,20 +61,27 @@ ot_limit_count(get) ->
 %%
 %%
 ot_inst_stats(get, StatType) ->
-    {value, eproc_stats:get_value(inst, ?ANY, StatType)}.
+    {value, eproc_stats:get_fsm_stats(inst, ?ANY, StatType)}.
 
 
 %%
 %%
 %%
 ot_trn_stats(get, StatType) ->
-    {value, eproc_stats:get_value(trn, ?ANY, StatType)}.
+    {value, eproc_stats:get_fsm_stats(trn, ?ANY, StatType)}.
 
 
 %%
 %%
 %%
 ot_msg_stats(get, StatType) ->
-    {value, eproc_stats:get_value(msg, ?ANY, StatType)}.
+    {value, eproc_stats:get_fsm_stats(msg, ?ANY, StatType)}.
+
+
+%%
+%%
+%%
+ot_store_stats(get, Operation, StatType) ->
+    {value, eproc_stats:get_store_stats(Operation, StatType)}.
 
 

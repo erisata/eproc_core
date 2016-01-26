@@ -73,6 +73,7 @@ registry_cfg() ->
 %%
 start(_StartType, _StartArgs) ->
     ok = validate_env(application:get_all_env()),
+    ok = eproc_stats:setup(),
     SnmpAgent = enomon_snmp:load_application_mib(?APP, ?MODULE, ?MIB),
     ok = eproc_error_logger:register(),
     {ok, Pid} = eproc_core_sup:start_link(),

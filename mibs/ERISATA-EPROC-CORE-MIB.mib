@@ -183,8 +183,162 @@ ERISATA-EPROC-CORE-MIB DEFINITIONS ::= BEGIN
         ::= { eprocCoreObjects 123 }
 
 
+    --
+    --  Store performance stats.
+    --  Starts at 200.
+    --
+    storeGetInstance OBJECT-TYPE
+        SYNTAX      Gauge32
+        UNITS       "us"
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        ::= { eprocCoreObjects 201 }
 
-    -- TODO: Store operation counts and durations.
+    storeGetTransition OBJECT-TYPE
+        SYNTAX      Gauge32
+        UNITS       "us"
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        ::= { eprocCoreObjects 202 }
+
+    storeGetState OBJECT-TYPE
+        SYNTAX      Gauge32
+        UNITS       "us"
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        ::= { eprocCoreObjects 203 }
+
+    storeGetMessage OBJECT-TYPE
+        SYNTAX      Gauge32
+        UNITS       "us"
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        ::= { eprocCoreObjects 204 }
+
+    storeGetNode OBJECT-TYPE
+        SYNTAX      Gauge32
+        UNITS       "us"
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        ::= { eprocCoreObjects 205 }
+
+    storeAddInstance OBJECT-TYPE
+        SYNTAX      Gauge32
+        UNITS       "us"
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        ::= { eprocCoreObjects 206 }
+
+    storeAddTransition OBJECT-TYPE
+        SYNTAX      Gauge32
+        UNITS       "us"
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        ::= { eprocCoreObjects 207 }
+
+    storeSetInstanceKilled OBJECT-TYPE
+        SYNTAX      Gauge32
+        UNITS       "us"
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        ::= { eprocCoreObjects 208 }
+
+    storeSetInstanceSuspended OBJECT-TYPE
+        SYNTAX      Gauge32
+        UNITS       "us"
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        ::= { eprocCoreObjects 209 }
+
+    storeSetInstanceResuming OBJECT-TYPE
+        SYNTAX      Gauge32
+        UNITS       "us"
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        ::= { eprocCoreObjects 210 }
+
+    storeSetInstanceResumed OBJECT-TYPE
+        SYNTAX      Gauge32
+        UNITS       "us"
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        ::= { eprocCoreObjects 211 }
+
+    storeAddInstCrash OBJECT-TYPE
+        SYNTAX      Gauge32
+        UNITS       "us"
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        ::= { eprocCoreObjects 212 }
+
+    storeLoadInstance OBJECT-TYPE
+        SYNTAX      Gauge32
+        UNITS       "us"
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        ::= { eprocCoreObjects 213 }
+
+    storeLoadRunning OBJECT-TYPE
+        SYNTAX      Gauge32
+        UNITS       "us"
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        ::= { eprocCoreObjects 214 }
+
+    storeAttrTask OBJECT-TYPE
+        SYNTAX      Gauge32
+        UNITS       "us"
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        ::= { eprocCoreObjects 215 }
+
+    storeAttachmentSave OBJECT-TYPE
+        SYNTAX      Gauge32
+        UNITS       "us"
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        ::= { eprocCoreObjects 216 }
+
+    storeAttachmentRead OBJECT-TYPE
+        SYNTAX      Gauge32
+        UNITS       "us"
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        ::= { eprocCoreObjects 217 }
+
+    storeAttachmentDelete OBJECT-TYPE
+        SYNTAX      Gauge32
+        UNITS       "us"
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        ::= { eprocCoreObjects 218 }
+
+    storeAttachmentCleanup OBJECT-TYPE
+        SYNTAX      Gauge32
+        UNITS       "us"
+        MAX-ACCESS  read-only
+        STATUS      current
+        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        ::= { eprocCoreObjects 219 }
+
 
 
     ----------------------------------------------------------------------------
@@ -199,28 +353,74 @@ ERISATA-EPROC-CORE-MIB DEFINITIONS ::= BEGIN
         MODULE
             MANDATORY-GROUPS {
                 eprocCoreGenericOG,
-                eprocCoreRTStatsOG }
+                eprocCoreRTStatsOG,
+                eprocCoreStoreStatsOG
+            }
             GROUP eprocCoreGenericOG
             DESCRIPTION "This group is mandatory."
             GROUP eprocCoreRTStatsOG
+            DESCRIPTION "This group is mandatory."
+            GROUP eprocCoreStoreStatsOG
             DESCRIPTION "This group is mandatory."
         ::= { eprocCoreMibCompls 1 }
 
 
     eprocCoreGenericOG OBJECT-GROUP
-        OBJECTS {storeModule, registryModule, limitCount}
+        OBJECTS {
+            storeModule,
+            registryModule,
+            limitCount
+        }
         STATUS current
         DESCRIPTION "Generic EProc information."
         ::= { eprocCoreMibGroups 1 }
 
     eprocCoreRTStatsOG OBJECT-GROUP
-        OBJECTS {instCreated, instStarted, instSuspended, instResumed,
-            instKilled, instCompleted, instDuration, instCrashed,
-            trnCount, trnDuration, msgInAsyncCount, msgInSyncCount,
-            msgOutAsyncCount, msgOutSyncCount}
+        OBJECTS {
+            instCreated,
+            instStarted,
+            instSuspended,
+            instResumed,
+            instKilled,
+            instCompleted,
+            instDuration,
+            instCrashed,
+            trnCount,
+            trnDuration,
+            msgInAsyncCount,
+            msgInSyncCount,
+            msgOutAsyncCount,
+            msgOutSyncCount
+        }
         STATUS current
         DESCRIPTION "Statistics collected at runtime."
         ::= { eprocCoreMibGroups 2 }
+
+    eprocCoreStoreStatsOG OBJECT-GROUP
+        OBJECTS {
+            storeGetInstance,
+            storeGetTransition,
+            storeGetState,
+            storeGetMessage,
+            storeGetNode,
+            storeAddInstance,
+            storeAddTransition,
+            storeSetInstanceKilled,
+            storeSetInstanceSuspended,
+            storeSetInstanceResuming,
+            storeSetInstanceResumed,
+            storeAddInstCrash,
+            storeLoadInstance,
+            storeLoadRunning,
+            storeAttrTask,
+            storeAttachmentSave,
+            storeAttachmentRead,
+            storeAttachmentDelete,
+            storeAttachmentCleanup
+        }
+        STATUS current
+        DESCRIPTION "Store performance stats."
+        ::= { eprocCoreMibGroups 3 }
 
 
 

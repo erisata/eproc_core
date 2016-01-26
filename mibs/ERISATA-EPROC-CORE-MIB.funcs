@@ -2,12 +2,17 @@
 %%% Mapping of MIB objects types to functions implementing them.
 %%%
 
+%%
 %% Generic info.
+%%
 {storeModule,   {eproc_snmp, ot_store_module,    []}}.
 {registryModule,{eproc_snmp, ot_registry_module, []}}.
 {limitCount,    {eproc_snmp, ot_limit_count,     []}}.
 
+
+%%
 %% Runtime stats.
+%%
 {instCreated,       {eproc_snmp, ot_inst_stats, [created]}}.
 {instStarted,       {eproc_snmp, ot_inst_stats, [started]}}.
 {instSuspended,     {eproc_snmp, ot_inst_stats, [suspended]}}.
@@ -22,5 +27,29 @@
 {msgInSyncCount,    {eproc_snmp, ot_msg_stats,  [in_sync]}}.
 {msgOutAsyncCount,  {eproc_snmp, ot_msg_stats,  [out_async]}}.
 {msgOutSyncCount,   {eproc_snmp, ot_msg_stats,  [out_sync]}}.
+
+
+%%
+%%  Store stats.
+%%
+{storeGetInstance,          {eproc_snmp, ot_store_stats, [get_instance, mean]}}.
+{storeGetTransition,        {eproc_snmp, ot_store_stats, [get_transition, mean]}}.
+{storeGetState,             {eproc_snmp, ot_store_stats, [get_state, mean]}}.
+{storeGetMessage,           {eproc_snmp, ot_store_stats, [get_message, mean]}}.
+{storeGetNode,              {eproc_snmp, ot_store_stats, [get_node, mean]}}.
+{storeAddInstance,          {eproc_snmp, ot_store_stats, [add_instance, mean]}}.
+{storeAddTransition,        {eproc_snmp, ot_store_stats, [add_transition, mean]}}.
+{storeSetInstanceKilled,    {eproc_snmp, ot_store_stats, [set_instance_killed, mean]}}.
+{storeSetInstanceSuspended, {eproc_snmp, ot_store_stats, [set_instance_suspended, mean]}}.
+{storeSetInstanceResuming,  {eproc_snmp, ot_store_stats, [set_instance_resuming, mean]}}.
+{storeSetInstanceResumed,   {eproc_snmp, ot_store_stats, [set_instance_resumed, mean]}}.
+{storeAddInstCrash,         {eproc_snmp, ot_store_stats, [add_inst_crash, mean]}}.
+{storeLoadInstance,         {eproc_snmp, ot_store_stats, [load_instance, mean]}}.
+{storeLoadRunning,          {eproc_snmp, ot_store_stats, [load_running, mean]}}.
+{storeAttrTask,             {eproc_snmp, ot_store_stats, [attr_task, mean]}}.
+{storeAttachmentSave,       {eproc_snmp, ot_store_stats, [attachment_save, mean]}}.
+{storeAttachmentRead,       {eproc_snmp, ot_store_stats, [attachment_read, mean]}}.
+{storeAttachmentDelete,     {eproc_snmp, ot_store_stats, [attachment_delete, mean]}}.
+{storeAttachmentCleanup,    {eproc_snmp, ot_store_stats, [attachment_cleanup, mean]}}.
 
 

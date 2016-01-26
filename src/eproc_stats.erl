@@ -24,6 +24,7 @@
     i/0,
     info/1,
     reset/1,
+    setup/0,
     add_instance_created/1,
     add_instance_started/1,
     add_instance_suspended/1,
@@ -32,7 +33,9 @@
     add_instance_completed/2,
     add_instance_crashed/1,
     add_transition_completed/6,
-    get_value/3
+    get_fsm_stats/3,
+    add_store_operation/2,
+    get_store_stats/2
 ]).
 
 -define(ROOT, eproc_core).
@@ -64,6 +67,32 @@ info(list) ->
 reset(all) ->
     Entries = exometer:find_entries([?ROOT]),
     [ ok = exometer:reset(Name) || {Name, _Type, enabled} <- Entries ],
+    ok.
+
+
+%%
+%%  Create static metrics.
+%%
+setup() ->
+    ok = exometer:ensure([?ROOT, store, get_instance],          uniform, []),
+    ok = exometer:ensure([?ROOT, store, get_transition],        uniform, []),
+    ok = exometer:ensure([?ROOT, store, get_state],             uniform, []),
+    ok = exometer:ensure([?ROOT, store, get_message],           uniform, []),
+    ok = exometer:ensure([?ROOT, store, get_node],              uniform, []),
+    ok = exometer:ensure([?ROOT, store, add_instance],          uniform, []),
+    ok = exometer:ensure([?ROOT, store, add_transition],        uniform, []),
+    ok = exometer:ensure([?ROOT, store, set_instance_killed],   uniform, []),
+    ok = exometer:ensure([?ROOT, store, set_instance_suspended], uniform, []),
+    ok = exometer:ensure([?ROOT, store, set_instance_resuming], uniform, []),
+    ok = exometer:ensure([?ROOT, store, set_instance_resumed],  uniform, []),
+    ok = exometer:ensure([?ROOT, store, add_inst_crash],        uniform, []),
+    ok = exometer:ensure([?ROOT, store, load_instance],         uniform, []),
+    ok = exometer:ensure([?ROOT, store, load_running],          uniform, []),
+    ok = exometer:ensure([?ROOT, store, attr_task],             uniform, []),
+    ok = exometer:ensure([?ROOT, store, attachment_save],       uniform, []),
+    ok = exometer:ensure([?ROOT, store, attachment_read],       uniform, []),
+    ok = exometer:ensure([?ROOT, store, attachment_delete],     uniform, []),
+    ok = exometer:ensure([?ROOT, store, attachment_cleanup],    uniform, []),
     ok.
 
 
@@ -138,8 +167,24 @@ add_transition_completed(InstType, DurationUS, _ReqMsgType, HadReplyMsg, OutMsgA
 %%
 %%
 %%
-get_value(Object, InstType, StatType) ->
+get_fsm_stats(Object, InstType, StatType) ->
     get_value_spiral([?ROOT, Object, InstType, StatType]).
+
+
+
+%%
+%%  Records duration of the store operations.
+%%
+add_store_operation(Operation, DurationUS) ->
+    ok = exometer:update([?ROOT, store, Operation], DurationUS).
+
+
+%%
+%%  Returns specific statictic for the particular store peration.
+%%
+get_store_stats(Operation, DataPoint) ->
+    {ok, [{DataPoint, Value}]} = exometer:get_value([?ROOT, store, Operation], DataPoint),
+    Value.
 
 
 

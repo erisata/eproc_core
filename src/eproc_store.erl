@@ -14,14 +14,14 @@
 %| limitations under the License.
 %\--------------------------------------------------------------------
 
-%%
-%%  Main interface for a store implementation. The core engine is always using
-%%  this module to access the database. Several implementations of this interface
-%%  are provided. The `eproc_core` provides ETS and Mnesia based implementations.
-%%  Riak based implementation is provided by the `eproc_riak` component.
-%%
-%%  TODO: A lot of functionality is duplicated between store implementations. This behaviour should be reviewed.
-%%
+%%%
+%%% Main interface for a store implementation. The core engine is always using
+%%% this module to access the database. Several implementations of this interface
+%%% are provided. The `eproc_core` provides ETS and Mnesia based implementations.
+%%% Riak based implementation is provided by the `eproc_riak` component.
+%%%
+%%% TODO: A lot of functionality is duplicated between store implementations. This behaviour should be reviewed.
+%%%
 -module(eproc_store).
 -compile([{parse_transform, lager_transform}]).
 -export([
@@ -99,9 +99,9 @@
 -define(MSG_MSVAR_DATE, '$5').
 
 
-%% =============================================================================
-%%  Callback definitions.
-%% =============================================================================
+%%% ============================================================================
+%%% Callback definitions.
+%%% ============================================================================
 
 %%
 %%  This callback should return a list of supervisor child specifications
@@ -111,155 +111,6 @@
         StoreArgs   :: term()
     ) ->
         {ok, list()}.
-
-
-%%
-%%  This function should register new persistent FSM.
-%%  Additionally, the following should be performed:
-%%
-%%    * Unique FSM InstId should be generated.
-%%    * Unique group should be generated, if group=new.
-%%    * Fill instance id in related structures.
-%%
--callback add_instance(
-        StoreArgs   :: term(),
-        Instance    :: #instance{}
-    ) ->
-        {ok, inst_id()}.
-
-
-%%
-%%  This function should register new transition for the FSM.
-%%  Additionally, the following should be done:
-%%
-%%    * Add all related messages.
-%%    * Terminate FSM, if the `inst_state` is substate of the `terminated` state.
-%%    * suspend FSM, if `inst_state = suspended` and `interrupt = #interrupt{reason = R}`.
-%%    * resume FSM, if instance state was `resuming` and new `inst_state = running`.
-%%    * Handle attribute actions.
-%%
-%%  NOTE: For some of messages, a destination instance id will be unknown.
-%%  These partially resolved destinations are in form of `{inst, undefined}`
-%%  and are stored in messages and transition message references.
-%%  A store implementation needs to resolve these message destinations
-%%  after the message is stored, for example on first read (or each read).
-%%
--callback add_transition(
-        StoreArgs   :: term(),
-        InstId      :: inst_id(),
-        Transition  :: #transition{},
-        Messages    :: [#message{}]
-    ) ->
-        {ok, inst_id(), trn_nr()}.
-
-
-%%
-%%  Mark instance as killed.
-%%
--callback set_instance_killed(
-        StoreArgs   :: term(),
-        FsmRef      :: fsm_ref(),
-        UserAction  :: #user_action{}
-    ) ->
-        {ok, inst_id()}.
-
-
-%%
-%%  Mark instance as suspended and initialize corresponing interrupt.
-%%
--callback set_instance_suspended(
-        StoreArgs   :: term(),
-        FsmRef      :: fsm_ref(),
-        Reason      :: #user_action{} | {fault, Reason :: term()} | {impl, Reason :: term()}
-    ) ->
-        {ok, inst_id()}.
-
-
-%%
-%%  This function is invoked when an attempt to resume the FSM made.
-%%  It should check if the current status of the FSM is `suspended`
-%%  or `resuming`. In other cases it should exit with an error.
-%%  The following cases shoud be handled here:
-%%
-%%   1. Change `#instance.status` from `suspended` to `resuming`.
-%%   2. Add the resume attempt to the active interrupt.
-%%
--callback set_instance_resuming(
-        StoreArgs   :: term(),
-        FsmRef      :: fsm_ref(),
-        StateAction :: unchanged | retry_last | {set, NewStateName, NewStateData, ResumeScript},
-        UserAction  :: #user_action{}
-    ) ->
-        {ok, inst_id(), fsm_start_spec()} |
-        {error, not_found | running | terminated} |
-        {error, Reason :: term()}
-    when
-        NewStateName :: term() | undefined,
-        NewStateData :: term() | undefined,
-        ResumeScript :: script() | undefined.
-
-
-%%
-%%  This function transfers the FSM from the `resuming` state to `running`.
-%%  The following steps should be done for that:
-%%
-%%   1. Change `#instance.status` from `resuming` to `running`.
-%%   2. Set transition number for the active interrupt number.
-%%   3. The active interrupt should be marked as closed.
-%%
--callback set_instance_resumed(
-        StoreArgs   :: term(),
-        InstId      :: inst_id(),
-        TrnNr       :: trn_nr()
-    ) ->
-        ok |
-        {error, Reason :: term()}.
-
-
-%%
-%%  Register a crash occured in the FSM.
-%%
--callback add_inst_crash(
-        StoreArgs   :: term(),
-        InstId      :: inst_id(),
-        LastTrnNr   :: trn_nr() | undefined,
-        Pid         :: pid() | undefined,
-        Msg         :: term(),
-        Reason      :: term()
-    ) ->
-        ok |
-        {error, Reason :: term()}.
-
-%%
-%%  Get instance with its current state and active interrupt.
-%%
--callback load_instance(
-        StoreArgs   :: term(),
-        FsmRef      :: fsm_ref()
-    ) ->
-        {ok, #instance{}} |
-        {error, not_found}.
-
-
-%%
-%%  Return all FSMs, that should be started automatically on startup.
-%%
--callback load_running(
-        StoreArgs       :: term(),
-        PartitionPred   :: fun((inst_id(), inst_group()) -> boolean())
-    ) ->
-        {ok, [{FsmRef :: fsm_ref(), StartSpec :: fsm_start_spec()}]}.
-
-
-%%
-%%  Perform attribute action.
-%%
--callback attr_task(
-        StoreArgs       :: term(),
-        AttrModule      :: module(),
-        AttrTask        :: term()
-    ) ->
-        Response :: term().
 
 
 %%
@@ -413,6 +264,155 @@
 
 
 %%
+%%  This function should register new persistent FSM.
+%%  Additionally, the following should be performed:
+%%
+%%    * Unique FSM InstId should be generated.
+%%    * Unique group should be generated, if group=new.
+%%    * Fill instance id in related structures.
+%%
+-callback add_instance(
+        StoreArgs   :: term(),
+        Instance    :: #instance{}
+    ) ->
+        {ok, inst_id()}.
+
+
+%%
+%%  This function should register new transition for the FSM.
+%%  Additionally, the following should be done:
+%%
+%%    * Add all related messages.
+%%    * Terminate FSM, if the `inst_state` is substate of the `terminated` state.
+%%    * suspend FSM, if `inst_state = suspended` and `interrupt = #interrupt{reason = R}`.
+%%    * resume FSM, if instance state was `resuming` and new `inst_state = running`.
+%%    * Handle attribute actions.
+%%
+%%  NOTE: For some of messages, a destination instance id will be unknown.
+%%  These partially resolved destinations are in form of `{inst, undefined}`
+%%  and are stored in messages and transition message references.
+%%  A store implementation needs to resolve these message destinations
+%%  after the message is stored, for example on first read (or each read).
+%%
+-callback add_transition(
+        StoreArgs   :: term(),
+        InstId      :: inst_id(),
+        Transition  :: #transition{},
+        Messages    :: [#message{}]
+    ) ->
+        {ok, inst_id(), trn_nr()}.
+
+
+%%
+%%  Mark instance as killed.
+%%
+-callback set_instance_killed(
+        StoreArgs   :: term(),
+        FsmRef      :: fsm_ref(),
+        UserAction  :: #user_action{}
+    ) ->
+        {ok, inst_id()}.
+
+
+%%
+%%  Mark instance as suspended and initialize corresponing interrupt.
+%%
+-callback set_instance_suspended(
+        StoreArgs   :: term(),
+        FsmRef      :: fsm_ref(),
+        Reason      :: #user_action{} | {fault, Reason :: term()} | {impl, Reason :: term()}
+    ) ->
+        {ok, inst_id()}.
+
+
+%%
+%%  This function is invoked when an attempt to resume the FSM made.
+%%  It should check if the current status of the FSM is `suspended`
+%%  or `resuming`. In other cases it should exit with an error.
+%%  The following cases shoud be handled here:
+%%
+%%   1. Change `#instance.status` from `suspended` to `resuming`.
+%%   2. Add the resume attempt to the active interrupt.
+%%
+-callback set_instance_resuming(
+        StoreArgs   :: term(),
+        FsmRef      :: fsm_ref(),
+        StateAction :: unchanged | retry_last | {set, NewStateName, NewStateData, ResumeScript},
+        UserAction  :: #user_action{}
+    ) ->
+        {ok, inst_id(), fsm_start_spec()} |
+        {error, not_found | running | terminated} |
+        {error, Reason :: term()}
+    when
+        NewStateName :: term() | undefined,
+        NewStateData :: term() | undefined,
+        ResumeScript :: script() | undefined.
+
+
+%%
+%%  This function transfers the FSM from the `resuming` state to `running`.
+%%  The following steps should be done for that:
+%%
+%%   1. Change `#instance.status` from `resuming` to `running`.
+%%   2. Set transition number for the active interrupt number.
+%%   3. The active interrupt should be marked as closed.
+%%
+-callback set_instance_resumed(
+        StoreArgs   :: term(),
+        InstId      :: inst_id(),
+        TrnNr       :: trn_nr()
+    ) ->
+        ok |
+        {error, Reason :: term()}.
+
+
+%%
+%%  Register a crash occured in the FSM.
+%%
+-callback add_inst_crash(
+        StoreArgs   :: term(),
+        InstId      :: inst_id(),
+        LastTrnNr   :: trn_nr() | undefined,
+        Pid         :: pid() | undefined,
+        Msg         :: term(),
+        Reason      :: term()
+    ) ->
+        ok |
+        {error, Reason :: term()}.
+
+%%
+%%  Get instance with its current state and active interrupt.
+%%
+-callback load_instance(
+        StoreArgs   :: term(),
+        FsmRef      :: fsm_ref()
+    ) ->
+        {ok, #instance{}} |
+        {error, not_found}.
+
+
+%%
+%%  Return all FSMs, that should be started automatically on startup.
+%%
+-callback load_running(
+        StoreArgs       :: term(),
+        PartitionPred   :: fun((inst_id(), inst_group()) -> boolean())
+    ) ->
+        {ok, [{FsmRef :: fsm_ref(), StartSpec :: fsm_start_spec()}]}.
+
+
+%%
+%%  Perform attribute action.
+%%
+-callback attr_task(
+        StoreArgs       :: term(),
+        AttrModule      :: module(),
+        AttrTask        :: term()
+    ) ->
+        Response :: term().
+
+
+%%
 %%  This callback should save attachment using Key as key and Value as value.
 %%  The key should be associated with Owner (if provided). A single option
 %%  {overwrite, boolean()} should be handled. Default should be {overwrite, false}.
@@ -467,9 +467,9 @@
 
 
 
-%% =============================================================================
-%%  Public API.
-%% =============================================================================
+%%% ============================================================================
+%%% Public API.
+%%% ============================================================================
 
 %%
 %%  Returns supervisor child specifications, that should be used to
@@ -508,7 +508,9 @@ ref(Module, Args) ->
 %%
 get_instance(Store, FsmRef, Query) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:get_instance(StoreArgs, FsmRef, Query).
+    {DurationUS, Result} = timer:tc(StoreMod, get_instance, [StoreArgs, FsmRef, Query]),
+    eproc_stats:add_store_operation(get_instance, DurationUS),
+    Result.
 
 
 %%
@@ -516,7 +518,9 @@ get_instance(Store, FsmRef, Query) ->
 %%
 get_transition(Store, FsmRef, TrnNr, Query) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:get_transition(StoreArgs, FsmRef, TrnNr, Query).
+    {DurationUS, Result} = timer:tc(StoreMod, get_transition, [StoreArgs, FsmRef, TrnNr, Query]),
+    eproc_stats:add_store_operation(get_transition, DurationUS),
+    Result.
 
 
 %%
@@ -524,7 +528,9 @@ get_transition(Store, FsmRef, TrnNr, Query) ->
 %%
 get_state(Store, FsmRef, SttNr, Query) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:get_state(StoreArgs, FsmRef, SttNr, Query).
+    {DurationUS, Result} = timer:tc(StoreMod, get_state, [StoreArgs, FsmRef, SttNr, Query]),
+    eproc_stats:add_store_operation(get_state, DurationUS),
+    Result.
 
 
 %%
@@ -532,7 +538,9 @@ get_state(Store, FsmRef, SttNr, Query) ->
 %%
 get_message(Store, MsgId, Query) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:get_message(StoreArgs, MsgId, Query).
+    {DurationUS, Result} = timer:tc(StoreMod, get_message, [StoreArgs, MsgId, Query]),
+    eproc_stats:add_store_operation(get_message, DurationUS),
+    Result.
 
 
 %%
@@ -540,13 +548,15 @@ get_message(Store, MsgId, Query) ->
 %%
 get_node(Store) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:get_node(StoreArgs).
+    {DurationUS, Result} = timer:tc(StoreMod, get_node, [StoreArgs]),
+    eproc_stats:add_store_operation(get_node, DurationUS),
+    Result.
 
 
 
-%% =============================================================================
-%%  Functions for `eproc_fsm` and related modules.
-%% =============================================================================
+%%% ============================================================================
+%%% Functions for `eproc_fsm` and related modules.
+%%% ============================================================================
 
 %%
 %%  Stores new persistent instance, generates id for it,
@@ -555,7 +565,9 @@ get_node(Store) ->
 %%
 add_instance(Store, Instance = #instance{curr_state = #inst_state{}}) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:add_instance(StoreArgs, Instance).
+    {DurationUS, Result} = timer:tc(StoreMod, add_instance, [StoreArgs, Instance]),
+    eproc_stats:add_store_operation(add_instance, DurationUS),
+    Result.
 
 
 %%
@@ -565,7 +577,9 @@ add_instance(Store, Instance = #instance{curr_state = #inst_state{}}) ->
 %%
 add_transition(Store, InstId, Transition, Messages) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:add_transition(StoreArgs, InstId, Transition, Messages).
+    {DurationUS, Result} = timer:tc(StoreMod, add_transition, [StoreArgs, InstId, Transition, Messages]),
+    eproc_stats:add_store_operation(add_transition, DurationUS),
+    Result.
 
 
 %%
@@ -573,7 +587,9 @@ add_transition(Store, InstId, Transition, Messages) ->
 %%
 set_instance_killed(Store, FsmRef, UserAction) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:set_instance_killed(StoreArgs, FsmRef, UserAction).
+    {DurationUS, Result} = timer:tc(StoreMod, set_instance_killed, [StoreArgs, FsmRef, UserAction]),
+    eproc_stats:add_store_operation(set_instance_killed, DurationUS),
+    Result.
 
 
 %%
@@ -581,7 +597,9 @@ set_instance_killed(Store, FsmRef, UserAction) ->
 %%
 set_instance_suspended(Store, FsmRef, Reason) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:set_instance_suspended(StoreArgs, FsmRef, Reason).
+    {DurationUS, Result} = timer:tc(StoreMod, set_instance_suspended, [StoreArgs, FsmRef, Reason]),
+    eproc_stats:add_store_operation(set_instance_suspended, DurationUS),
+    Result.
 
 
 %%
@@ -589,7 +607,9 @@ set_instance_suspended(Store, FsmRef, Reason) ->
 %%
 set_instance_resuming(Store, FsmRef, StateAction, UserAction) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:set_instance_resuming(StoreArgs, FsmRef, StateAction, UserAction).
+    {DurationUS, Result} = timer:tc(StoreMod, set_instance_resuming, [StoreArgs, FsmRef, StateAction, UserAction]),
+    eproc_stats:add_store_operation(set_instance_resuming, DurationUS),
+    Result.
 
 
 %%
@@ -598,7 +618,9 @@ set_instance_resuming(Store, FsmRef, StateAction, UserAction) ->
 %%
 set_instance_resumed(Store, InstId, TrnNr) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:set_instance_resumed(StoreArgs, InstId, TrnNr).
+    {DurationUS, Result} = timer:tc(StoreMod, set_instance_resumed, [StoreArgs, InstId, TrnNr]),
+    eproc_stats:add_store_operation(set_instance_resumed, DurationUS),
+    Result.
 
 
 %%
@@ -606,7 +628,9 @@ set_instance_resumed(Store, InstId, TrnNr) ->
 %%
 add_inst_crash(Store, InstId, LastTrnNr, Pid, Msg, Reason) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:add_inst_crash(StoreArgs, InstId, LastTrnNr, Pid, Msg, Reason).
+    {DurationUS, Result} = timer:tc(StoreMod, add_inst_crash, [StoreArgs, InstId, LastTrnNr, Pid, Msg, Reason]),
+    eproc_stats:add_store_operation(add_inst_crash, DurationUS),
+    Result.
 
 
 %%
@@ -615,7 +639,9 @@ add_inst_crash(Store, InstId, LastTrnNr, Pid, Msg, Reason) ->
 %%
 load_instance(Store, FsmRef) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:load_instance(StoreArgs, FsmRef).
+    {DurationUS, Result} = timer:tc(StoreMod, load_instance, [StoreArgs, FsmRef]),
+    eproc_stats:add_store_operation(load_instance, DurationUS),
+    Result.
 
 
 
@@ -626,7 +652,9 @@ load_instance(Store, FsmRef) ->
 %%
 load_running(Store, PartitionPred) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:load_running(StoreArgs, PartitionPred).
+    {DurationUS, Result} = timer:tc(StoreMod, load_running, [StoreArgs, PartitionPred]),
+    eproc_stats:add_store_operation(load_running, DurationUS),
+    Result.
 
 
 %%
@@ -635,13 +663,92 @@ load_running(Store, PartitionPred) ->
 %%
 attr_task(Store, AttrModule, AttrTask) ->
     {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:attr_task(StoreArgs, AttrModule, AttrTask).
+    {DurationUS, Result} = timer:tc(StoreMod, attr_task, [StoreArgs, AttrModule, AttrTask]),
+    eproc_stats:add_store_operation(attr_task, DurationUS),
+    Result.
 
 
 
-%% =============================================================================
-%%  Functions for `eproc_store` implementations.
-%% =============================================================================
+%%% ============================================================================
+%%% Attachment related functions
+%%% ============================================================================
+
+%%
+%%  See `eproc_attachment:save/5`.
+%%
+-spec attachment_save(
+        Store   :: store_ref(),
+        Key     :: term(),
+        Value   :: term(),
+        Owner   :: fsm_ref() | undefined,
+        Opts    :: proplists:proplist()
+    ) ->
+        ok |
+        {error, duplicate} |
+        {error, Reason :: term()}.
+
+attachment_save(Store, Key, Value, Owner, Opts) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
+    {DurationUS, Result} = timer:tc(StoreMod, attachment_save, [StoreArgs, Key, Value, Owner, Opts]),
+    eproc_stats:add_store_operation(attachment_save, DurationUS),
+    Result.
+
+
+%%
+%%  See `eproc_attachment:read/2`.
+%%
+-spec attachment_read(
+        Store   :: store_ref(),
+        Key     :: term()
+    ) ->
+        {ok, Value :: term()} |
+        {error, not_found} |
+        {error, Reason :: term()}.
+
+attachment_read(Store, Key) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
+    {DurationUS, Result} = timer:tc(StoreMod, attachment_read, [StoreArgs, Key]),
+    eproc_stats:add_store_operation(attachment_read, DurationUS),
+    Result.
+
+
+%%
+%%  See `eproc_attachment:delete/2`.
+%%
+-spec attachment_delete(
+        Store   :: store_ref(),
+        Key     :: term()
+    ) ->
+        ok.
+
+attachment_delete(Store, Key) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
+    {DurationUS, Result} = timer:tc(StoreMod, attachment_delete, [StoreArgs, Key]),
+    eproc_stats:add_store_operation(attachment_delete, DurationUS),
+    Result.
+
+
+%%
+%%  See `eproc_attachment:cleanup/2`.
+%%
+-spec attachment_cleanup(
+        Store   :: store_ref(),
+        Owner   :: fsm_ref()
+    ) ->
+        ok |
+        {error, Reason :: term()}.
+
+attachment_cleanup(Store, Key) ->
+    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
+    {DurationUS, Result} = timer:tc(StoreMod, attachment_cleanup, [StoreArgs, Key]),
+    eproc_stats:add_store_operation(attachment_cleanup, DurationUS),
+    Result.
+
+
+
+%%% ============================================================================
+%%% Functions for `eproc_store` implementations.
+%%% ============================================================================
 
 %%
 %%  Checks if instance is terminated by status.
@@ -854,9 +961,9 @@ make_orelse_guard(Values, MakeGuardFun) when is_list(Values)->
     [erlang:list_to_tuple(['orelse' | lists:flatten(GuardList)])].
 
 
-%% =============================================================================
-%%  Instance related functions for `eproc_store` implementations
-%% =============================================================================
+%%% ============================================================================
+%%% Instance related functions for `eproc_store` implementations
+%%% ============================================================================
 
 %%
 %%  Returns the age of the instance in microseconds.
@@ -1082,9 +1189,9 @@ instance_filter_to_guard({age, MinAge}) ->
     [Guard].
 
 
-%% =============================================================================
-%%  Message related functions for `eproc_store` implementations
-%% =============================================================================
+%%% ============================================================================
+%%% Message related functions for `eproc_store` implementations
+%%% ============================================================================
 
 %%
 %% Makes message id out of message id or message copy id.
@@ -1234,78 +1341,9 @@ message_peer_filter_to_guard({any, EventSrc}) ->
     }.
 
 
-%% =============================================================================
-%%  Attachment related functions
-%% =============================================================================
-
-%%
-%%  See `eproc_attachment:save/5`.
-%%
--spec attachment_save(
-        Store   :: store_ref(),
-        Key     :: term(),
-        Value   :: term(),
-        Owner   :: fsm_ref() | undefined,
-        Opts    :: proplists:proplist()
-    ) ->
-        ok |
-        {error, duplicate} |
-        {error, Reason :: term()}.
-
-attachment_save(Store, Key, Value, Owner, Opts) ->
-    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:attachment_save(StoreArgs, Key, Value, Owner, Opts).
-
-
-%%
-%%  See `eproc_attachment:read/2`.
-%%
--spec attachment_read(
-        Store   :: store_ref(),
-        Key     :: term()
-    ) ->
-        {ok, Value :: term()} |
-        {error, not_found} |
-        {error, Reason :: term()}.
-
-attachment_read(Store, Key) ->
-    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:attachment_read(StoreArgs, Key).
-
-
-%%
-%%  See `eproc_attachment:delete/2`.
-%%
--spec attachment_delete(
-        Store   :: store_ref(),
-        Key     :: term()
-    ) ->
-        ok.
-
-attachment_delete(Store, Key) ->
-    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:attachment_delete(StoreArgs, Key).
-
-
-%%
-%%  See `eproc_attachment:cleanup/2`.
-%%
--spec attachment_cleanup(
-        Store   :: store_ref(),
-        Owner   :: fsm_ref()
-    ) ->
-        ok |
-        {error, Reason :: term()}.
-
-attachment_cleanup(Store, Key) ->
-    {ok, {StoreMod, StoreArgs}} = resolve_ref(Store),
-    StoreMod:attachment_cleanup(StoreArgs, Key).
-
-
-
-%% =============================================================================
-%%  Other more general public functions
-%% =============================================================================
+%%% ============================================================================
+%%% Other more general public functions
+%%% ============================================================================
 
 %%
 %%  sublist_opt(L, F, C) returns C elements of list L starting with F-th element of the list.
@@ -1359,9 +1397,9 @@ intersect_lists([List | Other]) ->
 
 
 
-%% =============================================================================
-%%  Internal functions.
-%% =============================================================================
+%%% ============================================================================
+%%% Internal functions.
+%%% ============================================================================
 
 %%
 %%  Resolve the provided (optional) store reference.
