@@ -35,7 +35,7 @@
 -export([start/2, stop/1]).
 
 -define(APP, eproc_core).
--define(MIB, "ERISATA-EPROC-MIB").
+-define(MIB, "ERISATA-EPROC-CORE-MIB").
 
 
 %% =============================================================================

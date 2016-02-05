@@ -15,7 +15,7 @@
 %\--------------------------------------------------------------------
 
 %%%
-%%% Implementation of the SNMP metrics, as described in the `mibs/ERISATA-EPROC-MIB.mib`.
+%%% Implementation of the SNMP metrics, as described in the `mibs/ERISATA-EPROC-CORE-MIB.mib`.
 %%%
 -module(eproc_snmp).
 -export([
