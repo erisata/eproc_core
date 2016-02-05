@@ -123,7 +123,10 @@ ERISATA-EPROC-CORE-MIB DEFINITIONS ::= BEGIN
         UNITS       "s"
         MAX-ACCESS  read-only
         STATUS      current
-        DESCRIPTION "Total time in seconds spent executing all instances, completed during last 60 seconds"
+        DESCRIPTION "
+            Total time in seconds spent executing all instances, completed during last 60 seconds.
+            TODO: Gauge32 is to small, and this metric is hardly meaningfull.
+            "
         ::= { eprocCoreObjects 106 }
 
     instCrashed OBJECT-TYPE
