@@ -231,6 +231,6 @@ get_value_spiral(MatchHead) ->
 %%
 get_duration(Created) ->
     Now = erlang:timestamp(),
-    eproc_timer:timestamp_diff_us(Created, Now).
+    eproc_timer:timestamp_diff_us(Now, Created).
 
 
