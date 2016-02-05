@@ -61,21 +61,21 @@ ot_limit_count(get) ->
 %%
 %%
 ot_inst_stats(get, StatType) ->
-    {value, eproc_stats:get_fsm_stats(inst, ?ANY, StatType)}.
+    {value, erlang:round(eproc_stats:get_fsm_stats(inst, ?ANY, StatType))}.
 
 
 %%
 %%
 %%
 ot_trn_stats(get, StatType) ->
-    {value, eproc_stats:get_fsm_stats(trn, ?ANY, StatType)}.
+    {value, erlang:round(eproc_stats:get_fsm_stats(trn, ?ANY, StatType))}.
 
 
 %%
 %%
 %%
 ot_msg_stats(get, StatType) ->
-    {value, eproc_stats:get_fsm_stats(msg, ?ANY, StatType)}.
+    {value, erlang:round(eproc_stats:get_fsm_stats(msg, ?ANY, StatType))}.
 
 
 %%
