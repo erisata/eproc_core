@@ -82,6 +82,6 @@ ot_msg_stats(get, StatType) ->
 %%
 %%
 ot_store_stats(get, Operation, StatType) ->
-    {value, eproc_stats:get_store_stats(Operation, StatType)}.
+    {value, erlang:round(eproc_stats:get_store_stats(Operation, StatType))}.
 
 

@@ -192,7 +192,7 @@ ERISATA-EPROC-CORE-MIB DEFINITIONS ::= BEGIN
         UNITS       "us"
         MAX-ACCESS  read-only
         STATUS      current
-        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        DESCRIPTION "Mean duration in us of the corresponding eproc_store operation."
         ::= { eprocCoreObjects 201 }
 
     storeGetTransition OBJECT-TYPE
@@ -200,7 +200,7 @@ ERISATA-EPROC-CORE-MIB DEFINITIONS ::= BEGIN
         UNITS       "us"
         MAX-ACCESS  read-only
         STATUS      current
-        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        DESCRIPTION "Mean duration in us of the corresponding eproc_store operation."
         ::= { eprocCoreObjects 202 }
 
     storeGetState OBJECT-TYPE
@@ -208,7 +208,7 @@ ERISATA-EPROC-CORE-MIB DEFINITIONS ::= BEGIN
         UNITS       "us"
         MAX-ACCESS  read-only
         STATUS      current
-        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        DESCRIPTION "Mean duration in us of the corresponding eproc_store operation."
         ::= { eprocCoreObjects 203 }
 
     storeGetMessage OBJECT-TYPE
@@ -216,7 +216,7 @@ ERISATA-EPROC-CORE-MIB DEFINITIONS ::= BEGIN
         UNITS       "us"
         MAX-ACCESS  read-only
         STATUS      current
-        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        DESCRIPTION "Mean duration in us of the corresponding eproc_store operation."
         ::= { eprocCoreObjects 204 }
 
     storeGetNode OBJECT-TYPE
@@ -224,7 +224,7 @@ ERISATA-EPROC-CORE-MIB DEFINITIONS ::= BEGIN
         UNITS       "us"
         MAX-ACCESS  read-only
         STATUS      current
-        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        DESCRIPTION "Mean duration in us of the corresponding eproc_store operation."
         ::= { eprocCoreObjects 205 }
 
     storeAddInstance OBJECT-TYPE
@@ -232,7 +232,7 @@ ERISATA-EPROC-CORE-MIB DEFINITIONS ::= BEGIN
         UNITS       "us"
         MAX-ACCESS  read-only
         STATUS      current
-        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        DESCRIPTION "Mean duration in us of the corresponding eproc_store operation."
         ::= { eprocCoreObjects 206 }
 
     storeAddTransition OBJECT-TYPE
@@ -240,7 +240,7 @@ ERISATA-EPROC-CORE-MIB DEFINITIONS ::= BEGIN
         UNITS       "us"
         MAX-ACCESS  read-only
         STATUS      current
-        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        DESCRIPTION "Mean duration in us of the corresponding eproc_store operation."
         ::= { eprocCoreObjects 207 }
 
     storeSetInstanceKilled OBJECT-TYPE
@@ -248,7 +248,7 @@ ERISATA-EPROC-CORE-MIB DEFINITIONS ::= BEGIN
         UNITS       "us"
         MAX-ACCESS  read-only
         STATUS      current
-        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        DESCRIPTION "Mean duration in us of the corresponding eproc_store operation."
         ::= { eprocCoreObjects 208 }
 
     storeSetInstanceSuspended OBJECT-TYPE
@@ -256,7 +256,7 @@ ERISATA-EPROC-CORE-MIB DEFINITIONS ::= BEGIN
         UNITS       "us"
         MAX-ACCESS  read-only
         STATUS      current
-        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        DESCRIPTION "Mean duration in us of the corresponding eproc_store operation."
         ::= { eprocCoreObjects 209 }
 
     storeSetInstanceResuming OBJECT-TYPE
@@ -264,7 +264,7 @@ ERISATA-EPROC-CORE-MIB DEFINITIONS ::= BEGIN
         UNITS       "us"
         MAX-ACCESS  read-only
         STATUS      current
-        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        DESCRIPTION "Mean duration in us of the corresponding eproc_store operation."
         ::= { eprocCoreObjects 210 }
 
     storeSetInstanceResumed OBJECT-TYPE
@@ -272,7 +272,7 @@ ERISATA-EPROC-CORE-MIB DEFINITIONS ::= BEGIN
         UNITS       "us"
         MAX-ACCESS  read-only
         STATUS      current
-        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        DESCRIPTION "Mean duration in us of the corresponding eproc_store operation."
         ::= { eprocCoreObjects 211 }
 
     storeAddInstCrash OBJECT-TYPE
@@ -280,7 +280,7 @@ ERISATA-EPROC-CORE-MIB DEFINITIONS ::= BEGIN
         UNITS       "us"
         MAX-ACCESS  read-only
         STATUS      current
-        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        DESCRIPTION "Mean duration in us of the corresponding eproc_store operation."
         ::= { eprocCoreObjects 212 }
 
     storeLoadInstance OBJECT-TYPE
@@ -288,7 +288,7 @@ ERISATA-EPROC-CORE-MIB DEFINITIONS ::= BEGIN
         UNITS       "us"
         MAX-ACCESS  read-only
         STATUS      current
-        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        DESCRIPTION "Mean duration in us of the corresponding eproc_store operation."
         ::= { eprocCoreObjects 213 }
 
     storeLoadRunning OBJECT-TYPE
@@ -296,7 +296,7 @@ ERISATA-EPROC-CORE-MIB DEFINITIONS ::= BEGIN
         UNITS       "us"
         MAX-ACCESS  read-only
         STATUS      current
-        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        DESCRIPTION "Mean duration in us of the corresponding eproc_store operation."
         ::= { eprocCoreObjects 214 }
 
     storeAttrTask OBJECT-TYPE
@@ -304,7 +304,7 @@ ERISATA-EPROC-CORE-MIB DEFINITIONS ::= BEGIN
         UNITS       "us"
         MAX-ACCESS  read-only
         STATUS      current
-        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        DESCRIPTION "Mean duration in us of the corresponding eproc_store operation."
         ::= { eprocCoreObjects 215 }
 
     storeAttachmentSave OBJECT-TYPE
@@ -312,7 +312,7 @@ ERISATA-EPROC-CORE-MIB DEFINITIONS ::= BEGIN
         UNITS       "us"
         MAX-ACCESS  read-only
         STATUS      current
-        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        DESCRIPTION "Mean duration in us of the corresponding eproc_store operation."
         ::= { eprocCoreObjects 216 }
 
     storeAttachmentRead OBJECT-TYPE
@@ -320,7 +320,7 @@ ERISATA-EPROC-CORE-MIB DEFINITIONS ::= BEGIN
         UNITS       "us"
         MAX-ACCESS  read-only
         STATUS      current
-        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        DESCRIPTION "Mean duration in us of the corresponding eproc_store operation."
         ::= { eprocCoreObjects 217 }
 
     storeAttachmentDelete OBJECT-TYPE
@@ -328,7 +328,7 @@ ERISATA-EPROC-CORE-MIB DEFINITIONS ::= BEGIN
         UNITS       "us"
         MAX-ACCESS  read-only
         STATUS      current
-        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        DESCRIPTION "Mean duration in us of the corresponding eproc_store operation."
         ::= { eprocCoreObjects 218 }
 
     storeAttachmentCleanup OBJECT-TYPE
@@ -336,7 +336,7 @@ ERISATA-EPROC-CORE-MIB DEFINITIONS ::= BEGIN
         UNITS       "us"
         MAX-ACCESS  read-only
         STATUS      current
-        DESCRIPTION "Mnean duration in us of the corresponding eproc_store operation."
+        DESCRIPTION "Mean duration in us of the corresponding eproc_store operation."
         ::= { eprocCoreObjects 219 }
 
 
