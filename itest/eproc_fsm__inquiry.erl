@@ -39,7 +39,10 @@
 %%  Create new inquiry.
 %%
 create(CustNr, Inquiry) ->
-    StartOpts = [{register, id}, {start_sync, true}],
+    StartOpts = [
+        {register, id},
+        {start_sync, {eproc_registry, wait_for, [undefined, all_started, 60000]}}
+    ],
     CreateOpts = [{start_spec, {default, StartOpts}}],
     {ok, _FsmRef} = eproc_fsm:send_create_event(?MODULE, {}, {create, CustNr, Inquiry}, CreateOpts).
 

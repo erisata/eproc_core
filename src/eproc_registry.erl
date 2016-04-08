@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013-2015 Erisata, UAB (Ltd.)
+%| Copyright 2013-2016 Erisata, UAB (Ltd.)
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -14,27 +14,27 @@
 %| limitations under the License.
 %\--------------------------------------------------------------------
 
-%%
-%%  Interface module for an FSM instance registry.
-%%  The registry is responsible for:
-%%
-%%   1. Starting all running FSMs on application startup.
-%%   2. Starting newly created FSMs on first event send.
-%%   3. Supervising all running FSMs.
-%%   4. Locating FSMs by an instance id or a name.
-%%   5. Send message to an FSM.
-%%
-%%  Modules implementing this behaviour are also implementing all callbacks needed
-%%  for using it as an OTP Process Registry. These callbacks are `register_name/2`,
-%%  `unregister_name/1` and `send/2`. I.e. the modules implementing this behaviour
-%%  can be used with all the standard OTP behaviours to register and reference
-%%  a process using `{via, Module, Name}` as a process name. Only `send/2` callback
-%%  is used currently by `eproc_core`.
-%%
+%%%
+%%% Interface module for an FSM instance registry.
+%%% The registry is responsible for:
+%%%
+%%%  1. Starting all running FSMs on application startup.
+%%%  2. Starting newly created FSMs on first event send.
+%%%  3. Supervising all running FSMs.
+%%%  4. Locating FSMs by an instance id or a name.
+%%%  5. Send message to an FSM.
+%%%
+%%% Modules implementing this behaviour are also implementing all callbacks needed
+%%% for using it as an OTP Process Registry. These callbacks are `register_name/2`,
+%%% `unregister_name/1` and `send/2`. I.e. the modules implementing this behaviour
+%%% can be used with all the standard OTP behaviours to register and reference
+%%% a process using `{via, Module, Name}` as a process name. Only `send/2` callback
+%%% is used currently by `eproc_core`.
+%%%
 -module(eproc_registry).
 -compile([{parse_transform, lager_transform}]).
 -export([supervisor_child_specs/1, ref/0, ref/2]).
--export([make_new_fsm_ref/3, make_fsm_ref/2, register_fsm/3, whereis_fsm/2]).
+-export([wait_for/3, make_new_fsm_ref/3, make_fsm_ref/2, register_fsm/3, whereis_fsm/2]).
 -export_type([ref/0, registry_fsm_ref/0]).
 -include("eproc.hrl").
 
@@ -54,9 +54,9 @@
 
 
 
-%% =============================================================================
-%%  Callback definitions.
-%% =============================================================================
+%%% ============================================================================
+%%% Callback definitions.
+%%% ============================================================================
 
 %%
 %%  This callback should return a list of supervisor child specifications
@@ -66,6 +66,7 @@
         RegistryArgs    :: term()
     ) ->
         {ok, list()}.
+
 
 %%
 %%  This callback is used to register FSM with its standard references.
@@ -79,10 +80,21 @@
         ok.
 
 
+%%
+%%  This callback should block untill the specified event or the timeout occurs.
+%%
+-callback wait_for(
+        RegistryArgs    :: term(),
+        What            :: all_started,
+        Timeout         :: integer() | infinity
+    ) ->
+        ok | {error, Reason :: term()}.
 
-%% =============================================================================
-%%  Callback definitions required by the OTP Process Registry.
-%% =============================================================================
+
+
+%%% ============================================================================
+%%% Callback definitions required by the OTP Process Registry.
+%%% ============================================================================
 
 %%
 %%  This callback is from the OTP Process Registry behaviour.
@@ -124,9 +136,9 @@
 
 
 
-%% =============================================================================
-%%  Public API.
-%% =============================================================================
+%%% ============================================================================
+%%% Public API.
+%%% ============================================================================
 
 %%
 %%  Returns supervisor child specifications, that should be used to
@@ -246,10 +258,29 @@ whereis_fsm(Registry, FsmRef) ->
     RegistryMod:whereis_name({fsm, RegistryArgs, FsmRef}).
 
 
+%%
+%%  This function allows to synchronize with the registry. This
+%%  function blocks untill the specified event or a timeout occurs.
+%%
+%%  It was introduced to be used with the `{start_sync, MFA}` option
+%%  in the `eproc_fsm` module.
+%%
+-spec wait_for(
+        Registry    :: registry_ref(),
+        What        :: all_started,
+        Timeout     :: integer() | infinity
+    ) ->
+        ok | {error, Reason :: term()}.
 
-%% =============================================================================
-%%  Internal functions.
-%% =============================================================================
+wait_for(Registry, What, Timeout) ->
+    {ok, {RegistryMod, RegistryArgs}} = resolve_ref(Registry),
+    RegistryMod:wait_for(RegistryArgs, What, Timeout).
+
+
+
+%%% ============================================================================
+%%% Internal functions.
+%%% ============================================================================
 
 %%
 %%  Resolve the provided (optional) registry reference.

@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013-2015 Erisata, UAB (Ltd.)
+%| Copyright 2013-2016 Erisata, UAB (Ltd.)
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -14,16 +14,16 @@
 %| limitations under the License.
 %\--------------------------------------------------------------------
 
-%%
-%%  GProc based registry. This registry is not dedesigned to work
-%%  in clusters. It can be used for tests or single node deploymens.
-%%
+%%%
+%%% GProc based registry. This registry is not dedesigned to work
+%%% in clusters. It can be used for tests or single node deploymens.
+%%%
 -module(eproc_reg_gproc).
 -behaviour(eproc_registry).
 -behaviour(gen_server).
 -compile([{parse_transform, lager_transform}]).
 -export([start_link/2, ref/0, load/0]).
--export([supervisor_child_specs/1, register_fsm/3]).
+-export([supervisor_child_specs/1, register_fsm/3, wait_for/3]).
 -export([register_name/2, unregister_name/1, whereis_name/1, send/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -include("eproc.hrl").
@@ -36,9 +36,9 @@
 -define(BY_NAME(N), {n, l, {eproc_name, N}}).
 
 
-%% =============================================================================
-%%  Public API.
-%% =============================================================================
+%%% ============================================================================
+%%% Public API.
+%%% ============================================================================
 
 %%
 %%  Start the registry.
@@ -62,9 +62,9 @@ load() ->
 
 
 
-%% =============================================================================
-%%  Callbacks for `eproc_registry`.
-%% =============================================================================
+%%% ============================================================================
+%%% Callbacks for `eproc_registry`.
+%%% ============================================================================
 
 %%
 %%  Returns supervisor child specifications for starting the registry.
@@ -90,10 +90,18 @@ register_fsm(_RegistryArgs, _InstId, Refs) ->
     ok = lists:foreach(Register, Refs).
 
 
+%%
+%%  This function allows to synchronize with the registry. This
+%%  function blocks untill the specified event or a timeout occurs.
+%%
+wait_for(_RegistryArgs, all_started, Timeout) ->
+    gen_server:call(?MANAGER, {wait_for, all_started}, Timeout).
 
-%% =============================================================================
-%%  Callbacks for OTP Process Registry.
-%% =============================================================================
+
+
+%%% ============================================================================
+%%% Callbacks for OTP Process Registry.
+%%% ============================================================================
 
 %%
 %%  Process registration is not implemented for this registry.
@@ -138,9 +146,9 @@ send({new, _RegistryArgs, FsmRef, StartSpec}, Message) ->
 
 
 
-%% =============================================================================
-%%  Internal state of the module.
-%% =============================================================================
+%%% ============================================================================
+%%% Internal state of the module.
+%%% ============================================================================
 
 -record(state, {
     loaded  :: boolean()
@@ -148,9 +156,9 @@ send({new, _RegistryArgs, FsmRef, StartSpec}, Message) ->
 
 
 
-%% =============================================================================
-%%  Callbacks for `gen_server`.
-%% =============================================================================
+%%% ============================================================================
+%%% Callbacks for `gen_server`.
+%%% ============================================================================
 
 %%
 %%  Initialization.
@@ -166,8 +174,14 @@ init({Load}) ->
 %%
 %%  Syncronous calls.
 %%
+handle_call({wait_for, all_started}, _From, State) ->
+    % This process is blocked while loading all the FSMs, so we
+    % can just reply ok here, because the blocking was in the
+    % inbox of this process.
+    {reply, ok, State};
+
 handle_call(_Message, _From, State) ->
-    {stop, not_implemented, not_implemented, State}.
+    {reply, undefined, State}.
 
 
 %%
@@ -177,7 +191,7 @@ handle_cast('eproc_reg_gproc$load', State) ->
     handle_info('eproc_reg_gproc$load', State);
 
 handle_cast(_Message, State) ->
-    {stop, not_implemented, State}.
+    {noreply, State}.
 
 
 %%
@@ -208,9 +222,9 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 
-%% =============================================================================
-%%  Internal functions.
-%% =============================================================================
+%%% ============================================================================
+%%% Internal functions.
+%%% ============================================================================
 
 
 %%

@@ -774,11 +774,14 @@ create(Module, Args, Options) ->
 %%      from the FsmName parameter. The FSM registers `id` and `name` (if name exists) by default,
 %%      if registry exists. The startup will fail if this option is set to `id`, `name` or `both`,
 %%      and the registry is not configured for the `eproc_core` application (app environment).
-%%  `{start_sync, Sync :: boolean()}`
+%%  `{start_sync, Sync :: boolean() | {Module :: module(), Function :: atom(), Args :: list()}}`
 %%  :   starts FSM synchronously if `Sync = true` and asynchronously otherwise.
 %%      Default is `false` (asynchronously). If FSM is started synchonously,
 %%      FSM id and name will be registered within the EProc Registry before
-%%      this function exits, if requested.
+%%      this function exits, if requested. In the case of `{Module, Function, Args}`,
+%%      the fsm will be started asynchronously, and then it will call the specified
+%%      function after loading the instance, but before starting to handle any events.
+%%      It can be used to synchronize the process startup.
 %%  `{limit_restarts, eproc_limits:limit_spec()}`
 %%  :   Limits restarts of the FSM.
 %%      Delays will be effective on process startup.
@@ -808,7 +811,7 @@ create(Module, Args, Options) ->
 
 start_link(FsmName, FsmRef, Options) ->
     {ok, StartOpts, ProcessOptions} = resolve_start_link_opts(Options),
-    start_sync(gen_server:start_link(FsmName, ?MODULE, {FsmRef, StartOpts}, ProcessOptions), StartOpts).
+    start_sync(gen_server:start_link(FsmName, ?MODULE, {FsmRef, StartOpts}, ProcessOptions), FsmRef, StartOpts).
 
 
 %%
@@ -822,7 +825,7 @@ start_link(FsmName, FsmRef, Options) ->
 
 start_link(FsmRef, Options) ->
     {ok, StartOpts, ProcessOptions} = resolve_start_link_opts(Options),
-    start_sync(gen_server:start_link(?MODULE, {FsmRef, StartOpts}, ProcessOptions), StartOpts).
+    start_sync(gen_server:start_link(?MODULE, {FsmRef, StartOpts}, ProcessOptions), FsmRef, StartOpts).
 
 
 %%
@@ -2479,6 +2482,10 @@ handle_start(FsmRef, StartOpts, State = #state{store = Store}) ->
                         {ok, NewState = #state{type = Type}} ->
                             lager:debug("FSM started, ref=~p, pid=~p.", [FsmRef, self()]),
                             eproc_stats:add_instance_started(Type),
+                            case proplists:get_value(start_sync, StartOpts) of
+                                {M, F, A} -> ok = erlang:apply(M, F, A);
+                                _Other    -> ok
+                            end,
                             {online, NewState};
                         {error, Reason} ->
                             lager:warning("Failed to start FSM, ref=~p, error=~p.", [FsmRef, Reason]),
@@ -3096,8 +3103,10 @@ create_prepare_send(Module, Args, Options) ->
 %%
 %%  Start FSM synchronously, if requested.
 %%
-start_sync({ok, Pid}, StartOpts) ->
+start_sync({ok, Pid}, FsmRef, StartOpts) ->
     case proplists:get_value(start_sync, StartOpts, false) of
+        {_Module, _Function, _Args} ->
+            {ok, Pid};
         false ->
             {ok, Pid};
         true ->
@@ -3105,12 +3114,12 @@ start_sync({ok, Pid}, StartOpts) ->
                 true -> {ok, Pid}
             catch
                 C:E ->
-                    lager:error("FSM start failed with reason ~p:~p at ~p", [C, E, erlang:get_stacktrace()]),
+                    lager:error("FSM ~p start failed with reason ~p:~p at ~p", [FsmRef, C, E, erlang:get_stacktrace()]),
                     {error, start_failed}
             end
     end;
 
-start_sync(Other, _StartOpts) ->
+start_sync(Other, _FsmRef, _StartOpts) ->
     Other.
 
 
