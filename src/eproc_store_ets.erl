@@ -363,6 +363,11 @@ load_instance(_StoreArgs, FsmRef) ->
 %%
 %%  Load start specs for all currently running FSMs.
 %%
+%%  NOTE: The `resuming` state is not included here intentionally.
+%%  The process stuck in the `resuming` state can be resumed again
+%%  by calling `eproc_fsm:resume/2` explicitly. It was considered
+%%  to be better to leave the resume attemts maintained manually.
+%%
 load_running(_StoreArgs, PartitionPred) ->
     FilterFun = fun
         (#instance{inst_id = InstId, group = Group, start_spec = StartSpec, status = running}, Filtered) ->
