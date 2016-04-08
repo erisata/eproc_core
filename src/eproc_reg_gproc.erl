@@ -259,6 +259,8 @@ start_all() ->
     end,
     {ok, Store} = eproc_store:ref(),
     {ok, Fsms} = eproc_store:load_running(Store, PartitionPred),
-    ok = lists:foreach(StartFsmFun, Fsms).
+    ok = lists:foreach(StartFsmFun, Fsms),
+    lager:info("Started ~p FSMs.", [length(Fsms)]),
+    ok.
 
 
