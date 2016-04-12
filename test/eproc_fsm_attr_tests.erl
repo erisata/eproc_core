@@ -98,10 +98,12 @@ action_success_test() ->
     meck:expect(Mod, init, fun(100, [A, B]) -> {ok, [{A, state}, {B, state}]} end),
     meck:expect(Mod, handle_updated, fun
         (100, #attribute{name = a, data = 100}, state, del, undefined) -> {remove, deleted, true};
-        (100, #attribute{name = b, data = 200}, state, inc, undefined) -> {update, 201, state, true}
+        (100, #attribute{name = b, data = 200}, state, inc, undefined) -> {update, 201, state, true};
+        (100, #attribute{name = d, data = 7},   state, set, []       ) -> {update, 207, state, true}
     end),
     meck:expect(Mod, handle_created, fun
         (100, #attribute{name = c        }, set, []) -> {create, 0, state, true};
+        (100, #attribute{name = d        }, set, []) -> {create, 7, state, true};
         (100, #attribute{name = undefined}, set, []) -> {create, 0, state, true}
     end),
     {ok, State} = eproc_fsm_attr:init(100, [], 2, store, [
@@ -112,16 +114,20 @@ action_success_test() ->
     ?assertEqual(ok, eproc_fsm_attr:action(Mod, a, del)),             % remove attr
     ?assertEqual(ok, eproc_fsm_attr:action(Mod, b, inc)),             % update attr
     ?assertEqual(ok, eproc_fsm_attr:action(Mod, c, set, [])),         % create named attr
+    ?assertEqual(ok, eproc_fsm_attr:action(Mod, d, set, [])),         % Create and update in the same transition.
+    ?assertEqual(ok, eproc_fsm_attr:action(Mod, d, set, [])),         % Create and update in the same transition.
     ?assertEqual(ok, eproc_fsm_attr:action(Mod, undefined, set, [])), % create first unnamed attr
     ?assertEqual(ok, eproc_fsm_attr:action(Mod, undefined, set, [])), % create second unnamed attr
-    {ok, Actions, 5, _State2} = eproc_fsm_attr:transition_end(100, 0, [], State),
-    ?assertEqual(5, length(Actions)),
+    {ok, Actions, 6, _State2} = eproc_fsm_attr:transition_end(100, 0, [], State),
+    ?assertEqual(7, length(Actions)),                                 % 4th attribute has two actions.
     ?assertEqual(1, length([any || #attr_action{attr_nr = 1, action = {remove, {user, deleted}}} <- Actions])),
     ?assertEqual(1, length([any || #attr_action{attr_nr = 2, action = {update, [], 201}} <- Actions])),
+    ?assertEqual(1, length([any || #attr_action{attr_nr = 4, action = {update, [], 207}} <- Actions])),
     ?assertEqual(1, length([any || #attr_action{action = {create, c,         [], 0}} <- Actions])),
+    ?assertEqual(1, length([any || #attr_action{action = {create, d,         [], 7}} <- Actions])),
     ?assertEqual(2, length([any || #attr_action{action = {create, undefined, [], 0}} <- Actions])),
-    ?assertEqual(2, meck:num_calls(Mod, handle_updated, '_')),
-    ?assertEqual(3, meck:num_calls(Mod, handle_created, '_')),
+    ?assertEqual(3, meck:num_calls(Mod, handle_updated, '_')),
+    ?assertEqual(4, meck:num_calls(Mod, handle_created, '_')),
     ?assert(meck:validate([Mod])),
     meck:unload([Mod]).
 

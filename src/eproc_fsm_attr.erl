@@ -271,7 +271,7 @@ transition_end(InstId, TrnNr, NextSName, State = #state{last_nr = LastAttrNr, at
         {InstId, NextSName, [], []},
         AttrCtxsAfterActions
     ),
-    AllActions = UserActions ++ CleanupActions,
+    AllActions = lists:reverse(UserActions) ++ CleanupActions,
     NewState = State#state{
         last_nr = NewAttrNr,
         attrs = AttrCtxsAfterCleanup

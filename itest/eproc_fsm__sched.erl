@@ -111,7 +111,8 @@ handle_state([scheduling], {timer, tick}, StateData = #state{subsc = Subscribers
     {next_state, [scheduling], StateData};
 
 handle_state([scheduling], {event, {set, Period}}, StateData) ->
-    ok = eproc_timer:set(main, Period, tick, [scheduling]), % Timer updated.
+    ok = eproc_timer:set(main, {1, min}, tick, [scheduling]), % To check, if the same timer can be updated several times in one trn.
+    ok = eproc_timer:set(main, Period,   tick, [scheduling]), % Timer updated.
     {same_state, StateData#state{period = Period}};
 
 handle_state([scheduling], {event, cancel}, StateData) ->

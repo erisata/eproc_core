@@ -94,8 +94,8 @@ handle_state([serving], {entry, _PrevState}, StateData) ->
 handle_state([serving], {sync, _From, get}, StateData = #state{data = Data}) ->
     {reply_same, {ok, Data}, StateData};
 
-handle_state([serving], {event, crash}, #state{data = Data}) ->
-    undefined = Data;
+handle_state([serving], {event, crash}, _StateData) ->
+    erlang:error(expected_error);
 
 handle_state([serving], {event, stop}, StateData) ->
     {final_state, [done], StateData};
