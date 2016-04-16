@@ -94,6 +94,12 @@ register_fsm(_RegistryArgs, _InstId, Refs) ->
 %%  This function allows to synchronize with the registry. This
 %%  function blocks untill the specified event or a timeout occurs.
 %%
+%%  TODO: This implementation is not sufficient, because there is a
+%%  gap between the time, when all the processes are started, and
+%%  when all of them have their keys registered. It looks like we
+%%  need to wait for all the processes, but now we cannot determine
+%%  which processes to wait for.
+%%
 wait_for(_RegistryArgs, all_started, Timeout) ->
     gen_server:call(?MANAGER, {wait_for, all_started}, Timeout).
 
