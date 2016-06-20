@@ -20,7 +20,8 @@
 -module(eproc_reg_gproc_SUITE).
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([
-    test_register_fsm/1
+    test_register_fsm/1,
+    test_registry_reset/1
 ]).
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eproc_core/include/eproc.hrl").
@@ -30,22 +31,31 @@
 %%  CT API.
 %%
 all() ->
-    [test_register_fsm].
+    [test_register_fsm, test_registry_reset].
 
 
 %%
 %%  CT API, initialization.
 %%
 init_per_suite(Config) ->
+    application:load(lager),
+    application:load(eproc_core),
+    application:set_env(lager, handlers, [{lager_console_backend, debug}]),
+    application:set_env(eproc_core, store, {eproc_store_ets, ref, []}),
+    application:set_env(eproc_core, registry, {eproc_reg_gproc, ref, [[{load, false}]]}),
     {ok, _} = application:ensure_all_started(gproc),
-    {ok, Registry} = eproc_reg_gproc:ref(),
-    [{registry, Registry} | Config].
+    {ok, _} = application:ensure_all_started(eproc_core),
+    {ok, Store} = eproc_store:ref(),
+    {ok, Registry} = eproc_registry:ref(),
+    [{store, Store}, {registry, Registry} | Config].
+
 
 %%
 %%  CT API, cleanup.
 %%
 end_per_suite(_Config) ->
-    ok = application:stop(gproc).
+    ok = application:stop(gproc),
+    ok = application:stop(eproc_core).
 
 
 %%
@@ -84,6 +94,20 @@ test_register_fsm(Config) ->
     ok = receive msg1 -> ok    after 100 -> error end,
     ok = receive msg3 -> ok    after 100 -> error end,
     ok = receive msg2 -> error after 100 -> ok    end,
+    ok.
+
+
+%%
+%%  Check if registry reset works.
+%%
+test_registry_reset(Config) ->
+    {ok, Lamp} = eproc_fsm__lamp:create(),
+    ok = eproc_fsm__lamp:toggle(Lamp),
+    ok = eproc_reg_gproc:reset(),
+    ok = timer:sleep(500),
+    case catch eproc_fsm__lamp:toggle(Lamp) of
+        {'EXIT', {noproc, _}} -> ok
+    end,
     ok.
 
 

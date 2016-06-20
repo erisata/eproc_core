@@ -22,12 +22,13 @@
 -behaviour(eproc_registry).
 -behaviour(gen_server).
 -compile([{parse_transform, lager_transform}]).
--export([start_link/2, ref/0, load/0]).
+-export([start_link/2, ref/0, ref/1, load/0, reset/0]).
 -export([supervisor_child_specs/1, register_fsm/3, wait_for/3]).
 -export([register_name/2, unregister_name/1, whereis_name/1, send/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -include("eproc.hrl").
 
+-define(SUP,     'eproc_reg_gproc$sup').
 -define(SUP_DEF, 'eproc_reg_gproc$sup_def').
 -define(SUP_MFA, 'eproc_reg_gproc$sup_mfa').
 -define(MANAGER, 'eproc_reg_gproc$manager').
@@ -55,10 +56,33 @@ ref() ->
 
 
 %%
+%%  Create reference to this registry.
+%%
+ref(Args) ->
+    eproc_store:ref(?MODULE, Args).
+
+
+%%
 %%  Load FSM instances.
 %%
 load() ->
     gen_server:cast(?MANAGER, 'eproc_reg_gproc$load').
+
+
+%%
+%%  Reset the registry to its initial state. The loaded FSMs
+%%  will be stopped. The reset is implemented by restarting
+%%  the registry.
+%%
+%%  This function can be used when the current node becomes
+%%  a secondary node after being a primary node in a hot-stand-by
+%%  cluster.
+%%
+-spec reset() -> ok.
+
+reset() ->
+    lager:info("Reseting the registry."),
+    eproc_reg_gproc_sup:reset(?SUP).
 
 
 
@@ -70,14 +94,11 @@ load() ->
 %%  Returns supervisor child specifications for starting the registry.
 %%
 supervisor_child_specs(RegistryArgs) ->
-    Load = proplists:get_value(load, RegistryArgs, true),
-    Reg = ?MODULE,
-    SupDef = eproc_fsm_def_sup,
-    SupMfa = eproc_fsm_mfa_sup,
-    DefSpec = {{Reg, sup_def}, {SupDef, start_link, [{local, ?SUP_DEF}]}, permanent, 10000, supervisor, [SupDef]},
-    MfaSpec = {{Reg, sup_mfa}, {SupMfa, start_link, [{local, ?SUP_MFA}]}, permanent, 10000, supervisor, [SupMfa]},
-    MgrSpec = {{Reg, manager}, {Reg,    start_link, [{local, ?MANAGER}, Load]}, permanent, 10000, worker, [Reg]},
-    {ok, [DefSpec, MfaSpec, MgrSpec]}.
+    Spec = {eproc_reg_gproc,
+        {eproc_reg_gproc_sup, start_link, [RegistryArgs, ?SUP, ?SUP_DEF, ?SUP_MFA, ?MANAGER]},
+        permanent, 10000, supervisor, [eproc_reg_gproc_sup]
+    },
+    {ok, [Spec]}.
 
 
 %%
