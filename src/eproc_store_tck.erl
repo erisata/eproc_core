@@ -34,6 +34,7 @@
     eproc_store_core_test_get_state/1,
     eproc_store_core_test_attrs/1,
     eproc_store_router_test_attrs/1,
+    eproc_store_router_test_uniq/1,
     eproc_store_meta_test_attrs/1,
     eproc_store_attachment_test_instid/1,
     eproc_store_attachment_test_name/1
@@ -59,7 +60,8 @@ testcases(core) -> [
     ];
 
 testcases(router) -> [
-    eproc_store_router_test_attrs
+    eproc_store_router_test_attrs,
+    eproc_store_router_test_uniq
     ];
 
 testcases(meta) -> [
@@ -1296,6 +1298,49 @@ eproc_store_router_test_attrs(Config) ->
     ?assertThat(eproc_store:set_instance_killed(Store, {inst, IID2}, #user_action{}), is({ok, IID2})),
     ?assertThat(eproc_router:lookup(Key3, RouterOpts), is({ok, []})),
     ok.
+
+
+%%
+%%  Check if store operations for handling `eproc_router` attributes (keys) respect uniq option.
+%%
+eproc_store_router_test_uniq(Config) ->
+    ok = meck:new(eproc_fsm, [passthrough]),
+    CurrentFsmFun = fun(InstId) -> meck:expect(eproc_fsm, id, [{[], {ok, InstId}}]) end,
+    Store = store(Config),
+    Now = os:timestamp(),
+    Key1 = {eproc_store_router_test_attrs, {Now, 1}},
+    Key2 = {eproc_store_router_test_attrs, {Now, 2}},
+    RouterOpts = [{store, Store}],
+    %%
+    %%  Add instances.
+    %%
+    {ok, IID1} = eproc_store:add_instance(Store, inst_value()),
+    {ok, IID2} = eproc_store:add_instance(Store, inst_value()),
+    {ok, IID3} = eproc_store:add_instance(Store, inst_value()),
+    SortedIds12 = lists:sort([IID1, IID2]),
+    ok = CurrentFsmFun(IID1),
+    ok = eproc_router:add_key(Key1, '_', [sync]),                           % Adding non unique key to inst 1
+    ?assertThat(eproc_router:lookup(Key1, RouterOpts), is({ok, [IID1]})),
+    ok = eproc_router:add_key(Key1, '_', [sync]),                           % Adding non unique key to inst 1 repeatedly
+    ?assertThat(eproc_router:lookup(Key1, RouterOpts), is({ok, [IID1]})),
+    ok = CurrentFsmFun(IID2),
+    ok = eproc_router:add_key(Key1, '_', [sync]),                           % Adding non unique key to inst 2
+    {ok, LookupIds1} = eproc_router:lookup(Key1, RouterOpts),
+    ?assertThat(lists:sort(LookupIds1), is(SortedIds12)),
+    ok = eproc_router:add_key(Key1, '_', [sync]),                           % Adding non unique key to inst 2 repeatedly
+    {ok, LookupIds2} = eproc_router:lookup(Key1, RouterOpts),
+    ?assertThat(lists:sort(LookupIds2), is(SortedIds12)),
+    ok = CurrentFsmFun(IID3),
+    {error, exists} = eproc_router:add_key(Key1, '_', [sync, uniq]),        % Adding existing key as unique to inst 3
+    {ok, LookupIds3} = eproc_router:lookup(Key1, RouterOpts),
+    ?assertThat(lists:sort(LookupIds3), is(SortedIds12)),
+    ok = eproc_router:add_key(Key2, '_', [sync, uniq]),                     % Adding new unique key to inst 3
+    ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, [IID3]})),
+    ok = CurrentFsmFun(IID2),
+    {error, exists} = eproc_router:add_key(Key2, '_', [sync, uniq]),                     % Adding existing key as unique to inst 2
+    ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, [IID3]})),
+    true = meck:validate([eproc_fsm]),
+    ok = meck:unload([eproc_fsm]).
 
 
 

@@ -31,6 +31,7 @@
     eproc_store_core_test_get_state/1,
     eproc_store_core_test_attrs/1,
     eproc_store_router_test_attrs/1,
+    eproc_store_router_test_uniq/1,
     eproc_store_meta_test_attrs/1,
     eproc_store_attachment_test_instid/1,
     eproc_store_attachment_test_name/1,
@@ -84,6 +85,7 @@ end_per_suite(Config) ->
 ?MAP_TCK_TEST(eproc_store_core_test_get_state).
 ?MAP_TCK_TEST(eproc_store_core_test_attrs).
 ?MAP_TCK_TEST(eproc_store_router_test_attrs).
+?MAP_TCK_TEST(eproc_store_router_test_uniq).
 ?MAP_TCK_TEST(eproc_store_meta_test_attrs).
 ?MAP_TCK_TEST(eproc_store_attachment_test_instid).
 ?MAP_TCK_TEST(eproc_store_attachment_test_name).
