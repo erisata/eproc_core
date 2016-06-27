@@ -1150,7 +1150,7 @@ handle_attr_custom_router_action(AttrAction, Instance) ->
 handle_attr_custom_router_task({key_sync, Key, InstId, Uniq}) ->
     AddKeyFun = fun () ->
         SyncRef = {'eproc_router$key_sync', erlang:make_ref()},
-        true = ets:insert_new(?KEY_TBL, #router_key{key = Key, inst_id = InstId, attr_nr = SyncRef}),
+        true = ets:insert(?KEY_TBL, #router_key{key = Key, inst_id = InstId, attr_nr = SyncRef}),
         {ok, SyncRef}
     end,
     case {ets:lookup(?KEY_TBL, Key), Uniq} of
