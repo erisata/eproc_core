@@ -70,7 +70,7 @@
         Opts    :: [sync | uniq]
     ) ->
         ok |
-        {error, exist} |
+        {error, exists} |
         {error, Reason :: term()}.
 
 add_key(Key, Scope, Opts) ->
