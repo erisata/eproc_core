@@ -300,7 +300,7 @@ event(InstId, {'eproc_fsm_attr$event', AttrRef, Event}, State = #state{attrs = A
                 false ->
                     lager:error("Ignoring attribute event with unknown id=~p for inst_id=~p", [RefAttrNr, InstId]),
                     {error, not_found};
-                 AC ->
+                AC ->
                     {ok, AC}
             end
     end,
