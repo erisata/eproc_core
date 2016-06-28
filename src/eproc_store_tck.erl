@@ -1337,6 +1337,8 @@ eproc_store_router_test_uniq(Config) ->
     ?assertThat(lists:sort(LookupIds3), is(SortedIds12)),
     ok = eproc_router:add_key(Key2, '_', [sync, uniq]),                     % Adding new unique key to inst 3
     ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, [IID3]})),
+    ok = eproc_router:add_key(Key2, next, [sync, uniq]),                    % Adding existing unique key to the same inst 3 with updated scope
+    ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, [IID3]})),
     ok = CurrentFsmFun(IID2),
     {error, exists} = eproc_router:add_key(Key2, '_', [sync, uniq]),        % Adding existing key as unique to inst 2
     ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, [IID3]})),
