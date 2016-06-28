@@ -1302,6 +1302,7 @@ eproc_store_router_test_attrs(Config) ->
 
 %%
 %%  Check if store operations for handling `eproc_router` attributes (keys) respect uniq option.
+%%  Only sync add_router cases are tested.
 %%
 eproc_store_router_test_uniq(Config) ->
     ok = meck:new(eproc_fsm, [passthrough]),
@@ -1337,7 +1338,7 @@ eproc_store_router_test_uniq(Config) ->
     ok = eproc_router:add_key(Key2, '_', [sync, uniq]),                     % Adding new unique key to inst 3
     ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, [IID3]})),
     ok = CurrentFsmFun(IID2),
-    {error, exists} = eproc_router:add_key(Key2, '_', [sync, uniq]),                     % Adding existing key as unique to inst 2
+    {error, exists} = eproc_router:add_key(Key2, '_', [sync, uniq]),        % Adding existing key as unique to inst 2
     ?assertThat(eproc_router:lookup(Key2, RouterOpts), is({ok, [IID3]})),
     true = meck:validate([eproc_fsm]),
     ok = meck:unload([eproc_fsm]).
