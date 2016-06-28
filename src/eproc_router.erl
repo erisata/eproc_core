@@ -55,7 +55,7 @@
 %%  :   if the key should be added synchronously, i.e. the key should
 %%      be available right after this function exits. If this option is
 %%      not present, the key will be activated at the end of the transition.
-%%      Synchronous key activation is less effective, altrough can be necessary
+%%      Synchronous key activation is less effective, although can be necessary
 %%      in the cases, when a call should be made rigth after adding the key and
 %%      the key is needed for routing the response of that call.
 %%  `uniq`
@@ -87,7 +87,7 @@ add_key(Key, Scope, Opts) ->
             end,
             case TaskResponse of
                 {ok, SyncRef} ->
-                    Name = undefined,
+                    Name = Key,
                     Action = {key, Key, SyncRef},
                     ok = eproc_fsm_attr:action(?MODULE, Name, Action, Scope);
                 {error, Reason} ->
@@ -272,8 +272,10 @@ handle_created(_InstId, _Attribute, {key, Key, SyncRef}, _Scope) ->
 %%
 %%  Keys cannot be updated.
 %%
-handle_updated(_InstId, _Attribute, _AttrState, {key, _Key}, _Scope) ->
-    {error, keys_non_updateable}.
+handle_updated(_InstId, _Attribute, _AttrState, {key, Key, SyncRef}, _Scope) ->
+    NewAttrData = #data{key = Key, ref = SyncRef},
+    NewAttrState = undefined,
+    {update, NewAttrData, NewAttrState, true}.
 
 
 %%

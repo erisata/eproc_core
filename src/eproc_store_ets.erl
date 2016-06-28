@@ -1120,9 +1120,9 @@ resolve_message_match_filter(Messages, MatchSpec) ->
 %% =============================================================================
 
 %%
-%%  Creates or removes router keys.
+%%  Creates, updates or removes router keys.
 %%
-%%  The sync record will be replaced, if created previously, alrough
+%%  The sync record will be replaced, if created previously, although
 %%  the SyncRef is not checked to keep this action atomic.
 %%
 handle_attr_custom_router_action(AttrAction, Instance) ->
@@ -1139,6 +1139,8 @@ handle_attr_custom_router_action(AttrAction, Instance) ->
             end,
             true = ets:insert(?KEY_TBL, #router_key{key = Key, inst_id = InstId, attr_nr = AttrNr}),
             ok;
+        {update, _Scope, {data, _Key, undefined}} ->
+            ok;
         {remove, _Reason} ->
             true = ets:match_delete(?KEY_TBL, #router_key{inst_id = InstId, attr_nr = AttrNr, _ = '_'}),
             ok
@@ -1153,10 +1155,23 @@ handle_attr_custom_router_task({key_sync, Key, InstId, Uniq}) ->
         true = ets:insert(?KEY_TBL, #router_key{key = Key, inst_id = InstId, attr_nr = SyncRef}),
         {ok, SyncRef}
     end,
+    IsKeyAddedFun = fun
+        (#router_key{key = K, inst_id = I}, _     ) when K=:=Key, I=:=InstId -> true;
+        (#router_key{key = K             }, Result) when K=:=Key             -> Result
+    end,
     case {ets:lookup(?KEY_TBL, Key), Uniq} of
-        {[], _    } -> AddKeyFun();
-        {_,  false} -> AddKeyFun();
-        {_,  true } -> {error, exists}
+        {[], _} ->
+            AddKeyFun();
+        {Keys, false} ->
+            case lists:foldl(IsKeyAddedFun, false, Keys) of
+                true  -> {ok, undefined};
+                false -> AddKeyFun()
+            end;
+        {Keys, true} ->
+            case lists:foldl(IsKeyAddedFun, false, Keys) of
+                true  -> {ok, undefined};
+                false -> {error, exists}
+            end
     end;
 
 handle_attr_custom_router_task({lookup, Key}) ->
