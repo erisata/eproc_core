@@ -168,8 +168,7 @@ test_sync_multi_key(_Config) ->
 test_sync_uniq_key(_Config) ->
     % Initialisation
     {ok, IRef1 = {inst, IID1}} = eproc_fsm__router_key:new(),
-    {ok, IRef2 = {inst, IID2}} = eproc_fsm__router_key:new(),
-    IID12Sorted = lists:sort([IID1, IID2]),
+    {ok, IRef2               } = eproc_fsm__router_key:new(),
     % Tests
     Key = key_async_multi,
     ?assertThat(eproc_fsm__router_key:add_key(IRef1, Key, '_', [sync, uniq]), is({ok, {ok, [IID1]}})),  % Key for the first instance
