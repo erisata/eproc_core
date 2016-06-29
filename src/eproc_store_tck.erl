@@ -34,6 +34,7 @@
     eproc_store_core_test_get_state/1,
     eproc_store_core_test_attrs/1,
     eproc_store_router_test_attrs/1,
+    eproc_store_router_test_multiple/1,
     eproc_store_router_test_uniq/1,
     eproc_store_meta_test_attrs/1,
     eproc_store_attachment_test_instid/1,
@@ -61,6 +62,7 @@ testcases(core) -> [
 
 testcases(router) -> [
     eproc_store_router_test_attrs,
+    eproc_store_router_test_multiple,
     eproc_store_router_test_uniq
     ];
 
@@ -1301,6 +1303,170 @@ eproc_store_router_test_attrs(Config) ->
 
 
 %%
+%%  Check if store operations for adding/removing same `eproc_router` keys to different instances work.
+%%
+eproc_store_router_test_multiple(Config) ->
+    %
+    % Initialisation
+    Store = store(Config),
+    Now = os:timestamp(),
+    KeyAsync = {eproc_store_router_test_multiple, {Now, asynchronous}},         % Asynchronous [non unique] key
+    KeySyncM = {eproc_store_router_test_multiple, {Now, synchronous_multiple}}, % Synchronous non unique key
+    KeySyncU = {eproc_store_router_test_multiple, {Now, synchronous_unique}},   % Synchronous unique key
+    RouterOpts = [{store, Store}],
+    {ok, IID1} = eproc_store:add_instance(Store, inst_value()),
+    {ok, IID2} = eproc_store:add_instance(Store, inst_value()),
+    IID12Sorted = lists:sort([IID1, IID2]),
+    ?assertThat(eproc_router:lookup(KeyAsync, RouterOpts), is({ok, []})),
+    ?assertThat(eproc_router:lookup(KeySyncM, RouterOpts), is({ok, []})),
+    ?assertThat(eproc_router:lookup(KeySyncU, RouterOpts), is({ok, []})),
+    %
+    % Adding keys synchronously.
+    {ok, SyncRefM1} = eproc_store:attr_task(Store, eproc_router, {key_sync, KeySyncM, IID1, false}),    % Adding synchronous non unique key to instance 1
+    {ok, SyncRefM2} = eproc_store:attr_task(Store, eproc_router, {key_sync, KeySyncM, IID2, false}),    % Adding synchronous non unique key to instance 2
+    {ok, undefined} = eproc_store:attr_task(Store, eproc_router, {key_sync, KeySyncM, IID1, false}),    % Updating synchronous non unique key of instance 1
+    {ok, SyncRefU1} = eproc_store:attr_task(Store, eproc_router, {key_sync, KeySyncU, IID1, true}),     % Adding synchronous unique key to instance 1
+    {error, exists} = eproc_store:attr_task(Store, eproc_router, {key_sync, KeySyncU, IID2, true}),     % Adding synchronous unique key to instance 2 -> fail
+    {ok, undefined} = eproc_store:attr_task(Store, eproc_router, {key_sync, KeySyncU, IID1, true}),     % Updating synchronous unique key of instance 1
+    ?assertThat(eproc_router:lookup(KeyAsync, RouterOpts), is({ok, []})),
+    {ok, Res1}= eproc_router:lookup(KeySyncM, RouterOpts),
+    ?assertThat(lists:sort(Res1),                          is(IID12Sorted)),
+    ?assertThat(eproc_router:lookup(KeySyncU, RouterOpts), is({ok, [IID1]})),
+    %
+    % Adding the key attributes.
+    %
+    % First instance.
+    MsgId111 = {IID1, 1, 0, recv},
+    Trn11 = #transition{
+        trn_id = 1, sname = s1, sdata = {data, 1, 1},
+        timestamp = os:timestamp(), duration = 13, trigger_type = event,
+        trn_node = undefined,
+        trigger_msg = #msg_ref{cid = MsgId111, peer = {connector, some}},
+        trigger_resp = undefined,
+        trn_messages = [],
+        attr_last_nr = 1,
+        attr_actions = [
+            #attr_action{module = eproc_router, attr_nr = 1, needs_store = true, action = {create, KeySyncM, '_', {data, KeySyncM, SyncRefM1}}},
+            #attr_action{module = eproc_router, attr_nr = 1, needs_store = true, action = {update,           s1,  {data, KeySyncM, undefined}}},
+            #attr_action{module = eproc_router, attr_nr = 2, needs_store = true, action = {create, KeySyncU, s1,  {data, KeySyncU, SyncRefU1}}},
+            #attr_action{module = eproc_router, attr_nr = 3, needs_store = true, action = {create, KeyAsync, '_', {data, KeyAsync, undefined}}},
+            #attr_action{module = eproc_router, attr_nr = 2, needs_store = true, action = {update,           '_', {data, KeySyncU, undefined}}},
+            #attr_action{module = eproc_router, attr_nr = 3, needs_store = true, action = {update,           '_', {data, KeyAsync, undefined}}}
+        ],
+        inst_status = running, interrupts = undefined
+    },
+    Msg111 = #message{msg_id = MsgId111, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m111},
+    {ok, IID1, 1} = eproc_store:add_transition(Store, IID1, Trn11, [Msg111]),
+    % Second instance.
+    MsgId211 = {IID2, 1, 0, recv},
+    Trn21 = #transition{
+        trn_id = 1, sname = s1, sdata = {data, 2, 1},
+        timestamp = os:timestamp(), duration = 13, trigger_type = event,
+        trn_node = undefined,
+        trigger_msg = #msg_ref{cid = MsgId211, peer = {connector, some}},
+        trigger_resp = undefined,
+        trn_messages = [],
+        attr_last_nr = 1,
+        attr_actions = [
+            #attr_action{module = eproc_router, attr_nr = 1, needs_store = true, action = {create, KeySyncM, '_', {data, KeySyncM, SyncRefM2}}},
+            #attr_action{module = eproc_router, attr_nr = 2, needs_store = true, action = {create, KeyAsync, '_', {data, KeyAsync, undefined}}}
+        ],
+        inst_status = running, interrupts = undefined
+    },
+    Msg211 = #message{msg_id = MsgId211, sender = {connector, some}, receiver = {inst, IID2}, resp_to = undefined, date = os:timestamp(), body = m211},
+    {ok, IID2, 1} = eproc_store:add_transition(Store, IID2, Trn21, [Msg211]),
+    % Testing results
+    {ok, Res2}= eproc_router:lookup(KeyAsync, RouterOpts),
+    ?assertThat(lists:sort(Res2),                          is(IID12Sorted)),
+    {ok, Res3}= eproc_router:lookup(KeySyncM, RouterOpts),
+    ?assertThat(lists:sort(Res3),                          is(IID12Sorted)),
+    ?assertThat(eproc_router:lookup(KeySyncU, RouterOpts), is({ok, [IID1]})),
+    %
+    % Removing one attribute by scope.
+    MsgId121 = {IID1, 2, 0, recv},
+    Trn12 = Trn11#transition{
+        trn_id = 2, sname = s2, sdata = {data, 1, 2},
+        trigger_msg = #msg_ref{cid = MsgId121, peer = {connector, some}},
+        trigger_resp = undefined,
+        trn_messages = [],
+        attr_last_nr = 2,
+        attr_actions = [
+            #attr_action{module = eproc_router, attr_nr = 1, needs_store = true, action = {remove, {scope, s2}}}
+        ],
+        inst_status = running, interrupts = undefined
+    },
+    Msg121 = #message{msg_id = MsgId121, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m11},
+    {ok, IID1, 2} = eproc_store:add_transition(Store, IID1, Trn12, [Msg121]),
+    {ok, Res4}= eproc_router:lookup(KeyAsync, RouterOpts),
+    ?assertThat(lists:sort(Res4),                          is(IID12Sorted)),
+    ?assertThat(eproc_router:lookup(KeySyncM, RouterOpts), is({ok, [IID2]})),
+    ?assertThat(eproc_router:lookup(KeySyncU, RouterOpts), is({ok, [IID1]})),
+    %
+    % Adding keys synchronously once again
+    {ok, SyncRefM3} = eproc_store:attr_task(Store, eproc_router, {key_sync, KeySyncM, IID1, false}),    % Adding synchronous non unique key to instance 1 (after removal)
+    {ok, undefined} = eproc_store:attr_task(Store, eproc_router, {key_sync, KeySyncM, IID2, false}),    % Updating synchronous non unique key of instance 2
+    {error, exists} = eproc_store:attr_task(Store, eproc_router, {key_sync, KeySyncU, IID2, true}),     % Adding synchronous unique key to instance 2 -> fail
+    {ok, Res5}= eproc_router:lookup(KeyAsync, RouterOpts),
+    ?assertThat(lists:sort(Res5),                          is(IID12Sorted)),
+    {ok, Res6}= eproc_router:lookup(KeySyncM, RouterOpts),
+    ?assertThat(lists:sort(Res6),                          is(IID12Sorted)),
+    ?assertThat(eproc_router:lookup(KeySyncU, RouterOpts), is({ok, [IID1]})),
+    %
+    % Adding key attributes once again
+    %
+    % First instance.
+    MsgId131 = {IID1, 1, 0, recv},
+    Trn13 = #transition{
+        trn_id = 3, sname = s3, sdata = {data, 1, 3},
+        timestamp = os:timestamp(), duration = 13, trigger_type = event,
+        trn_node = undefined,
+        trigger_msg = #msg_ref{cid = MsgId131, peer = {connector, some}},
+        trigger_resp = undefined,
+        trn_messages = [],
+        attr_last_nr = 2,
+        attr_actions = [
+            #attr_action{module = eproc_router, attr_nr = 4, needs_store = true, action = {create, KeySyncM, '_', {data, KeySyncM, SyncRefM3}}},
+            #attr_action{module = eproc_router, attr_nr = 3, needs_store = true, action = {update,           s3,  {data, KeyAsync, undefined}}}
+        ],
+        inst_status = running, interrupts = undefined
+    },
+    Msg131 = #message{msg_id = MsgId131, sender = {connector, some}, receiver = {inst, IID1}, resp_to = undefined, date = os:timestamp(), body = m131},
+    {ok, IID1, 3} = eproc_store:add_transition(Store, IID1, Trn13, [Msg131]),
+    % Second instance.
+    MsgId231 = {IID2, 1, 0, recv},
+    Trn23 = #transition{
+        trn_id = 2, sname = s3, sdata = {data, 2, 3},
+        timestamp = os:timestamp(), duration = 13, trigger_type = event,
+        trn_node = undefined,
+        trigger_msg = #msg_ref{cid = MsgId231, peer = {connector, some}},
+        trigger_resp = undefined,
+        trn_messages = [],
+        attr_last_nr = 3,
+        attr_actions = [
+            #attr_action{module = eproc_router, attr_nr = 1, needs_store = true, action = {update, s3,  {data, KeySyncM, undefined}}},
+            #attr_action{module = eproc_router, attr_nr = 2, needs_store = true, action = {update, s3,  {data, KeyAsync, undefined}}}
+        ],
+        inst_status = running, interrupts = undefined
+    },
+    Msg231 = #message{msg_id = MsgId231, sender = {connector, some}, receiver = {inst, IID2}, resp_to = undefined, date = os:timestamp(), body = m221},
+    {ok, IID2, 2} = eproc_store:add_transition(Store, IID2, Trn23, [Msg231]),
+    % Testing results
+    {ok, Res7}= eproc_router:lookup(KeyAsync, RouterOpts),
+    ?assertThat(lists:sort(Res7),                          is(IID12Sorted)),
+    {ok, Res8}= eproc_router:lookup(KeySyncM, RouterOpts),
+    ?assertThat(lists:sort(Res8),                          is(IID12Sorted)),
+    ?assertThat(eproc_router:lookup(KeySyncU, RouterOpts), is({ok, [IID1]})),
+    %
+    % Check, if keys are available after instances are terminated.
+    ?assertThat(eproc_store:set_instance_killed(Store, {inst, IID1}, #user_action{}), is({ok, IID1})),
+    ?assertThat(eproc_store:set_instance_killed(Store, {inst, IID2}, #user_action{}), is({ok, IID2})),
+    ?assertThat(eproc_router:lookup(KeyAsync, RouterOpts), is({ok, []})),
+    ?assertThat(eproc_router:lookup(KeySyncM, RouterOpts), is({ok, []})),
+    ?assertThat(eproc_router:lookup(KeySyncU, RouterOpts), is({ok, []})),
+    ok.
+
+
+%%
 %%  Check if store operations for handling `eproc_router` attributes (keys) respect uniq option.
 %%  Only sync add_router cases are tested.
 %%
@@ -1309,8 +1475,8 @@ eproc_store_router_test_uniq(Config) ->
     CurrentFsmFun = fun(InstId) -> meck:expect(eproc_fsm, id, [{[], {ok, InstId}}]) end,
     Store = store(Config),
     Now = os:timestamp(),
-    Key1 = {eproc_store_router_test_attrs, {Now, 1}},
-    Key2 = {eproc_store_router_test_attrs, {Now, 2}},
+    Key1 = {eproc_store_router_test_uniq, {Now, 1}},
+    Key2 = {eproc_store_router_test_uniq, {Now, 2}},
     RouterOpts = [{store, Store}],
     %%
     %%  Add instances.
