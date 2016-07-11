@@ -1155,20 +1155,16 @@ handle_attr_custom_router_task({key_sync, Key, InstId, Uniq}) ->
         true = ets:insert(?KEY_TBL, #router_key{key = Key, inst_id = InstId, attr_nr = SyncRef}),
         {ok, SyncRef}
     end,
-    IsKeyAddedFun = fun
-        (#router_key{key = K, inst_id = I}, _     ) when K=:=Key, I=:=InstId -> true;
-        (#router_key{key = K             }, Result) when K=:=Key             -> Result
-    end,
     case {ets:lookup(?KEY_TBL, Key), Uniq} of
         {[], _} ->
             AddKeyFun();
         {Keys, false} ->
-            case lists:foldl(IsKeyAddedFun, false, Keys) of
+            case lists:keymember(InstId, #router_key.inst_id, Keys) of
                 true  -> {ok, undefined};
                 false -> AddKeyFun()
             end;
         {Keys, true} ->
-            case lists:foldl(IsKeyAddedFun, false, Keys) of
+            case lists:keymember(InstId, #router_key.inst_id, Keys) of
                 true  -> {ok, undefined};
                 false -> {error, exists}
             end

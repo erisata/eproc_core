@@ -261,7 +261,7 @@ handle_describe(#attribute{data = #data{key = Key}}, {prop, key}) ->
 
 
 %%
-%%  Attribute created.
+%%  New key created.
 %%
 handle_created(_InstId, _Attribute, {key, Key, SyncRef}, _Scope) ->
     AttrData = #data{key = Key, ref = SyncRef},
@@ -270,16 +270,20 @@ handle_created(_InstId, _Attribute, {key, Key, SyncRef}, _Scope) ->
 
 
 %%
-%%  Keys cannot be updated.
+%%  Existing key updated. Only attribute metadata is updated
+%%  for the key.
 %%
-handle_updated(_InstId, _Attribute, _AttrState, {key, Key, SyncRef}, _Scope) ->
-    NewAttrData = #data{key = Key, ref = SyncRef},
-    NewAttrState = undefined,
-    {update, NewAttrData, NewAttrState, true}.
+%%  NOTE: On SyncRef. The key can be created async, and the updated as sync
+%%      in the same transition. In such case, the ref can be undefined for
+%%      the `create' action and can be defined for the `update' action.
+%%
+handle_updated(_InstId, #attribute{data = AttrData}, AttrState, {key, _Key, SyncRef}, _Scope) ->
+    NewAttrData = AttrData#data{ref = SyncRef},
+    {update, NewAttrData, AttrState, true}.
 
 
 %%
-%%  Attributes should never be removed.
+%%  Keys are removed, when they become out of scope.
 %%
 handle_removed(_InstId, _Attribute, _AttrState) ->
     {ok, true}.
