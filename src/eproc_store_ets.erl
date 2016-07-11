@@ -1137,10 +1137,8 @@ handle_attr_custom_router_action(AttrAction, Instance) ->
         {create, _Name, _Scope, {data, Key, SyncRef}} ->
             true = ets:insert(?KEY_TBL, #router_key{key = Key, inst_id = InstId, attr_nr = AttrNr}),
             case SyncRef of
-                undefined ->
-                    true;
-                _ ->
-                    ok = DeleteFun(Key, SyncRef)
+                undefined -> ok;
+                _         -> ok = DeleteFun(Key, SyncRef)
             end,
             ok;
         {update, _Scope, {data, _Key, undefined}} ->
@@ -1178,7 +1176,12 @@ handle_attr_custom_router_task({key_sync, Key, InstId, Uniq}) ->
     end;
 
 handle_attr_custom_router_task({lookup, Key}) ->
-    InstIds = [ InstId || #router_key{inst_id = InstId} <- ets:lookup(?KEY_TBL, Key) ],
+    %
+    %   NOTE: The `usort` is needed here, because in some cases, two key records can
+    %       exist for the same key. Thats because of how the sync keys are added
+    %       and then replaces by SyncRef.
+    %
+    InstIds = lists:usort([ InstId || #router_key{inst_id = InstId} <- ets:lookup(?KEY_TBL, Key) ]),
     {ok, InstIds}.
 
 
