@@ -53,7 +53,8 @@ add_key_test() ->
     ok = meck:expect(eproc_store, attr_task, [
         {[store, eproc_router, {key_sync, key3, iid, false}], meck:seq([{ok, ref3},  {ok, undefined}])},
         {[store, eproc_router, {key_sync, key5, iid, true }], meck:seq([{ok, ref51}, {ok, undefined}, {ok, ref52}])},
-        {[store, eproc_router, {key_sync, key6, iid, true }], {error, exists}}
+        {[store, eproc_router, {key_sync, key6, iid, true }], {error, exists}},
+        {[store, eproc_router, {key_sync, key7, iid, false}], {ok, ref7}}
     ]),
     erlang:put('eproc_fsm$id', iid),
     {ok, State1} = eproc_fsm_attr:init(100, [], 0, store, []),
@@ -66,6 +67,8 @@ add_key_test() ->
     ok = eproc_router:add_key(key5, [],   [sync, uniq]),
     ok = eproc_router:add_key(key5, next, [sync, uniq]),
     {error, exists} = eproc_router:add_key(key6, [],   [sync, uniq]),    % Already registered by different fsm
+    ok = eproc_router:add_key(key7, [],   []),
+    ok = eproc_router:add_key(key7, [],   [sync]),
     {ok, AttrActions3, _LastAttrId3, State3} = eproc_fsm_attr:transition_end(100, 0, [second], State2),
     {ok, State4} = eproc_fsm_attr:transition_start(100, 0, [second], State3),
     {ok, AttrActions5, _LastAttrId5, State5} = eproc_fsm_attr:transition_end(100, 0, [third], State4),
@@ -85,17 +88,19 @@ add_key_test() ->
     ?assertThat(AttrActions3, contains_member(DefAction#attr_action{attr_nr = 4, action = {update,       [second], {data, key4, undefined}}})),
     ?assertThat(AttrActions3, contains_member(DefAction#attr_action{attr_nr = 5, action = {create, key5, [],       {data, key5, ref51    }}})),
     ?assertThat(AttrActions3, contains_member(DefAction#attr_action{attr_nr = 5, action = {update,       [second], {data, key5, undefined}}})),
-    ?assertThat(AttrActions3, has_length(7)),
+    ?assertThat(AttrActions3, contains_member(DefAction#attr_action{attr_nr = 6, action = {create, key7, [],       {data, key7, undefined}}})),
+    ?assertThat(AttrActions3, contains_member(DefAction#attr_action{attr_nr = 6, action = {update,       [],       {data, key7, ref7     }}})),
+    ?assertThat(AttrActions3, has_length(9)),
     ?assertThat(AttrActions5, contains_member(DefAction#attr_action{attr_nr = 1, action = {remove, {scope, [third]}}})),
     ?assertThat(AttrActions5, contains_member(DefAction#attr_action{attr_nr = 4, action = {remove, {scope, [third]}}})),
     ?assertThat(AttrActions5, contains_member(DefAction#attr_action{attr_nr = 5, action = {remove, {scope, [third]}}})),
     ?assertThat(AttrActions5, has_length(3)),
     ?assertThat(AttrActions7, contains_member(DefAction#attr_action{attr_nr = 2, action = {update,       [fourth], {data, key2, undefined}}})),
     ?assertThat(AttrActions7, contains_member(DefAction#attr_action{attr_nr = 3, action = {update,       [],       {data, key3, undefined}}})),
-    ?assertThat(AttrActions7, contains_member(DefAction#attr_action{attr_nr = 6, action = {create, key4, [fourth], {data, key4, undefined}}})),
-    ?assertThat(AttrActions7, contains_member(DefAction#attr_action{attr_nr = 7, action = {create, key5, [],       {data, key5, ref52    }}})),
+    ?assertThat(AttrActions7, contains_member(DefAction#attr_action{attr_nr = 7, action = {create, key4, [fourth], {data, key4, undefined}}})),
+    ?assertThat(AttrActions7, contains_member(DefAction#attr_action{attr_nr = 8, action = {create, key5, [],       {data, key5, ref52    }}})),
     ?assertThat(AttrActions7, has_length(4)),
-    ?assertThat(meck:num_calls(eproc_store, attr_task, '_'), is(7)),
+    ?assertThat(meck:num_calls(eproc_store, attr_task, '_'), is(8)),
     ?assert(meck:validate(eproc_store)),
     ok = meck:unload(eproc_store).
 

@@ -24,7 +24,8 @@
     test_async_multi_key/1,
     test_async_uniq_key/1,
     test_sync_multi_key/1,
-    test_sync_uniq_key/1
+    test_sync_uniq_key/1,
+    test_sync_async_key/1
 ]).
 -define(namespaced_types, ok).
 -include_lib("common_test/include/ct.hrl").
@@ -39,7 +40,8 @@ all() -> [
     test_async_multi_key,
     test_async_uniq_key,
     test_sync_multi_key,
-    test_sync_uniq_key
+    test_sync_uniq_key,
+    test_sync_async_key
     ].
 
 
@@ -188,4 +190,23 @@ test_sync_uniq_key(_Config) ->
     ok = eproc_fsm__router_key:finalise(IRef2),
     ?assertThat(eproc_router:lookup(Key), is({ok, []})),
     ok.
+
+
+%%
+%%  Test, if adding same key asynchronously and then synchronously in the same transition works.
+%%
+test_sync_async_key(_Config) ->
+    % Initialisation
+    {ok, IRef1 = {inst, IID1}} = eproc_fsm__router_key:new(),
+    % Tests
+    Key = key_sync_async,
+    ?assertThat(eproc_fsm__router_key:add_keys(IRef1, [{Key, '_', []}, {Key, '_', [sync]}]), is([{ok, {ok, []}}, {ok, {ok, [IID1]}}])),
+    ?assertThat(eproc_router:lookup(Key), is({ok, [IID1]})),
+    ok = eproc_fsm__router_key:next_state(IRef1),
+    ?assertThat(eproc_router:lookup(Key), is({ok, [IID1]})),
+    % Cleanup
+    ok = eproc_fsm__router_key:finalise(IRef1),
+    ?assertThat(eproc_router:lookup(Key), is({ok, []})),
+    ok.
+
 

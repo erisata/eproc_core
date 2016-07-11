@@ -1128,18 +1128,25 @@ resolve_message_match_filter(Messages, MatchSpec) ->
 handle_attr_custom_router_action(AttrAction, Instance) ->
     #attr_action{attr_nr = AttrNr, action = Action} = AttrAction,
     #instance{inst_id = InstId} = Instance,
+    DeleteFun = fun(Key, SyncRef) ->
+        DeletePattern = #router_key{key = Key, inst_id = InstId, attr_nr = SyncRef, _ = '_'},
+        true = ets:match_delete(?KEY_TBL, DeletePattern),
+        ok
+    end,
     case Action of
         {create, _Name, _Scope, {data, Key, SyncRef}} ->
+            true = ets:insert(?KEY_TBL, #router_key{key = Key, inst_id = InstId, attr_nr = AttrNr}),
             case SyncRef of
                 undefined ->
                     true;
                 _ ->
-                    DeletePattern = #router_key{key = Key, inst_id = InstId, attr_nr = SyncRef, _ = '_'},
-                    true = ets:match_delete(?KEY_TBL, DeletePattern)
+                    ok = DeleteFun(Key, SyncRef)
             end,
-            true = ets:insert(?KEY_TBL, #router_key{key = Key, inst_id = InstId, attr_nr = AttrNr}),
             ok;
         {update, _Scope, {data, _Key, undefined}} ->
+            ok;
+        {update, _Scope, {data, Key, SyncRef}} ->
+            ok = DeleteFun(Key, SyncRef),
             ok;
         {remove, _Reason} ->
             true = ets:match_delete(?KEY_TBL, #router_key{inst_id = InstId, attr_nr = AttrNr, _ = '_'}),
