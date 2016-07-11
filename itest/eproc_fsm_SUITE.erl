@@ -251,7 +251,10 @@ test_timers_after_resume(_Config) ->
     %%  Set timer.
     ok = eproc_fsm__sched:set_single(P, 10000),
     {ok, P} = eproc_fsm:suspend(P, []),
+    ok = timer:sleep(100),  % Wait for async suspend.
     {ok, P} = eproc_fsm:resume(P, []),
+    ok = timer:sleep(100),  % Wait for resume.
+    true = eproc_fsm:is_online(P),
     {ok, #instance{}} = eproc_store:load_instance(undefined, P),
     ok.
 
