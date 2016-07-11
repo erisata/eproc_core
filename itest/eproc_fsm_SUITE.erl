@@ -27,6 +27,7 @@
     test_kill/1,
     test_rtdata/1,
     test_timers/1,
+    test_timers_after_resume/1,
     test_router_integration/1,
     test_metadata_integration/1,
     test_event_type/1,
@@ -47,6 +48,7 @@ all() -> [
     test_kill,
     test_rtdata,
     test_timers,
+    test_timers_after_resume,
     test_router_integration,
     test_metadata_integration,
     test_event_type,
@@ -233,6 +235,24 @@ test_timers(_Config) ->
     ok = receive tick -> ok after 500 -> timeout end,
     %% Cleanup.
     ok = eproc_fsm__sched:stop(P),
+    ok.
+
+
+%%
+%%  Check if timers are set correctly on fsm start. Especially, if some timer is
+%%  created and updated in the same transition.
+%%
+%%  NOTE: this is a known bug, which this test is supposed to catch. However,
+%%  it does not yet successfully reproduce it.
+%%
+test_timers_after_resume(_Config) ->
+    {ok, P} = eproc_fsm__sched:start(),
+    ok = eproc_fsm__sched:subscribe(P),
+    %%  Set timer.
+    ok = eproc_fsm__sched:set_single(P, 10000),
+    {ok, P} = eproc_fsm:suspend(P, []),
+    {ok, P} = eproc_fsm:resume(P, []),
+    {ok, #instance{}} = eproc_store:load_instance(undefined, P),
     ok.
 
 

@@ -24,7 +24,7 @@
 -module(eproc_fsm__sched).
 -behaviour(eproc_fsm).
 -compile([{parse_transform, lager_transform}]).
--export([start/0, subscribe/1, set/2, cancel/1, pause/1, stop/1]).
+-export([start/0, subscribe/1, set/2, set_single/2, cancel/1, pause/1, stop/1]).
 -export([init/1, init/2, handle_state/3, terminate/3, code_change/4, format_status/2]).
 -include_lib("eproc_core/include/eproc.hrl").
 
@@ -44,6 +44,9 @@ subscribe(FsmRef) ->
 
 set(FsmRef, Period) ->
     eproc_fsm:send_event(FsmRef, {set, Period}).
+
+set_single(FsmRef, Period) ->
+    eproc_fsm:send_event(FsmRef, {set_single, Period}).
 
 cancel(FsmRef) ->
     eproc_fsm:send_event(FsmRef, cancel).
@@ -132,6 +135,15 @@ handle_state(_StateName, {entry, _PrevState}, StateData) ->
 
 handle_state(_StateName, {event, {add, Subscriber}}, StateData = #state{subsc = Subscribers}) ->
     {same_state, StateData#state{subsc = [Subscriber | Subscribers]}};
+
+handle_state(_StateName, {event, {set_single, Period}}, StateData) ->
+    ok = eproc_timer:set(single, {1, min}, tack, []), % To check, if the same timer can be created and updated in one trn.
+    ok = eproc_timer:set(single, Period,   tack, []), % Timer updated.
+    {same_state, StateData};
+
+handle_state([scheduling], {timer, tack}, StateData = #state{subsc = Subscribers}) ->
+    lists:foreach(fun (S) -> S ! tack end, Subscribers),
+    {same_state, StateData};
 
 handle_state(_StateName, {event, stop}, StateData) ->
     {final_state, [done], StateData};
