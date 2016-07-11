@@ -100,7 +100,7 @@ test_register_fsm(Config) ->
 %%
 %%  Check if registry reset works.
 %%
-test_registry_reset(Config) ->
+test_registry_reset(_Config) ->
     {ok, Lamp} = eproc_fsm__lamp:create(),
     ok = eproc_fsm__lamp:toggle(Lamp),
     ok = eproc_reg_gproc:reset(),
