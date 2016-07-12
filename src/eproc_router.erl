@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013-2015 Erisata, UAB (Ltd.)
+%| Copyright 2013-2016 Erisata, UAB (Ltd.)
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -14,16 +14,16 @@
 %| limitations under the License.
 %\--------------------------------------------------------------------
 
-%%
-%%  Message router is used to locate FSMs by business specific keys
-%%  instead of instance ids ir names. The keys can be added to an FSM
-%%  at some transition.
-%%
-%%  An FSM that should be accessed using business specific keys,
-%%  should register them by calling function `add_key/2-3`.
-%%  Keys are maintained as FSM attributes and can be limited to
-%%  particular scope.
-%%
+%%%
+%%% Message router is used to locate FSMs by business specific keys
+%%% instead of instance ids ir names. The keys can be added to an FSM
+%%% at some transition.
+%%%
+%%% An FSM that should be accessed using business specific keys,
+%%% should register them by calling function `add_key/2-3`.
+%%% Keys are maintained as FSM attributes and can be limited to
+%%% particular scope.
+%%%
 -module(eproc_router).
 -behaviour(eproc_fsm_attr).
 -export([add_key/3, add_key/2]).
@@ -37,14 +37,18 @@
 }).
 
 
-%% =============================================================================
-%%  API for FSM implementations.
-%% =============================================================================
+%%% ============================================================================
+%%% API for FSM implementations.
+%%% ============================================================================
 
 %%
 %%  Attaches the specified key to the current FSM. The key can be later
 %%  used to lookup FSM instance id. This function should be called from
-%%  the FSM process, most likely in the FSM callback's `handle_state/3` function.
+%%  the FSM process, most likely in the FSM callback's `handle_state/3' function.
+%%
+%%  If the `Key' is already registered for the current FSM instance,
+%%  the new key will not be added, and the validity of the existing key
+%%  will be updated to the new scope.
 %%
 %%  The attached key is valid for the specified scope. I.e. the key will
 %%  be automatically deactivated, if the FSM will exit the specified scope.
@@ -112,9 +116,9 @@ add_key(Key, Scope) ->
 
 
 
-%% =============================================================================
-%%  API for Router implementations.
-%% =============================================================================
+%%% ============================================================================
+%%% API for Router implementations.
+%%% ============================================================================
 
 %%
 %%  Returns instance instance ids (possibly []) by the specified key.
@@ -236,9 +240,9 @@ lookup_sync_send(Key, Fun) ->
 
 
 
-%% =============================================================================
-%%  Callbacks for `eproc_fsm_attr`.
-%% =============================================================================
+%%% ============================================================================
+%%% Callbacks for `eproc_fsm_attr`.
+%%% ============================================================================
 
 %%
 %%  FSM started.
@@ -297,9 +301,9 @@ handle_event(_InstId, _Attribute, _AttrState, Event) ->
 
 
 
-%% =============================================================================
-%%  Internal functions.
-%% =============================================================================
+%%% ============================================================================
+%%% Internal functions.
+%%% ============================================================================
 
 %%
 %%  Resolve `store` option.
