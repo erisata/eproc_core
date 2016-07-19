@@ -101,6 +101,9 @@ handle_state(serving, {event, stop}, StateData) ->
     {final_state, done, StateData};
 
 handle_state(serving, {exit, _NextState}, StateData) ->
+    {ok, StateData};
+
+handle_state(_Any, state, StateData) ->
     {ok, StateData}.
 
 

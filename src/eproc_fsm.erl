@@ -335,6 +335,7 @@
     type        :: inst_type(),     %% Type of the instance. In simple cases, it will match the module.
     module      :: module(),        %% Implementation of the user FSM.
     created     :: timestamp(),     %% Current instance creation time.
+    opts = []   :: list(),          %% Custom options of the FSM.
     sname       :: state_name(),    %% User FSM state name.
     sdata       :: state_data(),    %% User FSM state data.
     rt_field    :: integer(),       %% Runtime data field in the sdata.
@@ -539,6 +540,8 @@
 %%  the state entries will be invoked for the state `{selling, sale, '_'}' and
 %%  then for `{selling, '_', low_in_stock}`.
 %%
+%%  TODO: XXX: Describe the state event and its options.....
+%%
 %%  TODO: What to do, if one of the orthogonal entry actions will return `final_state' or
 %%      will return a `next_state' for state, that is not a substate of the currently
 %%      processed orthogonal entry?
@@ -557,7 +560,8 @@
                        {Type, Source, Message} |
                        {Type, Source, From, Message} |
                        {exit, NextStateName} |
-                       {entry, PrevStateName},
+                       {entry, PrevStateName} |
+                       state,
         StateData   :: state_data()
     ) ->
         {same_state, NewStateData} |
@@ -2362,7 +2366,7 @@ handle_start(FsmRef, StartOpts, State = #state{store = Store}) ->
             case LimitsResult of
                 ok ->
                     case start_loaded(Instance, StartOpts, StateWithInstId) of
-                        {ok, NewState = #state{type = Type}} ->
+                        {ok, NewState} ->
                             lager:debug("FSM started, ref=~p, pid=~p.", [FsmRef, self()]),
                             eproc_stats:add_instance_started(Type),
                             case proplists:get_value(start_sync, StartOpts) of
@@ -2484,6 +2488,7 @@ init_loaded(Instance, SName, SData, State) ->
         inst_id = InstId,
         type = Type,
         module = Module,
+        opts = CustomOpts,
         created = Created,
         curr_state = InstState
     } = Instance,
@@ -2506,7 +2511,8 @@ init_loaded(Instance, SName, SData, State) ->
                 rt_default  = RTDefault,
                 trn_nr      = LastTrnNr,
                 attrs       = AttrState,
-                created     = Created
+                created     = Created,
+                opts        = CustomOpts
             },
             {ok, NewState};
         {error, Reason} ->
@@ -2803,7 +2809,7 @@ perform_event_transition(Trigger, TrnNr, InitAttrActions, State) ->
                 1 -> {ok, NewSData};    % Do not exit for the initial state.
                 _ -> perform_exit(SName, NewSName, NewSData, State)
             end,
-            case perform_entry(SName, NewSName, '_', [], SDataAfterExit, State) of
+            case perform_entry(SName, NewSName, SDataAfterExit, State) of
                 {next, SNameAfterEntry, SDataAfterEntry} ->
                     {ok, DerivedSNameAfterEntry} = derive_next_state(SNameAfterEntry, SName),
                     {cont, DerivedSNameAfterEntry, SDataAfterEntry};
@@ -2829,6 +2835,32 @@ perform_exit(PrevSName, NextSName, SData, #state{module = Module}) ->
     case Module:handle_state(PrevSName, {exit, NextSName}, SData) of
         {ok, NewSData} ->
             {ok, NewSData}
+    end.
+
+
+%%
+%%
+%%
+perform_entry(PrevSName, NextSName, SData, State = #state{module = Module, opts = Opts}) ->
+    case perform_entry(PrevSName, NextSName, '_', [], SData, State) of
+        {next, NewSName, NewSData} ->
+            case proplists:get_bool(state_events, Opts) of
+                true ->
+                    case Module:handle_state(NewSName, state, NewSData) of
+                        ok ->
+                            {next, NewSName, NewSData};
+                        ignore ->
+                            {next, NewSName, NewSData};
+                        {ok, OtherSData} ->
+                            {next, NewSName, OtherSData};
+                        {next_state, OtherSName, OtherSData} ->
+                            perform_entry(PrevSName, OtherSName, OtherSData, State)
+                    end;
+                false ->
+                    {next, NewSName, NewSData}
+            end;
+        {stop, NewSName, NewSData} ->
+            {stop, NewSName, NewSData}
     end.
 
 
