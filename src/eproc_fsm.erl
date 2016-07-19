@@ -2844,7 +2844,7 @@ perform_exit(PrevSName, NextSName, SData, #state{module = Module}) ->
 perform_entry(PrevSName, NextSName, SData, State = #state{module = Module, opts = Opts}) ->
     case perform_entry(PrevSName, NextSName, '_', [], SData, State) of
         {next, NewSName, NewSData} ->
-            case proplists:get_bool(state_events, Opts) of
+            case proplists:get_bool(trigger_entered, Opts) of
                 true ->
                     {ok, DerivedNewSName} = derive_next_state(NewSName, PrevSName),
                     case Module:handle_state(DerivedNewSName, {entered, PrevSName}, NewSData) of
