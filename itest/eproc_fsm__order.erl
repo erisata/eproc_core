@@ -19,10 +19,10 @@
 %%
 %%  States:
 %%
-%%    * []              --create--> [pending]
-%%    * [pending]       --process--> [delivering]
-%%    * [delivering]    --delivered--> [completed]
-%%    * [completed]     -- final
+%%    * []              --create--> pending
+%%    * pending       --process--> delivering
+%%    * delivering    --delivered--> completed
+%%    * completed     -- final
 %%
 -module(eproc_fsm__order).
 -behaviour(eproc_fsm).
@@ -106,43 +106,43 @@ init(_StateName, _StateData) ->
 %%
 %%  The initial state.
 %%
-handle_state([], {sync, _From, {create, Items}}, StateData = #state{order_id = OrderId, cust_nr = CustNr}) ->
+handle_state({}, {sync, _From, {create, Items}}, StateData = #state{order_id = OrderId, cust_nr = CustNr}) ->
     ok = eproc_meta:add_tag(OrderId, order_id),
     ok = eproc_meta:add_tag(CustNr, cust_nr),
-    ok = eproc_router:add_key(?ORDER_KEY(OrderId), []),
-    {reply_next, ok, [pending], StateData#state{items = Items}};
+    ok = eproc_router:add_key(?ORDER_KEY(OrderId), '_'),
+    {reply_next, ok, pending, StateData#state{items = Items}};
 
 
 %%
 %%  The `pending` state.
 %%  The sync option is not necessary here.
 %%
-handle_state([pending], {entry, _PrevState}, StateData) ->
-    ok = eproc_timer:set({1, hour}, timeout, [pending]),
+handle_state(pending, {entry, _PrevState}, StateData) ->
+    ok = eproc_timer:set({1, hour}, timeout, pending),
     {ok, StateData};
 
-handle_state([pending], {sync, _From, process}, StateData) ->
+handle_state(pending, {sync, _From, process}, StateData) ->
     DeliveryId = {delivery, erlang:node(), os:timestamp()},
-    ok = eproc_router:add_key(?DELIVERY_KEY(DeliveryId), [], [sync]),
-    {reply_next, {ok, DeliveryId}, [delivering], StateData};
+    ok = eproc_router:add_key(?DELIVERY_KEY(DeliveryId), '_', [sync]),
+    {reply_next, {ok, DeliveryId}, delivering, StateData};
 
-handle_state([pending], {timer, timeout}, StateData) ->
+handle_state(pending, {timer, timeout}, StateData) ->
     {final_state, [expired], StateData};
 
-handle_state([pending], {exit, _NextState}, StateData) ->
+handle_state(pending, {exit, _NextState}, StateData) ->
     {ok, StateData};
 
 
 %%
 %%  The `delivering` state.
 %%
-handle_state([delivering], {entry, _PrevState}, StateData) ->
+handle_state(delivering, {entry, _PrevState}, StateData) ->
     {ok, StateData};
 
-handle_state([delivering], {sync, _From, delivered}, StateData) ->
-    {reply_final, {ok, completed}, [completed], StateData};
+handle_state(delivering, {sync, _From, delivered}, StateData) ->
+    {reply_final, {ok, completed}, completed, StateData};
 
-handle_state([delivering], {exit, _NextState}, StateData) ->
+handle_state(delivering, {exit, _NextState}, StateData) ->
     {ok, StateData}.
 
 

@@ -18,7 +18,8 @@
 %%  Testcases for `eproc_fsm`.
 %%
 -module(eproc_fsm_SUITE).
--export([all/0, init_per_suite/1, end_per_suite/1]).
+-compile([{parse_transform, lager_transform}]).
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 -export([
     test_simple_unnamed/1,
     test_simple_named/1,
@@ -80,6 +81,21 @@ end_per_suite(_Config) ->
     ok = application:stop(eproc_core).
 
 
+%%
+%%  Log test case name at start
+%%
+init_per_testcase(TestCase, Config) ->
+    lager:debug("-------------------------------------- ~p start", [TestCase]),
+    Config.
+
+
+%%
+%%  Log test case name at end
+%%
+end_per_testcase(TestCase, _Config) ->
+    lager:debug("-------------------------------------- ~p end", [TestCase]),
+    ok.
+
 
 %% =============================================================================
 %%  Testcases.
@@ -138,7 +154,7 @@ test_suspend_resume(_Config) ->
     %% Suspend and resume with updated state.
     {ok, Seq} = eproc_fsm:suspend(Seq, []),
     false     = eproc_fsm__seq:exists(Seq),
-    {ok, Seq} = eproc_fsm:resume(Seq, [{state, {set, [incrementing], {state, 100}, []}}]),
+    {ok, Seq} = eproc_fsm:resume(Seq, [{state, {set, incrementing, {state, 100}, []}}]),
     true      = eproc_fsm__seq:exists(Seq),
     {ok, 100} = eproc_fsm__seq:get(Seq),
     %% Terminate FSM.

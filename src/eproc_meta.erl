@@ -74,7 +74,7 @@
 
 add_tag(Tag, Type) ->
     Name = Action = {tag, to_binary(Tag), to_binary(Type)},
-    eproc_fsm_attr:action(?MODULE, Name, Action, []).
+    eproc_fsm_attr:action(?MODULE, Name, Action, '_').
 
 
 %%

@@ -160,7 +160,6 @@
     send_event/3, send_event/2,
     self_send_event/2, self_send_event/1,
     sync_send_event/3, sync_send_event/2,
-    orthogonal/4,
     trigger_event/4,
     kill/2, suspend/2, resume/2, update/5,
     is_online/2, is_online/1
@@ -181,6 +180,7 @@
     is_fsm_ref/1,
     is_state_in_scope/2,
     is_state_valid/1,
+    is_scope_valid/1,
     is_next_state_valid/1,
     is_next_state_valid/2,
     derive_next_state/2,
@@ -254,7 +254,7 @@
 %%  entry and exit actions are not invoked for this state.
 %%
 %%  The FSM callback can return ortogonal state with some of its regions
-%%  marked as unchanged (`'_'` or `{}` instead of region state). The corresponding
+%%  marked as unchanged (`'_'` or `{}` instead of a region state). The corresponding
 %%  exit and entry events will be called with the same wildcarded state
 %%  name, although the final state will be derived by replacing wildcards
 %%  with the previous states of the corresponding regions. This allows the
@@ -262,15 +262,15 @@
 %%  or exited. Wildcarded transition is only allowed within the same orthogonal
 %%  state, i.e. only regions can differ from the previous state.
 %%
-%%  NOTE: List based states are allowed only for legacy purposes. It should not
-%%  be used and will be removed in future.
+%%  NOTE: List based states are allowed only for legacy purposes. It should
+%%  be not used and will be removed in future.
 %%
--type state_name() :: atom() | binary() | integer() | tuple() | list().
+-type state_name() :: atom() | binary() | integer() | tuple().
 
 
 %%
 %%  State scope is used to specify validity of some FSM attributes. Currently the
-%%  scope needs to be specified for timers and keys. I.e. when the FSM exits the
+%%  scope can be specified for timers and router keys. I.e. when the FSM exits the
 %%  specified state (scope), the corresponding timers and keys will be deactivated.
 %%
 %%  The state scope has a structure similar to state name, except that it supports
@@ -469,10 +469,10 @@
 %%          state entry is a good place to set up timers that shouls be valid in
 %%          that state.
 %%
-%%      The `event`, `sync`, `info` and `timer` tuples all indicate transition triggers and are
-%%      handled by the `eproc_core` application. Additional triggers can be added by implementing
-%%      FSM attribute handlers. The generic structure of a trigger tuple (not taking exit and entry)
-%%      is the following:
+%%      The `event', `sync', `info' and `timer' tuples all indicate transition triggers and are
+%%      handled by the `eproc_core' application. Additional triggers can be added by implementing
+%%      FSM attribute handlers. The generic structure of a trigger tuple (not including the `exit'
+%%      and the `entry' actions) is the following:
 %%
 %%      {Type, Message}
 %%      :   for asynchronous messages.
@@ -486,44 +486,44 @@
 %%      The particular tuple structure should be defined in the module providing
 %%      the attribute handler implementation.
 %%
-%%  `StateData`
-%%  :   contains internal state of the FSM.
+%%  `StateData'
+%%  :   contains internal state data of the FSM.
 %%
-%%  If the function was invoked with asynchronous trigger (like `event`, `timer` or `info`),
+%%  If the function was invoked with an *asynchronous trigger* (like `event', `timer' or `info'),
 %%  the function should return one of the following:
 %%
-%%  `{same_state, NewStateData}`
+%%  `{same_state, NewStateData}'
 %%  :   to indicate, that transition is to the the same state. In this case, corresponding
 %%      state exit and entry callbacks will not be invoked.
-%%  `{next_state, NextStateName, NewStateData}`
+%%  `{next_state, NextStateName, NewStateData}'
 %%  :   indicates a transition to the next state. Next state can also be the current state,
 %%      but in this case state exit/entry callbacks will be invoked anyway.
-%%  `{final_state, FinalStateName, NewStateData}`
+%%  `{final_state, FinalStateName, NewStateData}'
 %%  :   indicates a transition to the final state of the FSM. I.e. FSM is terminated after
 %%      this transition.
 %%
-%%  In the case of synchronous events `{sync, From, Message}`, the callback can return all the
+%%  In the case of *synchronous events* like `{sync, From, Message}', the callback can return all the
 %%  responses listed above, if reply to the caller was sent explicitly using function `reply/2`.
-%%  If reply was not sent explicitly, the terms tagged with `reply_same`, `reply_next` and `reply_final`
-%%  should be used to send a reply and do the transition. Meaning of these response terms are
-%%  the same as for the `same_state`, `next_state` and `final_state` correspondingly.
+%%  If the reply was not sent explicitly, the terms tagged with `reply_same`, `reply_next` and `reply_final`
+%%  should be used to send a reply and perform the transition. The meaning of these response terms are
+%%  the same as for the `same_state', `next_state' and `final_state' correspondingly.
 %%
-%%  If the callback was invoked to handle state exit, the response term should be
-%%  `{ok, NewStateData}`.
+%%  If the callback was invoked to handle state *exit*, the response term should be
+%%  `{ok, NewStateData}'.
 %%
-%%  If the callback was invoked to handle state entry, the response term can be one of the following:
+%%  If the callback was invoked to handle state *entry*, the response term can be one of the following:
 %%
-%%  `{ok | same_state, NewStateData}`
+%%  `{ok | same_state, NewStateData}'
 %%  :   indicates, that the entry to the state if done.
-%%  `{next_state, NextStateName, NewStateData}`
+%%  `{next_state, NextStateName, NewStateData}'
 %%  :   says, that other state should be entered instead of this one.
 %%      This is usefull for entering substates in a composite state.
-%%      I.e, the source state can issue transition to the composite state withouth
+%%      I.e, the source state can issue transition to the composite state without
 %%      knowing its substates. The target state then enters its own initial state
-%%      as needed. 'eproc_fsm' will only call entry callback for the new state,
+%%      as needed. The `eproc_fsm' will only call the entry callback for the new state,
 %%      the exit and event callbacks will not be called for the current state.
-%%  `{final_state, FinalStateName, NewStateData}`
-%%  :   indicates, that the FSM is terminating. As in the case of the `next_state`,
+%%  `{final_state, FinalStateName, NewStateData}'
+%%  :   indicates, that the FSM is terminating. As in the case of the `next_state',
 %%      this case is also usefull when implementing composite states. No other callbacks
 %%      will be called after this response.
 %%
@@ -531,6 +531,17 @@
 %%  can be recognized by the state entry action, it will be invoked with `[]` as a PrevStateName
 %%  or the state name as returned by the `init/2` callback.
 %%  Similarly, the entry action is not invoked for the final state.
+%%
+%%  When a transition is made to an orthogonal state, (by returning `{next_state, ...}'),
+%%  state entries are invoked for each region is that state. The entries will be called
+%%  for all the deepest states one-by-one, skipping the wildcard states ('_').
+%%  I.e. if the transition is made to a state `{selling, sale, low_in_stock}',
+%%  the state entries will be invoked for the state `{selling, sale, '_'}' and
+%%  then for `{selling, '_', low_in_stock}`.
+%%
+%%  TODO: What to do, if one of the orthogonal entry actions will return `final_state' or
+%%      will return a `next_state' for state, that is not a substate of the currently
+%%      processed orthogonal entry?
 %%
 %%  TODO> Add `ignore` response to be able to ignore unknown messages, for example.
 %%
@@ -901,34 +912,7 @@ is_state_in_scope(State, {Scope}) ->
 is_state_in_scope(State, Scope) when State =:= Scope; Scope =:= {}; Scope =:= '_' ->
     true;
 
-is_state_in_scope(_State, []) ->
-    % Support for legacy list based states.
-    true;
-
-is_state_in_scope([BaseState | SubStates], [BaseScope | SubScopes]) when BaseState =:= BaseScope; BaseScope =:= '_' ->
-    % Support for legacy list based states.
-    is_state_in_scope(SubStates, SubScopes);
-
-is_state_in_scope([BaseState | SubStates], [BaseScope | SubScopes]) when element(1, BaseState) =:= BaseScope ->
-    % Support for legacy list based states.
-    is_state_in_scope(SubStates, SubScopes);
-
-is_state_in_scope([BaseState | _SubStates], [BaseScope | _SubScopes]) when is_tuple(BaseState), is_tuple(BaseScope) ->
-    % Support for legacy list based states.
-    [StateName | StateRegions] = tuple_to_list(BaseState),
-    [ScopeName | ScopeRegions] = tuple_to_list(BaseScope),
-    RegionCheck = fun
-        (_, false) -> false;
-        ({St, Sc}, true) -> is_state_in_scope(St, Sc)
-    end,
-    NamesEqual = StateName =:= ScopeName,
-    SizesEqual = tuple_size(BaseState) =:= tuple_size(BaseScope),
-    case NamesEqual and SizesEqual of
-        true -> lists:foldl(RegionCheck, true, lists:zip(StateRegions, ScopeRegions));
-        false -> false
-    end;
-
-is_state_in_scope(State, Scope) when is_tuple(State), tuple_size(State) > 0 ->
+is_state_in_scope(State, Scope) when tuple_size(State) > 0 ->
     [StateName | StateRegions] = tuple_to_list(State),
     case Scope of
         {} ->
@@ -937,7 +921,7 @@ is_state_in_scope(State, Scope) when is_tuple(State), tuple_size(State) > 0 ->
             true;
         StateName ->
             true;
-        _ when is_tuple(Scope), tuple_size(Scope) =:= tuple_size(State), element(1, Scope) =:= StateName ->
+        _ when tuple_size(Scope) =:= tuple_size(State), element(1, Scope) =:= StateName ->
             RegionCheck = fun
                 (_, false) -> false;
                 ({St, Sc}, true) -> is_state_in_scope(St, Sc)
@@ -957,19 +941,7 @@ is_state_in_scope(_State, _Scope) ->
 %%
 -spec is_state_valid(state_name()) -> boolean().
 
-is_state_valid([]) ->
-    % Support for legacy list based states.
-    true;
-
-is_state_valid([BaseState | SubStates]) when is_atom(BaseState); is_binary(BaseState); is_integer(BaseState) ->
-    % Support for legacy list based states.
-    is_state_valid(SubStates);
-
-is_state_valid([BaseState]) when is_tuple(BaseState) ->
-    % Support for legacy list based states.
-    is_state_valid(BaseState);
-
-is_state_valid(State) when State =:= {}; is_atom(State); is_binary(State); is_integer(State) ->
+is_state_valid(State) when State =:= {}; State =:= '_'; is_atom(State); is_binary(State); is_integer(State) ->
     true;
 
 is_state_valid(State) when is_tuple(State) ->
@@ -987,6 +959,13 @@ is_state_valid(State) when is_tuple(State) ->
 
 is_state_valid(_State) ->
     false.
+
+
+%%
+%%  Scope should be a valid state, maybe with some wildcards.
+%%
+is_scope_valid(Scope) ->
+    is_state_valid(Scope).
 
 
 %%
@@ -1025,109 +1004,71 @@ is_next_state_valid(NextStateName) ->
 -spec derive_next_state(StateName :: state_name(), PrevStateName :: state_name())
     -> {ok, DerivedStateName :: state_name()} | {error, term()}.
 
-derive_next_state([], _) ->
-    {error, empty};
-
 derive_next_state({}, _) ->
-    {error, empty};
+    {error, next_state_empty};
 
 derive_next_state(StateName, PrevStateName) ->
-    derive_next_sub_state(StateName, PrevStateName).
+    derive_next_sub_state(StateName, PrevStateName, [], StateName, PrevStateName).
 
 
 %%
 %%  Internal function for `derive_next_state/2`.
 %%
-derive_next_sub_state([], _) ->
-    % Support for legacy list based states.
-    {ok, []};
+% Wildcards are not allowed in the target state, if they were not defined in the prev state.
+derive_next_sub_state(Wildcard, PrevSName, Path, OrigNextSName, OrigPrevSName) when
+        Wildcard  =:= '_' orelse Wildcard  =:= {},
+        PrevSName =:= '_' orelse PrevSName =:= {}
+        ->
+    {error, {bad_state, [{lists:reverse(Path), wildcard, Wildcard}], OrigNextSName, OrigPrevSName}};
+
+% Wildcards are replaced with the corresponding region from the previous state.
+derive_next_sub_state(Wildcard, PrevSName, Path, OrigNextSName, OrigPrevSName) when
+        Wildcard =:= '_';
+        Wildcard =:= {}
+        ->
+    derive_next_sub_state(PrevSName, '_', Path, OrigNextSName, OrigPrevSName);
 
 % If the state is simple, it should be atom, binary or integer.
-derive_next_sub_state([Simple | SubStates], PrevStateName) when is_atom(Simple); is_binary(Simple); is_integer(Simple) ->
-    % Support for legacy list based states.
-    PrevSubStates = case PrevStateName of
-        [Simple | PSS] -> PSS;
-        _              -> undefined
-    end,
-    case derive_next_sub_state(SubStates, PrevSubStates) of
-        {ok, NewSubStates} -> {ok, [Simple | NewSubStates]};
-        {error, Reason}    -> {error, Reason}
-    end;
-
-% If the state is orthogonal...
-derive_next_sub_state([OrthState], [PrevStateName]) when is_tuple(OrthState) ->
-    % Support for legacy list based states.
-    case derive_next_state(OrthState, PrevStateName) of
-        {ok, NewState}  -> {ok, [NewState]};
-        {error, Reason} -> {error, Reason}
-    end;
-
-% If the state is orthogonal...
-derive_next_sub_state([OrthState], _PrevStateName) when is_tuple(OrthState) ->
-    % Support for legacy list based states.
-    case derive_next_state(OrthState, undefined) of
-        {ok, NewState}  -> {ok, [NewState]};
-        {error, Reason} -> {error, Reason}
-    end;
-
-% Patterns are not allowed.
-derive_next_sub_state(Wildcard, _PrevStateName) when Wildcard =:= '_'; Wildcard =:= {} ->
-    {error, {bad_state, Wildcard}};
-
-% If the state is simple, it should be atom, binary or integer.
-derive_next_sub_state(Simple, _PrevStateName) when is_atom(Simple); is_binary(Simple); is_integer(Simple) ->
+derive_next_sub_state(Simple, _PrevStateName, _Path, _OrigNextSName, _OrigPrevSName) when
+        is_atom(Simple);
+        is_binary(Simple);
+        is_integer(Simple)
+        ->
     {ok, Simple};
 
 % If the state is orthogonal...
-derive_next_sub_state(OrthState, PrevStateName) when is_tuple(OrthState), tuple_size(OrthState) > 0 ->
-    [StateName | StateRegions] = tuple_to_list(OrthState),
-    case is_atom(StateName) orelse is_binary(StateName) orelse is_integer(StateName) of
+derive_next_sub_state(OrthState, PrevSName, Path, OrigNextSName, OrigPrevSName) when tuple_size(OrthState) > 0 ->
+    StateName = erlang:element(1, OrthState),
+    case (is_atom(StateName) orelse is_binary(StateName) orelse is_integer(StateName)) andalso not (StateName =:= '_') of
         true ->
-            RegionsResult = case PrevStateName of
-                PrevOrthState when is_tuple(PrevOrthState),
-                        element(1, PrevOrthState) =:= StateName,
-                        tuple_size(PrevOrthState) =:= tuple_size(OrthState)
-                        ->
-                    % The FSM stays in the same FSM, so '_' can be used.
-                    [StateName | PrevStateRegions] = tuple_to_list(PrevOrthState),
-                    RegionsDeriveFun = fun
-                        (_, {error, Reason}) ->
-                            {error, Reason};
-                        ({'_', PrevRegion}, {ok, Regions}) ->
-                            case derive_next_state(PrevRegion, undefined) of
-                                {error, Reason} -> {error, Reason};
-                                {ok, NewRegion} -> {ok, [NewRegion | Regions]}
-                            end;
-                        ({Region, PrevRegion}, {ok, Regions}) ->
-                            case derive_next_state(Region, PrevRegion) of
-                                {error, Reason} -> {error, Reason};
-                                {ok, NewRegion} -> {ok, [NewRegion | Regions]}
-                            end
-                    end,
-                    lists:foldr(RegionsDeriveFun, {ok, []}, lists:zip(StateRegions, PrevStateRegions));
+            RegionCount = erlang:tuple_size(OrthState) - 1,
+            RegionIndexes = lists:seq(2, RegionCount + 1),
+            PrevRegionSNameFun = case PrevSName of
+                _ when element(1, PrevSName) =:= StateName, tuple_size(PrevSName) =:= tuple_size(OrthState) ->
+                    fun (RegionIndex) -> erlang:element(RegionIndex, PrevSName) end;
                 _ ->
-                    % The FSM came into the orthogonal state, all regions must be defined.
-                    RegionsDeriveFun = fun
-                        (_, {error, Reason}) ->
-                            {error, Reason};
-                        (Region, {ok, Regions}) ->
-                            case derive_next_state(Region, undefined) of
-                                {error, Reason} -> {error, Reason};
-                                {ok, NewRegion} -> {ok, [NewRegion | Regions]}
-                            end
-                    end,
-                    lists:foldr(RegionsDeriveFun, {ok, []}, StateRegions)
+                    fun (_RegionIndex) -> '_' end
             end,
-            case RegionsResult of
-                {ok, NewRegions} -> {ok, erlang:list_to_tuple([StateName | NewRegions])};
-                {error, RegionsReason} -> {error, RegionsReason}
+            DeriveRegionFun = fun (RegionIndex, {AggrState, Errors}) ->
+                RegionState = erlang:element(RegionIndex, OrthState),
+                RegionPrev  = PrevRegionSNameFun(RegionIndex),
+                case derive_next_sub_state(RegionState, RegionPrev, [RegionIndex | Path], OrigNextSName, OrigPrevSName) of
+                    {ok, DerivedRegion} ->
+                        {erlang:setelement(RegionIndex, AggrState, DerivedRegion), Errors};
+                    {error, {bad_state, ErrDetails, OrigNextSName, OrigPrevSName}} ->
+                        {AggrState, [ErrDetails | Errors]}
+                end
+            end,
+            case lists:foldr(DeriveRegionFun, {OrthState, []}, RegionIndexes) of
+                {DerivedState, []}           -> {ok, DerivedState};
+                {_FailedState, ErrorDetails} -> {error, {bad_state, lists:sort(lists:append(ErrorDetails)), OrigNextSName, OrigPrevSName}}
             end;
         false ->
-            {error, {bad_orthogonal, StateName}}
+            {error, {bad_state, [{lists:reverse([1 | Path]), state_name, StateName}], OrigNextSName, OrigPrevSName}}
     end;
 
-derive_next_sub_state(State, _) ->
-    {error, {bad_state, State}}.
+derive_next_sub_state(State, _PrevSName, Path, OrigNextSName, OrigPrevSName) ->
+    {error, {bad_state, [{lists:reverse(Path), unrecognized, State}], OrigNextSName, OrigPrevSName}}.
 
 
 %%
@@ -1404,64 +1345,6 @@ sync_send_event(FsmRef, Event, Options) ->
 
 sync_send_event(FsmRef, Event) ->
     sync_send_event(FsmRef, Event, []).
-
-
-%%
-%%  Helper function for handling events in orthogonal states explicitly.
-%%  This function should be in the context of the `handle_state/3` callback.
-%%
-%%  NOTE: In the case of the entry trigger, the FSM will receive the
-%%  entry events after executing the orthogonal state (apart from the
-%%  entries, incoked by this function). This is because of the standard
-%%  behaviour for the case, when the entry returns the `next_state` tuple.
-%%
-%%  TODO: Add support for sync and async events here.
-%%
-%%  TODO: Add support for orthogonal state as a substate of other state.
-%%
--spec orthogonal(
-        StateName :: state_name(),
-        Trigger   :: {entry, PrevStateName},
-        StateData :: state_data(),
-        OptsOrMod :: module() | list()
-    ) ->
-        {next_state, NextStateName, NewStateData}
-    when
-        NewStateData    :: state_data(),
-        NextStateName   :: state_name(),
-        PrevStateName   :: state_name().
-
-orthogonal(InitialState, {entry, PrevSN}, StateData, OptsOrMod) ->
-    {Module, Opts} = case is_atom(OptsOrMod) of
-        true  -> {OptsOrMod, []};
-        false -> {module, M} = proplists:lookup(module, OptsOrMod), {M, OptsOrMod}
-    end,
-    Function = proplists:get_value(function, Opts, handle_state),
-    %
-    MainStateName = erlang:element(1, InitialState),
-    RegionCount = erlang:tuple_size(InitialState) - 1,
-    RegionIndexes = lists:seq(2, RegionCount + 1),
-    WildcardState = erlang:list_to_tuple([MainStateName | lists:duplicate(RegionCount, '_')]),
-    EnterRegion = fun (RegionIndex, {SN, SD}) ->
-        RegionIS = erlang:element(RegionIndex, InitialState),
-        RegionSN = erlang:setelement(RegionIndex, WildcardState, RegionIS),
-        {NewRegionSN, NewSD} = orthogonal_enter_region(RegionIndex, RegionSN, PrevSN, SD, WildcardState, Module, Function),
-        NewRegionSNElem = erlang:element(RegionIndex, NewRegionSN),
-        {erlang:setelement(RegionIndex, SN, NewRegionSNElem), NewSD}
-    end,
-    {NextStateName, NewStateData} = lists:foldl(EnterRegion, {WildcardState, StateData}, RegionIndexes),
-    {next_state, NextStateName, NewStateData}.
-
-orthogonal_enter_region(RegionIndex, RegionSN, PrevSN, SD, WildcardSN, Module, Function) ->
-    case Module:Function(RegionSN, {entry, PrevSN}, SD) of
-        {ok, NewSD} ->
-            {RegionSN, NewSD};
-        {same_state, NewSD} ->
-            {RegionSN, NewSD};
-        {next_state, NextRegionSN, NewSD} ->
-            WildcardSN = erlang:setelement(RegionIndex, NextRegionSN, '_'), % Assert single region was changed.
-            orthogonal_enter_region(RegionIndex, NextRegionSN, PrevSN, NewSD, WildcardSN, Module, Function)
-    end.
 
 
 %%
@@ -2637,7 +2520,7 @@ init_loaded(Instance, SName, SData, State) ->
 call_init_persistent(Module, Args) ->
     case Module:init(Args) of
         {ok, SData} ->
-            {ok, [], SData};
+            {ok, {}, SData};
         {ok, SName, SData} ->
             true = is_state_valid(SName),
             {ok, SName, SData}
@@ -2716,7 +2599,7 @@ perform_transition(Trigger, TransitionFun, State) ->
         msg_type_fun = MessageTypeFun,
         reply_fun = ReplyFun
     } = Trigger,
-
+    %
     TrnNr = LastTrnNr + 1,
     TrnStart = os:timestamp(),
     erlang:put('eproc_fsm$msg_regs', #msg_regs{inst_id = InstId, trn_nr = TrnNr, next_msg_nr = 2, registered = []}),
@@ -2725,15 +2608,15 @@ perform_transition(Trigger, TransitionFun, State) ->
     {ok, ProcAction, NewSName, NewSData, Reply, ExplicitAttrActions} = TransitionFun(Trigger, TrnNr, State),
     {ok, AttrActions, LastAttrNr, NewAttrs} = eproc_fsm_attr:transition_end(InstId, TrnNr, NewSName, TrnAttrs),
     TrnEnd = os:timestamp(),
-
-    %%  Collect all messages.
+    %
+    % Collect all messages.
     #msg_regs{registered = MsgRegs} = erlang:erase('eproc_fsm$msg_regs'),
     {RegisteredMsgs, RegisteredMsgRefs, OutAsyncCount, OutSyncCount, InstId} = lists:foldr(
         fun registered_messages/2,
         {[], [], 0, 0, InstId},
         MsgRegs
     ),
-
+    %
     RequestMsgCId = case TriggerMsgCId of
         undefined             -> ?MSGCID_REQUEST(InstId, TrnNr);
         ?MSGCID_SENT(I, T, M) -> ?MSGCID_RECV(I, T, M)
@@ -2766,8 +2649,8 @@ perform_transition(Trigger, TransitionFun, State) ->
             },
             {ResponseRef, [RequestMsg, ResponseMsg | RegisteredMsgs]}
     end,
-
-    %%  Save transition.
+    %
+    % Save transition.
     {FinalProcAction, InstStatus, Interrupts, Delay} = case ProcAction of
         cont ->
             case erlang:erase('eproc_fsm$suspend') of
@@ -2883,7 +2766,7 @@ perform_event_transition(Trigger, TrnNr, InitAttrActions, State) ->
         src_arg = TriggerSrcArg
     } = Trigger,
     erlang:put('eproc_fsm$reply', noreply),
-
+    %
     From = {InstId, TrnNr, ReplyFun},
     TriggerArg = case {TriggerSrcArg, TriggerSync} of
         {true,  true}  -> {TriggerType, TriggerSrc, From, TriggerMsg};
@@ -2899,8 +2782,7 @@ perform_event_transition(Trigger, TrnNr, InitAttrActions, State) ->
         {reply_next,  R, NSN, NSD} -> {next,  {reply, R}, NSN,   NSD};
         {reply_final, R, NSN, NSD} -> {final, {reply, R}, NSN,   NSD}
     end,
-    {ok, DerivedSName} = derive_next_state(NewSName, SName),
-
+    %
     ExplicitReply = erlang:erase('eproc_fsm$reply'),
     Reply = case {TriggerSync, TransitionReply, ExplicitReply} of
         {true, {reply, ReplyMsg}, noreply} ->
@@ -2911,19 +2793,22 @@ perform_event_transition(Trigger, TrnNr, InitAttrActions, State) ->
         {false, noreply, noreply} ->
             noreply
     end,
-
+    %
     {ProcAction, SNameAfterTrn, SDataAfterTrn} = case TrnMode of
         same ->
+            {ok, DerivedSName} = derive_next_state(NewSName, SName),
             {cont, DerivedSName, NewSData};
         next ->
             {ok, SDataAfterExit} = case TrnNr of
                 1 -> {ok, NewSData};    % Do not exit for the initial state.
                 _ -> perform_exit(SName, NewSName, NewSData, State)
             end,
-            case perform_entry(SName, NewSName, DerivedSName, SDataAfterExit, State) of
-                {ok, DerivedSNameAfterEntry, SDataAfterEntry} ->
+            case perform_entry(SName, NewSName, '_', [], SDataAfterExit, State) of
+                {next, SNameAfterEntry, SDataAfterEntry} ->
+                    {ok, DerivedSNameAfterEntry} = derive_next_state(SNameAfterEntry, SName),
                     {cont, DerivedSNameAfterEntry, SDataAfterEntry};
-                {stop, DerivedSNameAfterEntry, SDataAfterEntry} ->
+                {stop, SNameAfterEntry, SDataAfterEntry} ->
+                    {ok, DerivedSNameAfterEntry} = derive_next_state(SNameAfterEntry, SName),
                     {stop, DerivedSNameAfterEntry, SDataAfterEntry}
             end;
         final ->
@@ -2931,6 +2816,7 @@ perform_event_transition(Trigger, TrnNr, InitAttrActions, State) ->
                 1 -> {ok, NewSData};    % Do not exit for the initial state.
                 _ -> perform_exit(SName, NewSName, NewSData, State)
             end,
+            {ok, DerivedSName} = derive_next_state(NewSName, SName),
             {stop, DerivedSName, SDataAfterExit}
     end,
     {ok, ProcAction, SNameAfterTrn, SDataAfterTrn, Reply, InitAttrActions}.
@@ -2949,19 +2835,96 @@ perform_exit(PrevSName, NextSName, SData, #state{module = Module}) ->
 %%
 %%  Invoke the state entry action.
 %%
-perform_entry(PrevSName, NextSName, DerivedSName, SData, State = #state{module = Module}) ->
-    case Module:handle_state(NextSName, {entry, PrevSName}, SData) of
+%%    * PrevSName    -- Full name of the previous state (at which the event occured).
+%%    * NextSName    -- Substate, to which we are entering now.
+%%    * EnteredSName -- State prefix, to which we already entered. All but the EntryPath regions are wildcarded here.
+%%    * EntryPath    -- Path, where the NextSName is in the EnteredSName.
+%%    * SData        -- State of the FSM implementation.
+%%    * State        -- Readonly state of the FSM behaviour.
+%%
+%%  It returns:
+%%
+%%    * {next, NextStateName, NewStateData}
+%%    * {stop, NextStateName, NewStateData}
+%%
+%%  where
+%%
+%%    * NextStateName - is substrate, that is at the EntryPath in the EnteredSName.
+%%    * NewStateData  - the the updated state of the FSM implementation.
+%%
+perform_entry(_PrevSName, NextSName, _EnteredSName, _EntryPath, SData, _State) when
+        NextSName =:= '_';
+        NextSName =:= {}
+        ->
+    {next, NextSName, SData};
+
+perform_entry(PrevSName, NextSName, EnteredSName, EntryPath, SData, State = #state{module = Module}) when
+        is_atom(NextSName);
+        is_binary(NextSName);
+        is_integer(NextSName);
+        tuple_size(NextSName) =:= 1
+        ->
+    EntrySName = set_state_region(NextSName, EntryPath, EnteredSName),
+    case Module:handle_state(EntrySName, {entry, PrevSName}, SData) of
         {ok, NewSData} ->
-            {ok, DerivedSName, NewSData};
+            {next, NextSName, NewSData};
         {same_state, NewSData} ->
-            {ok, DerivedSName, NewSData};
+            {next, NextSName, NewSData};
         {next_state, NewSName, NewSData} ->
-            {ok, NewDerivedSName} = derive_next_state(NewSName, PrevSName),
-            perform_entry(PrevSName, NewSName, NewDerivedSName, NewSData, State);
+            case catch set_state_region('_', EntryPath, NewSName) of
+                EnteredSName -> ok;
+                _            -> erlang:exit({invalid_state_entry_scope, NewSName, EnteredSName})
+            end,
+            EnteredRegion = get_state_region(EntryPath, NewSName),
+            perform_entry(PrevSName, EnteredRegion, EnteredSName, EntryPath, NewSData, State);
         {final_state, NewSName, NewSData} ->
-            {ok, NewDerivedSName} = derive_next_state(NewSName, PrevSName),
-            {stop, NewDerivedSName, NewSData}
-    end.
+            {stop, NewSName, NewSData}
+    end;
+
+perform_entry(PrevSName, NextSName, EnteredSName, EntryPath, SData, State) when
+        is_tuple(NextSName)
+        ->
+    MainStateName = erlang:element(1, NextSName),
+    RegionCount = erlang:tuple_size(NextSName) - 1,
+    RegionIndexes = lists:seq(2, RegionCount + 1),
+    WildcardState = erlang:list_to_tuple([MainStateName | lists:duplicate(RegionCount, '_')]),
+    EnteredBase = set_state_region(WildcardState, EntryPath, EnteredSName),
+    EnterRegionFun = fun (RegionIndex, {AggrAction, AggrSN, AggrSD}) ->
+        RegionSN = erlang:element(RegionIndex, NextSName),
+        RegionPath = EntryPath ++ [RegionIndex],
+        {NextOrStop, NewRSN, NewRSD} = perform_entry(PrevSName, RegionSN, EnteredBase, RegionPath, AggrSD, State),
+        {
+            case AggrAction of
+                next -> next;
+                _    -> NextOrStop
+            end,
+            erlang:setelement(RegionIndex, AggrSN, NewRSN),
+            NewRSD
+        }
+    end,
+    lists:foldl(EnterRegionFun, {stop, WildcardState, SData}, RegionIndexes).
+
+
+%%
+%%
+%%
+set_state_region(RegionState, [], _BaseState) ->
+    RegionState;
+
+set_state_region(RegionState, [Pos | Tail], BaseState) when is_tuple(BaseState) ->
+    Region = erlang:element(Pos, BaseState),
+    NewRegion = set_state_region(RegionState, Tail, Region),
+    erlang:setelement(Pos, BaseState, NewRegion).
+
+%%
+%%
+%%
+get_state_region([], BaseState) ->
+    BaseState;
+
+get_state_region([Pos | Tail], BaseState) when is_tuple(BaseState) ->
+    Region = erlang:element(Pos, BaseState),
+    get_state_region(Tail, Region).
 
 
 %%
@@ -3358,6 +3321,184 @@ limits_notify_trn_test() ->
     ),
     ?assert(meck:validate(eproc_limits)),
     ok = meck:unload(eproc_limits).
+
+
+%%
+%%  Check if `set_state_region/3` works as expected.
+%%
+set_state_region_test_() ->
+    [
+        ?_assertEqual(x,                   set_state_region(x,  [],     anything           )),
+        ?_assertEqual({a, d, c},           set_state_region(d,  [2],    {a, b, c}          )),
+        ?_assertEqual({a, {b, d}},         set_state_region(d,  [2, 2], {a, {b, c}}        )),
+        ?_assertEqual({a, {b, b1, bx}, c}, set_state_region(bx, [2, 3], {a, {b, b1, b2}, c}))
+    ].
+
+
+%%
+%%  Check if `get_state_region/2` works as expected.
+%%
+get_state_region_test_() ->
+    [
+        ?_assertEqual(x,    get_state_region([],     x                  )),
+        ?_assertEqual(b,    get_state_region([2],    {a, b}             )),
+        ?_assertEqual(b,    get_state_region([2],    {a, b, c}          )),
+        ?_assertEqual(c,    get_state_region([2, 2], {a, {b, c}}        )),
+        ?_assertEqual(b2,   get_state_region([2, 3], {a, {b, b1, b2}, c}))
+    ].
+
+
+perform_entry_test_() ->
+    {setup,
+        fun()  -> ok = meck:new(perform_entry_test_fakemod, [non_strict]) end,
+        fun(_) -> ok = meck:unload(perform_entry_test_fakemod) end,
+        fun(_) -> [
+            fun perform_entry_test_simple/0,
+            fun perform_entry_test_substate/0,
+            fun perform_entry_test_sub1tuple/0,
+            fun perform_entry_test_adjacent/0,
+            fun perform_entry_test_orthogonal/0,
+            fun perform_entry_test_orth_2l/0,
+            fun perform_entry_test_out_of_scope/0
+        ] end
+    }.
+
+%%
+%%  Just stay in the specified state.
+%%
+perform_entry_test_simple() ->
+    ok = meck:reset(perform_entry_test_fakemod),
+    ok = meck:expect(perform_entry_test_fakemod, handle_state, [
+        {[new_state, {entry, old_state}, data], {ok, data2}}
+    ]),
+    ?assertEqual(
+        {next, new_state, data2},
+        perform_entry(old_state, new_state, '_', [], data, #state{module = perform_entry_test_fakemod})
+    ),
+    ?assertEqual(1, meck:num_calls(perform_entry_test_fakemod, handle_state, '_')),
+    ?assert(meck:validate(perform_entry_test_fakemod)),
+    ok.
+
+
+%%
+%%  Enter a substate.
+%%
+perform_entry_test_substate() ->
+    ok = meck:reset(perform_entry_test_fakemod),
+    ok = meck:expect(perform_entry_test_fakemod, handle_state, [
+        {[new_state,        {entry, old_state}, data0], {next_state, {new_state, sub}, data1}},
+        {[{new_state, sub}, {entry, old_state}, data1], {same_state,                   data2}}
+    ]),
+    ?assertEqual(
+        {next, {new_state, sub}, data2},
+        perform_entry(old_state, new_state, '_', [], data0, #state{module = perform_entry_test_fakemod})
+    ),
+    ?assertEqual(1, meck:num_calls(perform_entry_test_fakemod, handle_state, [new_state,        '_', '_'])),
+    ?assertEqual(1, meck:num_calls(perform_entry_test_fakemod, handle_state, [{new_state, sub}, '_', '_'])),
+    ?assert(meck:validate(perform_entry_test_fakemod)),
+    ok.
+
+
+%%
+%%  Enter a substate as a 1-tuple.
+%%
+perform_entry_test_sub1tuple() ->
+    ok = meck:reset(perform_entry_test_fakemod),
+    ok = meck:expect(perform_entry_test_fakemod, handle_state, [
+        {[new_state,          {entry, old_state}, data0], {next_state, {new_state, {sub}}, data1}},
+        {[{new_state, {sub}}, {entry, old_state}, data1], {same_state,                     data2}}
+    ]),
+    ?assertEqual(
+        {next, {new_state, {sub}}, data2},
+        perform_entry(old_state, new_state, '_', [], data0, #state{module = perform_entry_test_fakemod})
+    ),
+    ?assertEqual(1, meck:num_calls(perform_entry_test_fakemod, handle_state, [new_state,          '_', '_'])),
+    ?assertEqual(1, meck:num_calls(perform_entry_test_fakemod, handle_state, [{new_state, {sub}}, '_', '_'])),
+    ?assert(meck:validate(perform_entry_test_fakemod)),
+    ok.
+
+
+%%
+%%  Skip this state and enter other state in the same region.
+%%
+perform_entry_test_adjacent() ->
+    ok = meck:reset(perform_entry_test_fakemod),
+    ok = meck:expect(perform_entry_test_fakemod, handle_state, [
+        {[new_state, {entry, old_state}, data0], {next_state, better_st, data1}},
+        {[better_st, {entry, old_state}, data1], {same_state,            data2}}
+    ]),
+    ?assertEqual(
+        {next, better_st, data2},
+        perform_entry(old_state, new_state, '_', [], data0, #state{module = perform_entry_test_fakemod})
+    ),
+    ?assertEqual(1, meck:num_calls(perform_entry_test_fakemod, handle_state, [new_state, '_', '_'])),
+    ?assertEqual(1, meck:num_calls(perform_entry_test_fakemod, handle_state, [better_st, '_', '_'])),
+    ?assert(meck:validate(perform_entry_test_fakemod)),
+    ok.
+
+
+%%
+%%  Enter orthogonal substates.
+%%
+perform_entry_test_orthogonal() ->
+    ok = meck:reset(perform_entry_test_fakemod),
+    ok = meck:expect(perform_entry_test_fakemod, handle_state, [
+        {[new_state,             {entry, old_state}, data0], {next_state, {new_state, a, b}, data1}},
+        {[{new_state, 'a', '_'}, {entry, old_state}, data1], {same_state,                    data2}},
+        {[{new_state, '_', 'b'}, {entry, old_state}, data2], {same_state,                    data3}}
+    ]),
+    ?assertEqual(
+        {next, {new_state, a, b}, data3},
+        perform_entry(old_state, new_state, '_', [], data0, #state{module = perform_entry_test_fakemod})
+    ),
+    ?assertEqual(1, meck:num_calls(perform_entry_test_fakemod, handle_state, [new_state,             '_', '_'])),
+    ?assertEqual(1, meck:num_calls(perform_entry_test_fakemod, handle_state, [{new_state,  a,  '_'}, '_', '_'])),
+    ?assertEqual(1, meck:num_calls(perform_entry_test_fakemod, handle_state, [{new_state, '_',  b }, '_', '_'])),
+    ?assert(meck:validate(perform_entry_test_fakemod)),
+    ok.
+
+
+%%
+%%  Enter orthogonal substates of several levels.
+%%
+perform_entry_test_orth_2l() ->
+    ok = meck:reset(perform_entry_test_fakemod),
+    ok = meck:expect(perform_entry_test_fakemod, handle_state, [
+        {[n,                                           {entry, o}, d0], {next_state, {n, a, b},                               d1}},
+        {[{n, a,                             '_'    }, {entry, o}, d1], {next_state, {n, {a, a1, a2, a3}, '_'},               d2}},
+        {[{n, {a, a1,  '_',            '_'}, '_'    }, {entry, o}, d2], {same_state,                                          d3}},
+        {[{n, {a, '_', a2,             '_'}, '_'    }, {entry, o}, d3], {next_state, {n, {a, '_', {a2, a21, a22}, '_'}, '_'}, d4}},
+        {[{n, {a, '_', {a2, a21, '_'}, '_'}, '_'    }, {entry, o}, d4], {same_state,                                          d5}},
+        {[{n, {a, '_', {a2, '_', a22}, '_'}, '_'    }, {entry, o}, d5], {same_state,                                          d6}},
+        {[{n, {a, '_', '_',            a3 }, '_'    }, {entry, o}, d6], {same_state,                                          d7}},
+        {[{n, '_',                           b      }, {entry, o}, d7], {next_state, {n, '_', {b, b1}},                       d8}},
+        {[{n, '_',                           {b, b1}}, {entry, o}, d8], {same_state,                                          d9}}
+    ]),
+    ?assertEqual(
+        {next, {n, {a, a1, {a2, a21, a22}, a3}, {b, b1}}, d9},
+        perform_entry(o, n, '_', [], d0, #state{module = perform_entry_test_fakemod})
+    ),
+    ?assertEqual(9, meck:num_calls(perform_entry_test_fakemod, handle_state, ['_', '_', '_'])),
+    ?assert(meck:validate(perform_entry_test_fakemod)),
+    ok.
+
+
+%%
+%%
+%%
+perform_entry_test_out_of_scope() ->
+    ok = meck:reset(perform_entry_test_fakemod),
+    ok = meck:expect(perform_entry_test_fakemod, handle_state, [
+        {[b,       {entry, a}, data0], {next_state, {b, b1}, data1}},
+        {[{b, b1}, {entry, a}, data1], {next_state, c,       data2}},
+        {[c,       {entry, a}, data2], {same_state,          data3}}
+    ]),
+    ?assertExit(
+        {invalid_state_entry_scope, c, {b, '_'}},
+        perform_entry(a, b, '_', [], data0, #state{module = perform_entry_test_fakemod})
+    ),
+    ?assert(meck:validate(perform_entry_test_fakemod)),
+    ok.
 
 
 -endif.

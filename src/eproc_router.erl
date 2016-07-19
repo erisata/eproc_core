@@ -78,27 +78,32 @@
         {error, Reason :: term()}.
 
 add_key(Key, Scope, Opts) ->
-    case proplists:get_keys(Opts) -- [sync, uniq] of
-        [] ->
-            Sync = proplists:get_value(sync, Opts, false),
-            TaskResponse = case Sync of
-                false -> {ok, undefined};
-                true ->
-                    {ok, InstId} = eproc_fsm:id(),
-                    Uniq = proplists:get_value(uniq, Opts, false),
-                    Task = {key_sync, Key, InstId, Uniq},
-                    eproc_fsm_attr:task(?MODULE, Task, [])
-            end,
-            case TaskResponse of
-                {ok, SyncRef} ->
-                    Name = Key,
-                    Action = {key, Key, SyncRef},
-                    ok = eproc_fsm_attr:action(?MODULE, Name, Action, Scope);
-                {error, Reason} ->
-                    {error, Reason}
+    case eproc_fsm:is_scope_valid(Scope) of
+        true ->
+            case proplists:get_keys(Opts) -- [sync, uniq] of
+                [] ->
+                    Sync = proplists:get_value(sync, Opts, false),
+                    TaskResponse = case Sync of
+                        false -> {ok, undefined};
+                        true ->
+                            {ok, InstId} = eproc_fsm:id(),
+                            Uniq = proplists:get_value(uniq, Opts, false),
+                            Task = {key_sync, Key, InstId, Uniq},
+                            eproc_fsm_attr:task(?MODULE, Task, [])
+                    end,
+                    case TaskResponse of
+                        {ok, SyncRef} ->
+                            Name = Key,
+                            Action = {key, Key, SyncRef},
+                            ok = eproc_fsm_attr:action(?MODULE, Name, Action, Scope);
+                        {error, Reason} ->
+                            {error, Reason}
+                    end;
+                Unknown ->
+                    {error, Unknown}
             end;
-        Unknown ->
-            {error, Unknown}
+        false ->
+            {error, {invalid_scope, Scope}}
     end.
 
 

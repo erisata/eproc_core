@@ -95,9 +95,9 @@
 %%  `Scope`
 %%  :   specifies validity scope of the timer.
 %%      Timer will be automatically canceled, if the FSM wil exit
-%%      the specific scope. Use `[]` for timers valid for the entire
+%%      the specific scope. Use `_' or `{}' for timers valid for the entire
 %%      lifecycle of the FSM. A special term can be used for the
-%%      scope: `next`. It represents a state, that will be entered
+%%      scope: `next'. It represents a state, that will be entered
 %%      after the current transition.
 %%
 -spec set(
@@ -106,7 +106,8 @@
         Event :: term(),
         Scope :: scope()
     ) ->
-        ok.
+        ok | {error, Reason :: term()}.
+
 set(Name, Time = {M, S, U}, Event, Scope) when is_integer(M), is_integer(S), is_integer(U) ->
     Start = os:timestamp(),
     After = timestamp_diff(Time, Start),
@@ -631,12 +632,17 @@ handle_event(InstId, Attribute, AttrState, trigger) ->
 %%  Create or update a timer.
 %%
 set_timer(Name, After, Start, Event, Scope) ->
-    {ok, InstId} = eproc_fsm:id(),
-    Src = {inst, InstId},
-    Dst = {timer, Name},
-    EventMsgType = eproc_fsm:resolve_event_type(timer, Event),
-    {ok, EventMsgCId} = eproc_fsm:register_sent_msg(Src, Dst, undefined, EventMsgType, Event, Start),
-    ok = eproc_fsm_attr:action(?MODULE, Name, {timer, After, Start, EventMsgCId, EventMsgType, Event}, Scope).
+    case eproc_fsm:is_scope_valid(Scope) of
+        true ->
+            {ok, InstId} = eproc_fsm:id(),
+            Src = {inst, InstId},
+            Dst = {timer, Name},
+            EventMsgType = eproc_fsm:resolve_event_type(timer, Event),
+            {ok, EventMsgCId} = eproc_fsm:register_sent_msg(Src, Dst, undefined, EventMsgType, Event, Start),
+            eproc_fsm_attr:action(?MODULE, Name, {timer, After, Start, EventMsgCId, EventMsgType, Event}, Scope);
+        false ->
+            {error, {invalid_scope, Scope}}
+    end.
 
 
 %%

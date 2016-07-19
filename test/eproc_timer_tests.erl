@@ -26,7 +26,7 @@
 %%
 mocked_set_test() ->
     Now = os:timestamp(),
-    ok = meck:new(eproc_fsm),
+    ok = meck:new(eproc_fsm, [passthrough]),
     ok = meck:new(eproc_fsm_attr),
     ok = meck:expect(eproc_fsm, id, fun
         () -> {ok, some}
@@ -42,14 +42,14 @@ mocked_set_test() ->
     end),
     ok = meck:expect(eproc_fsm_attr, action, fun
         (eproc_timer, undefined, {timer, 1000, {_, _, _}, {i, t, m1, sent}, _, msg1}, next) -> ok;
-        (eproc_timer, undefined, {timer, 1000, {_, _, _}, {i, t, m2, sent}, _, msg2}, []) -> ok;
-        (eproc_timer, some,      {timer, 1000, {_, _, _}, {i, t, m3, sent}, _, msg3}, []) -> ok;
-        (eproc_timer, other,     {timer, _,    {_, _, _}, {i, t, m4, sent}, _, msg4}, []) -> ok
+        (eproc_timer, undefined, {timer, 1000, {_, _, _}, {i, t, m2, sent}, _, msg2}, '_') -> ok;
+        (eproc_timer, some,      {timer, 1000, {_, _, _}, {i, t, m3, sent}, _, msg3}, '_') -> ok;
+        (eproc_timer, other,     {timer, _,    {_, _, _}, {i, t, m4, sent}, _, msg4}, '_') -> ok
     end),
     ok = eproc_timer:set(1000, msg1),
-    ok = eproc_timer:set(1000, msg2, []),
-    ok = eproc_timer:set(some, 1000, msg3, []),
-    ok = eproc_timer:set(other, eproc_timer:timestamp_after({1, min}, Now), msg4, []), % Fire at exact timestamp.
+    ok = eproc_timer:set(1000, msg2, '_'),
+    ok = eproc_timer:set(some, 1000, msg3, '_'),
+    ok = eproc_timer:set(other, eproc_timer:timestamp_after({1, min}, Now), msg4, '_'), % Fire at exact timestamp.
     ?assertEqual(4, meck:num_calls(eproc_fsm, register_sent_msg, '_')),
     ?assertEqual(4, meck:num_calls(eproc_fsm_attr, action, '_')),
     ?assert(meck:validate([eproc_fsm, eproc_fsm_attr])),
@@ -148,10 +148,10 @@ set_update_test() ->
     end),
     {ok, State1} = eproc_fsm_attr:init(0, [], 0, store, []),
     {ok, State2} = eproc_fsm_attr:transition_start(0, 0, [], State1),
-    ok = eproc_timer:set(some, 100, msg1, []),
+    ok = eproc_timer:set(some, 100, msg1, '_'),
     {ok, _Actions3, _LastAttrId3, State3} = eproc_fsm_attr:transition_end(0, 0, [], State2),
     {ok, State4} = eproc_fsm_attr:transition_start(0, 0, [], State3),
-    ok = eproc_timer:set(some, 300, msg1, []),
+    ok = eproc_timer:set(some, 300, msg1, '_'),
     {ok, _Actions5, _LastAttrId5, _State5} = eproc_fsm_attr:transition_end(0, 0, [], State4),
     ?assert(receive _TimerMsg1 -> false after 200 -> true end),
     ?assert(receive _TimerMsg2 -> true after 600 -> false end),
@@ -173,7 +173,7 @@ cancel_test() ->
     end),
     {ok, State1} = eproc_fsm_attr:init(0, [], 0, store, []),
     {ok, State2} = eproc_fsm_attr:transition_start(0, 0, [], State1),
-    ok = eproc_timer:set(some, 100, msg1, []),
+    ok = eproc_timer:set(some, 100, msg1, '_'),
     {ok, _Actions3, _LastAttrId3, State3} = eproc_fsm_attr:transition_end(0, 0, [], State2),
     {ok, State4} = eproc_fsm_attr:transition_start(0, 0, [], State3),
     ok = eproc_timer:cancel(some),

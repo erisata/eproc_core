@@ -109,7 +109,7 @@ test_wait_term(_Config) ->
     {ok, Ref} = eproc_fsm__seq:new(),
     {inst, InstId} = Ref,
     {error, timeout} = eproc_test:wait_term([{id, InstId}], {1,s}),
-    {ok, running, [incrementing], _} = eproc_test:get_state({inst, InstId}),
+    {ok, running, incrementing, _} = eproc_test:get_state({inst, InstId}),
     true = eproc_fsm:is_online(Ref).
 
 

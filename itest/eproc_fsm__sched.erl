@@ -18,7 +18,7 @@
 %%  Scheduler process, that send a message periodically.
 %%  This process uses FSM timers and is used to test them.
 %%
-%%      [] --- start ---> [paused] --- set ---> [scheduling]
+%%      [] --- start ---> paused --- set ---> scheduling
 %%
 
 -module(eproc_fsm__sched).
@@ -91,39 +91,39 @@ init(_StateName, _StateData) ->
 %%
 %%  The initial state.
 %%
-handle_state([], {event, start}, StateData) ->
-    {next_state, [paused], StateData};
+handle_state({}, {event, start}, StateData) ->
+    {next_state, paused, StateData};
 
 
 %%
 %%  The `paused` state.
 %%
-handle_state([paused], {event, {set, Period}}, StateData) ->
-    {next_state, [scheduling], StateData#state{period = Period}};
+handle_state(paused, {event, {set, Period}}, StateData) ->
+    {next_state, scheduling, StateData#state{period = Period}};
 
 
 %%
 %%  The `scheduling` state.
 %%
-handle_state([scheduling], {entry, _PrevState}, StateData = #state{period = Period}) ->
-    ok = eproc_timer:set(main, Period, tick, [scheduling]), % Timer created.
+handle_state(scheduling, {entry, _PrevState}, StateData = #state{period = Period}) ->
+    ok = eproc_timer:set(main, Period, tick, scheduling), % Timer created.
     {ok, StateData};
 
-handle_state([scheduling], {timer, tick}, StateData = #state{subsc = Subscribers}) ->
+handle_state(scheduling, {timer, tick}, StateData = #state{subsc = Subscribers}) ->
     lists:foreach(fun (S) -> S ! tick end, Subscribers),
-    {next_state, [scheduling], StateData};
+    {next_state, scheduling, StateData};
 
-handle_state([scheduling], {event, {set, Period}}, StateData) ->
-    ok = eproc_timer:set(main, {1, min}, tick, [scheduling]), % To check, if the same timer can be updated several times in one trn.
-    ok = eproc_timer:set(main, Period,   tick, [scheduling]), % Timer updated.
+handle_state(scheduling, {event, {set, Period}}, StateData) ->
+    ok = eproc_timer:set(main, {1, min}, tick, scheduling), % To check, if the same timer can be updated several times in one trn.
+    ok = eproc_timer:set(main, Period,   tick, scheduling), % Timer updated.
     {same_state, StateData#state{period = Period}};
 
-handle_state([scheduling], {event, cancel}, StateData) ->
+handle_state(scheduling, {event, cancel}, StateData) ->
     ok = eproc_timer:cancel(main),  % Timer canceled.
     {same_state, StateData};
 
-handle_state([scheduling], {event, pause}, StateData) ->
-    {next_state, [paused], StateData};
+handle_state(scheduling, {event, pause}, StateData) ->
+    {next_state, paused, StateData};
 
 
 
@@ -137,16 +137,16 @@ handle_state(_StateName, {event, {add, Subscriber}}, StateData = #state{subsc = 
     {same_state, StateData#state{subsc = [Subscriber | Subscribers]}};
 
 handle_state(_StateName, {event, {set_single, Period}}, StateData) ->
-    ok = eproc_timer:set(single, {1, min}, tack, []), % To check, if the same timer can be created and updated in one trn.
-    ok = eproc_timer:set(single, Period,   tack, []), % Timer updated.
+    ok = eproc_timer:set(single, {1, min}, tack, '_'), % To check, if the same timer can be created and updated in one trn.
+    ok = eproc_timer:set(single, Period,   tack, '_'), % Timer updated.
     {same_state, StateData};
 
-handle_state([scheduling], {timer, tack}, StateData = #state{subsc = Subscribers}) ->
+handle_state(scheduling, {timer, tack}, StateData = #state{subsc = Subscribers}) ->
     lists:foreach(fun (S) -> S ! tack end, Subscribers),
     {same_state, StateData};
 
 handle_state(_StateName, {event, stop}, StateData) ->
-    {final_state, [done], StateData};
+    {final_state, done, StateData};
 
 handle_state(_StateName, {exit, _NextState}, StateData) ->
     {ok, StateData}.

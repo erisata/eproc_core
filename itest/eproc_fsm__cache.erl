@@ -18,7 +18,7 @@
 %%  Process that serves single value generated on init.
 %%  This process uses FSM runtime data functionality and is used to test it.
 %%
-%%      [] --- get ---> [serving]
+%%      {} --- get ---> serving
 %%
 
 -module(eproc_fsm__cache).
@@ -81,26 +81,26 @@ init(_StateName, #state{data = undefined}) ->
 %%
 %%  The initial state.
 %%
-handle_state([], {sync, _From, get}, StateData = #state{data = Data}) ->
-    {reply_next, {ok, Data}, [serving], StateData};
+handle_state({}, {sync, _From, get}, StateData = #state{data = Data}) ->
+    {reply_next, {ok, Data}, serving, StateData};
 
 
 %%
 %%  The `serving` state.
 %%
-handle_state([serving], {entry, _PrevState}, StateData) ->
+handle_state(serving, {entry, _PrevState}, StateData) ->
     {ok, StateData};
 
-handle_state([serving], {sync, _From, get}, StateData = #state{data = Data}) ->
+handle_state(serving, {sync, _From, get}, StateData = #state{data = Data}) ->
     {reply_same, {ok, Data}, StateData};
 
-handle_state([serving], {event, crash}, _StateData) ->
+handle_state(serving, {event, crash}, _StateData) ->
     erlang:error(expected_error);
 
-handle_state([serving], {event, stop}, StateData) ->
-    {final_state, [done], StateData};
+handle_state(serving, {event, stop}, StateData) ->
+    {final_state, done, StateData};
 
-handle_state([serving], {exit, _NextState}, StateData) ->
+handle_state(serving, {exit, _NextState}, StateData) ->
     {ok, StateData}.
 
 

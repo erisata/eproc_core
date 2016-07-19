@@ -175,3 +175,12 @@ Run it:
     ok = eproc_fsm_void:poke(IID).
 
 
+Developer notes
+========================================
+
+To run partucular EUnit suite:
+
+    make test EUNIT_ARGS="suites=eproc_fsm tests=set_state_region_test"
+
+
+

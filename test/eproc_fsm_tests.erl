@@ -70,33 +70,16 @@ state_in_scope_test_() ->
         ?_assertMatch(false, eproc_fsm:is_state_in_scope({a, b, c}, {b})),
         ?_assertMatch(false, eproc_fsm:is_state_in_scope({a, b, c}, {a, '_'})),
         ?_assertMatch(false, eproc_fsm:is_state_in_scope({a, b, c}, {b, '_', '_'})),
-        ?_assertMatch(false, eproc_fsm:is_state_in_scope({a, b, c}, {a, c, '_'})),
-        % The following are for legacy support - list based states.
-        ?_assertMatch(true,  eproc_fsm:is_state_in_scope([], [])),
-        ?_assertMatch(true,  eproc_fsm:is_state_in_scope([a], [])),
-        ?_assertMatch(true,  eproc_fsm:is_state_in_scope([a], [a])),
-        ?_assertMatch(true,  eproc_fsm:is_state_in_scope([a, b], [a])),
-        ?_assertMatch(true,  eproc_fsm:is_state_in_scope([a, b], [a, b])),
-        ?_assertMatch(true,  eproc_fsm:is_state_in_scope([a, b], ['_', b])),
-        ?_assertMatch(true,  eproc_fsm:is_state_in_scope([{a, [b], [c]}], [a])),
-        ?_assertMatch(true,  eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{a, [], []}])),
-        ?_assertMatch(true,  eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{a, '_', '_'}])),
-        ?_assertMatch(true,  eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{a, [b], '_'}])),
-        ?_assertMatch(false, eproc_fsm:is_state_in_scope([], [a])),
-        ?_assertMatch(false, eproc_fsm:is_state_in_scope([a], [b])),
-        ?_assertMatch(false, eproc_fsm:is_state_in_scope([{a, [b], [c]}], [b])),
-        ?_assertMatch(false, eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{b}])),
-        ?_assertMatch(false, eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{b, []}])),
-        ?_assertMatch(false, eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{b, [], []}])),
-        ?_assertMatch(false, eproc_fsm:is_state_in_scope([{a, [b], [c]}], [{a, [c], []}]))
+        ?_assertMatch(false, eproc_fsm:is_state_in_scope({a, b, c}, {a, c, '_'}))
     ].
 
 
 is_state_valid_test_() ->
     [
-        ?_assertMatch(true,  eproc_fsm:is_state_valid([])),
-        ?_assertMatch(true,  eproc_fsm:is_state_valid([a, <<"b">>, 1])),
-        ?_assertMatch(true,  eproc_fsm:is_state_valid([z, {a, [b, c], []}])),
+        ?_assertMatch(true,  eproc_fsm:is_state_valid({})),
+        ?_assertMatch(true,  eproc_fsm:is_state_valid('_')),
+        ?_assertMatch(true,  eproc_fsm:is_state_valid({a, <<"b">>, 1})),
+        ?_assertMatch(true,  eproc_fsm:is_state_valid({z, {a, {b, c}, '_'}})),
         ?_assertMatch(true,  eproc_fsm:is_state_valid(1)),
         ?_assertMatch(true,  eproc_fsm:is_state_valid(<<"1">>)),
         ?_assertMatch(true,  eproc_fsm:is_state_valid({a})),
@@ -104,42 +87,38 @@ is_state_valid_test_() ->
         ?_assertMatch(true,  eproc_fsm:is_state_valid({a, b, c})),
         ?_assertMatch(true,  eproc_fsm:is_state_valid({a, b, {c, x}})),
         ?_assertMatch(false, eproc_fsm:is_state_valid({{a, x}, b, {c, x}})),
-        ?_assertMatch(false, eproc_fsm:is_state_valid([{a, [b], [c]}, z])),
-        ?_assertMatch(false, eproc_fsm:is_state_valid([1.2]))
+        ?_assertMatch(false, eproc_fsm:is_state_valid(1.2))
     ].
 
 is_next_state_valid_test_() ->
-    OrthP = {a, '_', '_', [w]},
-    Orth1 = {a, [x], [y], [z]},
-    Orth2 = {b, [i], [j], [k]},
+    OrthP = {a, '_', '_', w},
+    Orth1 = {a, x,   y,   z},
+    Orth2 = {b, i,   j,   k},
     [
-        ?_assertMatch(true,  eproc_fsm:is_next_state_valid([a, b, c])),
-        ?_assertMatch(false, eproc_fsm:is_next_state_valid([])),
+        ?_assertMatch(true,  eproc_fsm:is_next_state_valid({a, {b, c}})),
+        ?_assertMatch(false, eproc_fsm:is_next_state_valid({})),
         ?_assertMatch(false, eproc_fsm:is_next_state_valid(12.3)),
-        ?_assertMatch(true,  eproc_fsm:is_next_state_valid([Orth1])),
-        ?_assertMatch(false, eproc_fsm:is_next_state_valid([OrthP])),
-        ?_assertMatch(true,  eproc_fsm:is_next_state_valid([OrthP], [Orth1])),
-        ?_assertMatch(false, eproc_fsm:is_next_state_valid([OrthP], [Orth2])),
-        ?_assertMatch(false, eproc_fsm:is_next_state_valid([OrthP], [a, b, c]))
+        ?_assertMatch(true,  eproc_fsm:is_next_state_valid(Orth1)),
+        ?_assertMatch(false, eproc_fsm:is_next_state_valid(OrthP)),
+        ?_assertMatch(true,  eproc_fsm:is_next_state_valid(OrthP, Orth1)),
+        ?_assertMatch(false, eproc_fsm:is_next_state_valid(OrthP, Orth2)),
+        ?_assertMatch(false, eproc_fsm:is_next_state_valid(OrthP, {a, {b, c}}))
     ].
 
 
 derive_next_state_test_() ->
-    OrthP = {a, '_', '_', [w]},
-    Orth1 = {a, [x], [y], [z]},
-    Orth2 = {b, [i], [j], [k]},
+    OrthP = {a, '_', '_', w},
+    Orth1 = {a, x,   y,   z},
+    Orth2 = {b, i,   j,   k},
     [
-        ?_assertMatch({ok, {a, {b, c}}},            eproc_fsm:derive_next_state({a, {b, c}}, [])),
-        ?_assertMatch({ok, Orth1},                  eproc_fsm:derive_next_state(Orth1,       {})),
-        ?_assertMatch({ok, Orth1},                  eproc_fsm:derive_next_state(Orth1,       Orth2)),
-        ?_assertMatch({ok, {a, [x], [y], [w]}},     eproc_fsm:derive_next_state(OrthP,       Orth1)),
-        ?_assertMatch({error, {bad_state, '_'}},    eproc_fsm:derive_next_state(OrthP,       Orth2)),
-        % The following are for legacy list based states.
-        ?_assertMatch({ok, [a, b, c]},              eproc_fsm:derive_next_state([a, b, c], [])),
-        ?_assertMatch({ok, [Orth1]},                eproc_fsm:derive_next_state([Orth1],   [])),
-        ?_assertMatch({ok, [Orth1]},                eproc_fsm:derive_next_state([Orth1],   [Orth2])),
-        ?_assertMatch({ok, [{a, [x], [y], [w]}]},   eproc_fsm:derive_next_state([OrthP],   [Orth1])),
-        ?_assertMatch({error, {bad_state, '_'}},    eproc_fsm:derive_next_state([OrthP],   [Orth2]))
+        ?_assertMatch({ok, {a, {b, c}}},   eproc_fsm:derive_next_state({a, {b, c}}, {})),
+        ?_assertMatch({ok, Orth1},         eproc_fsm:derive_next_state(Orth1,       {})),
+        ?_assertMatch({ok, Orth1},         eproc_fsm:derive_next_state(Orth1,       Orth2)),
+        ?_assertMatch({ok, {a, x, y, w}},  eproc_fsm:derive_next_state(OrthP,       Orth1)),
+        ?_assertMatch(
+            {error, {bad_state, [{[2], wildcard, '_'}, {[3], wildcard, '_'}], OrthP, Orth2}},
+            eproc_fsm:derive_next_state(OrthP, Orth2)
+        )
     ].
 
 
@@ -170,7 +149,7 @@ create_state_test() ->
     ok = meck:new(eproc_fsm__void),
     ok = meck:new(eproc_stats, [stub_all]),
     ok = meck:expect(eproc_store, add_instance, fun
-        (_StoreRef, #instance{args = {a, b}, curr_state = #inst_state{sname = [], sdata = {state, a, b}}}) -> {ok, iid1}
+        (_StoreRef, #instance{args = {a, b}, curr_state = #inst_state{sname = {}, sdata = {state, a, b}}}) -> {ok, iid1}
     end),
     ok = meck:expect(eproc_fsm__void, init, fun ({A, B}) -> {ok, {state, A, B}} end),
     {ok, {inst, iid1}} = eproc_fsm:create(eproc_fsm__void, {a, b}, []),
@@ -196,17 +175,17 @@ start_link_new_by_inst_test() ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__void,
                 args = {a}, opts = [], status = running, created = os:timestamp(),
-                curr_state = #inst_state{sname = [], sdata = {state, a}, attr_last_nr = 0, attrs_active = []}
+                curr_state = #inst_state{sname = {}, sdata = {state, a}, attr_last_nr = 0, attrs_active = []}
             }}
     end),
     ok = meck:expect(eproc_fsm_attr, init, fun
-        (100, [], 0, store, []) -> {ok, []}
+        (100, {}, 0, store, []) -> {ok, []}
     end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, []),
     ?assert(eproc_fsm:is_online(PID)),
-    ?assert(meck:called(eproc_fsm_attr, init, [100, [], 0, store, []])),
-    ?assert(meck:called(eproc_fsm__void, init, [[], {state, a}])),
-    ?assert(meck:called(eproc_fsm__void, code_change, [state, [], {state, a}, undefined])),
+    ?assert(meck:called(eproc_fsm_attr, init, [100, {}, 0, store, []])),
+    ?assert(meck:called(eproc_fsm__void, init, [{}, {state, a}])),
+    ?assert(meck:called(eproc_fsm__void, code_change, [state, {}, {state, a}, undefined])),
     ?assert(meck:validate([eproc_store, eproc_fsm_attr, eproc_fsm__void, eproc_stats])),
     ok = meck:unload([eproc_store, eproc_fsm_attr, eproc_fsm__void, eproc_stats]),
     ok = unlink_kill(PID).
@@ -225,13 +204,13 @@ start_link_new_by_name_test() ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = N, module = eproc_fsm__void,
                 args = {a}, opts = [], status = running, created = os:timestamp(),
-                curr_state = #inst_state{sname = [], sdata = {state, a}, attr_last_nr = 0, attrs_active = []}
+                curr_state = #inst_state{sname = {}, sdata = {state, a}, attr_last_nr = 0, attrs_active = []}
             }}
     end),
     {ok, PID} = eproc_fsm:start_link({name, start_link_by_name_test}, []),
     ?assert(eproc_fsm:is_online(PID)),
-    ?assert(meck:called(eproc_fsm__void, init, [[], {state, a}])),
-    ?assert(meck:called(eproc_fsm__void, code_change, [state, [], {state, a}, undefined])),
+    ?assert(meck:called(eproc_fsm__void, init, [{}, {state, a}])),
+    ?assert(meck:called(eproc_fsm__void, code_change, [state, {}, {state, a}, undefined])),
     ?assert(meck:validate([eproc_store, eproc_fsm__void, eproc_stats])),
     ok = meck:unload([eproc_store, eproc_fsm__void, eproc_stats]),
     ok = unlink_kill(PID).
@@ -253,7 +232,7 @@ start_link_existing_test() ->
                 inst_id = I, group = I, name = name, module = eproc_fsm__void,
                 args = {a}, opts = [], curr_state = #inst_state{
                     stt_id = 0,
-                    sname = [some],
+                    sname = some,
                     sdata = {state, b},
                     attr_last_nr = 2,
                     attrs_active = [
@@ -266,13 +245,13 @@ start_link_existing_test() ->
             }}
     end),
     ok = meck:expect(eproc_fsm_attr, init, fun
-        (100, [some], 2, store, [A = #attribute{attr_id = 1}, B = #attribute{attr_id = 2}]) -> {ok, [{A, undefined}, {B, undefined}]}
+        (100, some, 2, store, [A = #attribute{attr_id = 1}, B = #attribute{attr_id = 2}]) -> {ok, [{A, undefined}, {B, undefined}]}
     end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, []),
     ?assert(eproc_fsm:is_online(PID)),
     ?assert(meck:called(eproc_fsm_attr, init, '_')),
-    ?assert(meck:called(eproc_fsm__void, init, [[some], {state, b}])),
-    ?assert(meck:called(eproc_fsm__void, code_change, [state, [some], {state, b}, undefined])),
+    ?assert(meck:called(eproc_fsm__void, init, [some, {state, b}])),
+    ?assert(meck:called(eproc_fsm__void, code_change, [state, some, {state, b}, undefined])),
     ?assert(meck:validate([eproc_store, eproc_fsm_attr, eproc_fsm__void, eproc_stats])),
     ok = meck:unload([eproc_store, eproc_fsm_attr, eproc_fsm__void, eproc_stats]),
     ok = unlink_kill(PID).
@@ -291,11 +270,11 @@ start_link_get_id_group_name_test() ->
             {ok, #instance{
                 inst_id = I, group = 2000, name = name, module = eproc_fsm__void,
                 args = {a}, opts = [], status = running, created = os:timestamp(),
-                curr_state = #inst_state{sname = [], sdata = {state, a}, attr_last_nr = 0, attrs_active = []}
+                curr_state = #inst_state{sname = {}, sdata = {state, a}, attr_last_nr = 0, attrs_active = []}
             }}
     end),
     ok = meck:expect(eproc_fsm__void, init, fun
-        ([], {state, a}) ->
+        ({}, {state, a}) ->
             ?assertEqual({ok, 1000}, eproc_fsm:id()),
             ?assertEqual({ok, 2000}, eproc_fsm:group()),
             ?assertEqual({ok, name}, eproc_fsm:name()),
@@ -303,8 +282,8 @@ start_link_get_id_group_name_test() ->
     end),
     {ok, PID} = eproc_fsm:start_link({inst, 1000}, []),
     ?assert(eproc_fsm:is_online(PID)),
-    ?assert(meck:called(eproc_fsm__void, init, [[], {state, a}])),
-    ?assert(meck:called(eproc_fsm__void, code_change, [state, [], {state, a}, undefined])),
+    ?assert(meck:called(eproc_fsm__void, init, [{}, {state, a}])),
+    ?assert(meck:called(eproc_fsm__void, code_change, [state, {}, {state, a}, undefined])),
     ?assert(meck:validate([eproc_store, eproc_fsm__void, eproc_stats])),
     ok = meck:unload([eproc_store, eproc_fsm__void, eproc_stats]),
     ok = unlink_kill(PID).
@@ -325,17 +304,17 @@ start_link_init_runtime_test() ->
             {ok, #instance{
                 inst_id = I, group = 2000, name = name, module = eproc_fsm__void,
                 args = {a}, opts = [], status = running, created = os:timestamp(),
-                curr_state = #inst_state{sname = [], sdata = {state, a, undefined}, attr_last_nr = 0, attrs_active = []}
+                curr_state = #inst_state{sname = {}, sdata = {state, a, undefined}, attr_last_nr = 0, attrs_active = []}
             }}
     end),
     ok = meck:expect(eproc_fsm__void, init, fun
-        ([], {state, a, undefined}) ->
+        ({}, {state, a, undefined}) ->
             {ok, 3, z}
     end),
     {ok, PID} = eproc_fsm:start_link({inst, 1000}, []),
     ?assert(eproc_fsm:is_online(PID)),
-    ?assert(meck:called(eproc_fsm__void, init, [[], {state, a, undefined}])),
-    ?assert(meck:called(eproc_fsm__void, code_change, [state, [], {state, a, undefined}, undefined])),
+    ?assert(meck:called(eproc_fsm__void, init, [{}, {state, a, undefined}])),
+    ?assert(meck:called(eproc_fsm__void, code_change, [state, {}, {state, a, undefined}, undefined])),
     ?assert(meck:validate([eproc_store, eproc_fsm__void, eproc_stats])),
     ok = meck:unload([eproc_store, eproc_fsm__void, eproc_stats]),
     ok = unlink_kill(PID).
@@ -354,7 +333,7 @@ start_link_fsmname_test() ->
             {ok, #instance{
                 inst_id = I, group = 2000, name = name, module = eproc_fsm__void,
                 args = {a}, opts = [], status = running, created = os:timestamp(),
-                curr_state = #inst_state{sname = [], sdata = {state, a}, attr_last_nr = 0, attrs_active = []}
+                curr_state = #inst_state{sname = {}, sdata = {state, a}, attr_last_nr = 0, attrs_active = []}
             }}
     end),
     {ok, PID} = eproc_fsm:start_link({local, start_link_fsmname_test}, {inst, 1000}, []),
@@ -373,7 +352,7 @@ start_link_opts_register_test() ->
     GenInst = fun (I, N) -> #instance{
         inst_id = I, group = I, name = N, module = eproc_fsm__void,
         args = {a}, opts = [], status = running, created = os:timestamp(),
-        curr_state = #inst_state{sname = [], sdata = {state, a}, attr_last_nr = 0, attrs_active = []}
+        curr_state = #inst_state{sname = {}, sdata = {state, a}, attr_last_nr = 0, attrs_active = []}
     } end,
     ok = meck:new(eproc_store, []),
     ok = meck:new(eproc_registry, []),
@@ -442,7 +421,7 @@ start_link_opts_limit_restarts_test() ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__void,
                 args = {a}, opts = [], status = running, created = os:timestamp(),
-                curr_state = #inst_state{sname = [], sdata = {state, a}, attr_last_nr = 0, attrs_active = []}
+                curr_state = #inst_state{sname = {}, sdata = {state, a}, attr_last_nr = 0, attrs_active = []}
             }}
     end),
     ok = meck:expect(eproc_limits, setup, fun
@@ -475,7 +454,7 @@ start_link_restart_suspend_test() ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__void,
                 args = {a}, opts = [], status = running, created = os:timestamp(),
-                curr_state = #inst_state{sname = [], sdata = {state, undefined}, attr_last_nr = 0, attrs_active = []}
+                curr_state = #inst_state{sname = {}, sdata = {state, undefined}, attr_last_nr = 0, attrs_active = []}
             }}
     end),
     ok = meck:expect(eproc_store, set_instance_suspended, fun
@@ -519,7 +498,7 @@ start_link_restart_delay_test() ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__void,
                 args = {a}, opts = [], status = running, created = os:timestamp(),
-                curr_state = #inst_state{sname = [], sdata = {state, undefined}, attr_last_nr = 0, attrs_active = []}
+                curr_state = #inst_state{sname = {}, sdata = {state, undefined}, attr_last_nr = 0, attrs_active = []}
             }}
     end),
     ok = meck:expect(eproc_limits, setup, fun
@@ -552,14 +531,14 @@ send_event_final_state_from_init_test() ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__void,
                 args = {a}, opts = [], status = running, created = os:timestamp(),
-                curr_state = #inst_state{stt_id = 0, sname = [], sdata = {state, a}, attr_last_nr = 0, attrs_active = []}
+                curr_state = #inst_state{stt_id = 0, sname = initial, sdata = {state, a}, attr_last_nr = 0, attrs_active = []}
             }}
     end),
     ok = meck:expect(eproc_store, add_transition, fun
         (store, 100, Transition = #transition{trn_id = TrnNr}, [#message{}]) ->
             #transition{
                 trn_id       = 1,
-                sname        = [done],
+                sname        = done,
                 sdata        = {state, a},
                 timestamp    = {_, _, _},
                 duration     = Duration,
@@ -581,7 +560,7 @@ send_event_final_state_from_init_test() ->
     ?assertEqual(ok, eproc_fsm:send_event(PID, done, [{source, {test, test}}])),
     ?assert(receive {'DOWN', Mon, process, PID, normal} -> true after 1000 -> false end),
     ?assertEqual(false, eproc_fsm:is_online(PID)),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, [[], {event, done}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, [initial, {event, done}, '_'])),
     ?assertEqual(1, meck:num_calls(eproc_store, add_transition, '_')),
     ?assert(meck:validate([eproc_store, eproc_fsm__void, eproc_stats])),
     ok = meck:unload([eproc_store, eproc_fsm__void, eproc_stats]),
@@ -600,7 +579,7 @@ send_event_final_state_from_ordinary_test() ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__seq,
                 args = {}, opts = [], status = running, created = os:timestamp(), curr_state = #inst_state{
-                    stt_id = 1, sname = [incrementing], sdata = {state, 5},
+                    stt_id = 1, sname = incrementing, sdata = {state, 5},
                     attr_last_nr = 0, attrs_active = []
                 }
             }}
@@ -621,8 +600,8 @@ send_event_final_state_from_ordinary_test() ->
     ?assertEqual(ok, eproc_fsm:send_event(PID, close, [{source, {test, test}}])),
     ?assert(receive {'DOWN', Mon, process, PID, normal} -> true after 1000 -> false end),
     ?assertEqual(false, eproc_fsm:is_online(PID)),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {event, close}, '_'])),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {exit, [closed]}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [incrementing, {event, close}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [incrementing, {exit, closed}, '_'])),
     ?assertEqual(2, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
     ?assertEqual(1, meck:num_calls(eproc_store, add_transition, '_')),
     ?assert(meck:validate([eproc_store, eproc_fsm__seq, eproc_stats])),
@@ -642,7 +621,7 @@ send_event_next_state_from_init_test() ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__seq,
                 args = {a}, opts = [], status = running, created = os:timestamp(), curr_state = #inst_state{
-                    stt_id = 0, sname = [], sdata = {state, undefined},
+                    stt_id = 0, sname = {}, sdata = {state, undefined},
                     attr_last_nr = 0, attrs_active = []
                 }
             }}
@@ -661,8 +640,8 @@ send_event_next_state_from_init_test() ->
     ?assert(eproc_fsm:is_online(PID)),
     ?assertEqual(ok, eproc_fsm:send_event(PID, reset, [{source, {test, test}}])),
     ?assertEqual(true, eproc_fsm:is_online(PID)),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[], {event, reset}, '_'])),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {entry, []}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [{}, {event, reset}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [incrementing, {entry, {}}, '_'])),
     ?assertEqual(2, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
     ?assertEqual(1, meck:num_calls(eproc_store, add_transition, '_')),
     ?assert(meck:validate([eproc_store, eproc_fsm__seq, eproc_stats])),
@@ -684,7 +663,7 @@ send_event_next_state_from_ordinary_test() ->
                 args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1,
-                    sname = [incrementing],
+                    sname = incrementing,
                     sdata = {state, 5},
                     attr_last_nr = 1,
                     attrs_active = []
@@ -705,9 +684,9 @@ send_event_next_state_from_ordinary_test() ->
     ?assert(eproc_fsm:is_online(PID)),
     ?assertEqual(ok, eproc_fsm:send_event(PID, flip, [{source, {test, test}}])),
     ?assertEqual(true, eproc_fsm:is_online(PID)),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {event, flip}, '_'])),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {exit, [decrementing]}, '_'])),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[decrementing], {entry, [incrementing]}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [incrementing, {event, flip}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [incrementing, {exit, decrementing}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [decrementing, {entry, incrementing}, '_'])),
     ?assertEqual(3, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
     ?assertEqual(1, meck:num_calls(eproc_store, add_transition, '_')),
     ?assert(meck:validate([eproc_store, eproc_fsm__seq, eproc_stats])),
@@ -727,7 +706,7 @@ send_event_same_state_from_init_test() ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__seq,
                 args = {a}, opts = [], status = running, created = os:timestamp(), curr_state = #inst_state{
-                    stt_id = 0, sname = [], sdata = {state, undefined},
+                    stt_id = 0, sname = {}, sdata = {state, undefined},
                     attr_last_nr = 0, attrs_active = []
                 }
             }}
@@ -737,7 +716,7 @@ send_event_same_state_from_init_test() ->
             {ok, InstId, TrnNr}
     end),
     ok = meck:expect(eproc_fsm__seq, handle_state, fun
-        ([], {event, skip}, StateData) ->
+        ({}, {event, skip}, StateData) ->
             {same_state, StateData}
     end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
@@ -747,7 +726,7 @@ send_event_same_state_from_init_test() ->
     ?assertEqual(ok, eproc_fsm:send_event(PID, skip, [{source, {test, test}}])),
     ?assert(receive {'DOWN', Mon, process, PID, Reason} when Reason =/= normal -> true after 1000 -> false end),
     ?assertEqual(false, eproc_fsm:is_online(PID)),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[], {event, skip}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [{}, {event, skip}, '_'])),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
     ?assertEqual(0, meck:num_calls(eproc_store, add_transition, '_')),
     ?assert(meck:validate([eproc_store, eproc_fsm__seq, eproc_stats])),
@@ -768,7 +747,7 @@ send_event_same_state_from_ordinary_test() ->
                 args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1,
-                    sname = [incrementing],
+                    sname = incrementing,
                     sdata = {state, 5},
                     attr_last_nr = 0,
                     attrs_active = []
@@ -789,7 +768,7 @@ send_event_same_state_from_ordinary_test() ->
     ?assert(eproc_fsm:is_online(PID)),
     ?assertEqual(ok, eproc_fsm:send_event(PID, skip, [{source, {test, test}}])),
     ?assertEqual(true, eproc_fsm:is_online(PID)),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {event, skip}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [incrementing, {event, skip}, '_'])),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
     ?assertEqual(1, meck:num_calls(eproc_store, add_transition, '_')),
     ?assert(meck:validate([eproc_store, eproc_fsm__seq, eproc_stats])),
@@ -811,7 +790,7 @@ send_event_entry_next_state_test() ->
                 args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 0,
-                    sname = [],
+                    sname = initial,
                     sdata = {state, some},
                     attr_last_nr = 0,
                     attrs_active = []
@@ -821,7 +800,7 @@ send_event_entry_next_state_test() ->
     ok = meck:expect(eproc_store, add_transition, fun
         (store, InstId, Transition = #transition{trn_id = TrnNr = 1}, [#message{}]) ->
             #transition{
-                sname = [closed],
+                sname = closed,
                 trigger_type = event,
                 trigger_msg  = #msg_ref{cid = {InstId, TrnNr, 0, recv}},
                 trigger_resp = undefined,
@@ -835,13 +814,13 @@ send_event_entry_next_state_test() ->
     ?assertEqual(ok, eproc_fsm__void:close(PID)),
     ?assert(receive {'DOWN', Mon, process, PID, Reason} when Reason == normal -> true after 1000 -> false end),
     ?assertEqual(false, eproc_fsm:is_online(PID)),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, [[], {event, close}, '_'])),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, [[closing], {entry, []}, '_'])),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, [[closing, cleanup], {entry, []}, '_'])),
-    ?assertEqual(3, meck:num_calls(eproc_fsm__void, handle_state, '_')),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, [initial, {event, close}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, [closing, {entry, initial}, '_'])),
+    ?assertEqual(2, meck:num_calls(eproc_fsm__void, handle_state, '_')),
     ?assertEqual(1, meck:num_calls(eproc_store, add_transition, '_')),
     ?assert(meck:validate([eproc_store, eproc_fsm__void, eproc_stats])),
-    ok = meck:unload([eproc_store, eproc_fsm__void, eproc_stats]).
+    ok = meck:unload([eproc_store, eproc_fsm__void, eproc_stats]),
+    ok.
 
 
 %%
@@ -858,7 +837,7 @@ send_event_reply_test() ->
                 args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1,
-                    sname = [incrementing],
+                    sname = incrementing,
                     sdata = {state, 5},
                     attr_last_nr = 0,
                     attrs_active = []
@@ -870,8 +849,8 @@ send_event_reply_test() ->
             {ok, InstId, TrnNr}
     end),
     ok = meck:expect(eproc_fsm__seq, handle_state, fun
-        ([incrementing], {event, get}, StateData) ->
-            {reply_next, bad, [decrementing], StateData}
+        (incrementing, {event, get}, StateData) ->
+            {reply_next, bad, decrementing, StateData}
     end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assertEqual(true, eproc_fsm:is_online(PID)),
@@ -880,7 +859,7 @@ send_event_reply_test() ->
     ?assertEqual(ok, eproc_fsm:send_event(PID, get, [{source, {test, test}}])),
     ?assert(receive {'DOWN', Mon, process, PID, Reason} when Reason =/= normal -> true after 1000 -> false end),
     ?assertEqual(false, eproc_fsm:is_online(PID)),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {event, get}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [incrementing, {event, get}, '_'])),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
     ?assertEqual(0, meck:num_calls(eproc_store, add_transition, '_')),
     ?assert(meck:validate([eproc_store, eproc_fsm__seq, eproc_stats])),
@@ -900,13 +879,13 @@ send_event_save_runtime_test() ->
             {ok, #instance{
                 inst_id = I, group = 2000, name = name, module = eproc_fsm__void,
                 args = {a}, opts = [], status = running, created = os:timestamp(), curr_state = #inst_state{
-                    stt_id = 0, sname = [], sdata = {state, a, this_is_empty},
+                    stt_id = 0, sname = initial, sdata = {state, a, this_is_empty},
                     attr_last_nr = 0, attrs_active = []
                 }
             }}
     end),
     ok = meck:expect(eproc_fsm__void, init, fun
-        ([], {state, a, this_is_empty}) ->
+        (initial, {state, a, this_is_empty}) ->
             {ok, 3, not_empty_at_runtime}
     end),
     ok = meck:expect(eproc_store, add_transition, fun
@@ -920,7 +899,7 @@ send_event_save_runtime_test() ->
     ?assert(receive {'DOWN', Mon, process, PID, normal} -> true after 1000 -> false end),
     ?assertEqual(false, eproc_fsm:is_online(PID)),
     ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, '_')),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, [[], {event, done}, {state, a, not_empty_at_runtime}])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, [initial, {event, done}, {state, a, not_empty_at_runtime}])),
     ?assertEqual(1, meck:num_calls(eproc_store, add_transition, '_')),
     ?assert(meck:validate([eproc_store, eproc_fsm__void, eproc_stats])),
     ok = meck:unload([eproc_store, eproc_fsm__void, eproc_stats]),
@@ -942,7 +921,7 @@ send_event_handle_attrs_test() ->
                 args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1,
-                    sname = [incrementing],
+                    sname = incrementing,
                     sdata = {state, 5},
                     attr_last_nr = 0,
                     attrs_active = []
@@ -984,7 +963,7 @@ send_event_restart_unreg_test() ->
             {ok, #instance{
                 inst_id = IID, group = 200, name = name, module = eproc_fsm__void,
                 args = {a}, opts = [], status = running, created = os:timestamp(), curr_state = #inst_state{
-                    stt_id = 0, sname = [], sdata = {state, IID},
+                    stt_id = 0, sname = initial, sdata = {state, IID},
                     attr_last_nr = 0, attrs_active = []
                 }
             }}
@@ -1005,10 +984,10 @@ send_event_restart_unreg_test() ->
         ({'eproc_fsm$limits', 200}, res) -> ok
     end),
     ok = meck:expect(eproc_fsm__void, handle_state, fun
-        ([], {event, done}, {state, 100}) ->
+        (initial, {event, done}, {state, 100}) ->
             meck:exception(error, some_error);
-        ([], {event, done}, StateData = {state, 200}) ->
-            {final_state, [done], StateData}
+        (initial, {event, done}, StateData = {state, 200}) ->
+            {final_state, done, StateData}
     end),
     {ok, PID1} = eproc_fsm:start_link({inst, 100}, [{store, store}, {limit_restarts, {series, some, 100, 1000, notify}}]),
     {ok, PID2} = eproc_fsm:start_link({inst, 200}, [{store, store}, {limit_restarts, {series, some, 100, 1000, notify}}]),
@@ -1046,7 +1025,7 @@ send_event_suspend_by_user_test() ->
                 args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1,
-                    sname = [incrementing],
+                    sname = incrementing,
                     sdata = {state, 5},
                     attr_last_nr = 0,
                     attrs_active = []
@@ -1059,12 +1038,12 @@ send_event_suspend_by_user_test() ->
             {ok, InstId, TrnNr}
     end),
     ok = meck:expect(eproc_fsm__seq, handle_state, fun
-        ([incrementing], {event, skip}, S) ->
+        (incrementing, {event, skip}, S) ->
             eproc_fsm:suspend(some_realy_good_reason),
-            {next_state, [decrementing], S};
-        ([incrementing], {exit, [decrementing]}, S) ->
+            {next_state, decrementing, S};
+        (incrementing, {exit, decrementing}, S) ->
             {ok, S};
-        ([decrementing], {entry, [incrementing]}, S) ->
+        (decrementing, {entry, incrementing}, S) ->
             {ok, S}
     end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
@@ -1074,7 +1053,7 @@ send_event_suspend_by_user_test() ->
     ?assert(receive {'EXIT', PID, normal}  -> true; AntMsg -> AntMsg after 1000 -> false end),
     erlang:process_flag(trap_exit, OldTrapExit),
     ?assertEqual(false, eproc_fsm:is_online(PID)),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {event, skip}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [incrementing, {event, skip}, '_'])),
     ?assertEqual(3, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
     ?assertEqual(1, meck:num_calls(eproc_store, add_transition, '_')),
     ?assert(meck:validate([eproc_store, eproc_fsm__seq, eproc_stats])),
@@ -1096,7 +1075,7 @@ send_event_limit_suspend_test() ->
                 args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1,
-                    sname = [incrementing],
+                    sname = incrementing,
                     sdata = {state, 5},
                     attr_last_nr = 0,
                     attrs_active = []
@@ -1105,14 +1084,14 @@ send_event_limit_suspend_test() ->
     end),
     ok = meck:expect(eproc_store, add_transition, fun
         (store, InstId, #transition{trn_id = TrnNr = 2, inst_status = suspended, interrupts = Ints}, [#message{}]) ->
-            [#interrupt{reason = {fault, {limits, [{trn, [some]}]}}}] = Ints,
+            [#interrupt{reason = {fault, {limits, [{trn, some}]}}}] = Ints,
             {ok, InstId, TrnNr}
     end),
     ok = meck:expect(eproc_limits, setup, fun
         ({'eproc_fsm$limits', 100}, trn, {series, some, 100, 0, notify}) -> ok
     end),
     ok = meck:expect(eproc_limits, notify, fun
-        ({'eproc_fsm$limits', 100}, [{trn, 1}]) -> {reached, [{trn, [some]}]}
+        ({'eproc_fsm$limits', 100}, [{trn, 1}]) -> {reached, [{trn, some}]}
     end),
     ok = meck:expect(eproc_limits, cleanup, fun
         ({'eproc_fsm$limits', 100}, trn) -> ok
@@ -1124,7 +1103,7 @@ send_event_limit_suspend_test() ->
     ?assert(receive {'EXIT', PID, normal}  -> true; AntMsg -> AntMsg after 1000 -> false end),
     erlang:process_flag(trap_exit, OldTrapExit),
     ?assertEqual(false, eproc_fsm:is_online(PID)),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {event, skip}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [incrementing, {event, skip}, '_'])),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
     ?assertEqual(1, meck:num_calls(eproc_store, add_transition, '_')),
     ?assertEqual(1, meck:num_calls(eproc_limits, setup, '_')),
@@ -1148,7 +1127,7 @@ send_event_limit_delay_test() ->
                 args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1,
-                    sname = [incrementing],
+                    sname = incrementing,
                     sdata = {state, 5},
                     attr_last_nr = 0,
                     attrs_active = []
@@ -1173,7 +1152,7 @@ send_event_limit_delay_test() ->
     TimeMS = TimeUS div 1000,
     ?assertEqual(true, (TimeMS > 290) and (TimeMS < 500)),
     %%
-    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {event, skip}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [incrementing, {event, skip}, '_'])),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
     ?assertEqual(1, meck:num_calls(eproc_store, add_transition, '_')),
     ?assertEqual(1, meck:num_calls(eproc_limits, setup, '_')),
@@ -1197,7 +1176,7 @@ self_send_event_test() ->
                 args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 0,
-                    sname = [],
+                    sname = initial,
                     sdata = {state, some},
                     attr_last_nr = 0,
                     attrs_active = []
@@ -1207,7 +1186,7 @@ self_send_event_test() ->
     ok = meck:expect(eproc_store, add_transition, fun
         (store, InstId, Transition = #transition{trn_id = TrnNr = 1}, [#message{}, #message{}]) ->
             #transition{
-                sname = [waiting],
+                sname = waiting,
                 trigger_type = event,
                 trigger_msg  = #msg_ref{cid = {InstId, TrnNr, 0, recv}},
                 trigger_resp = undefined,
@@ -1216,7 +1195,7 @@ self_send_event_test() ->
             {ok, InstId, TrnNr};
         (store, InstId, Transition = #transition{trn_id = TrnNr = 2}, [#message{}]) ->
             #transition{
-                sname = [done],
+                sname = done,
                 trigger_type = self,
                 trigger_msg  = #msg_ref{cid = {InstId, 1, _, recv}},
                 trigger_resp = undefined,
@@ -1230,10 +1209,10 @@ self_send_event_test() ->
     ?assertEqual(ok, eproc_fsm__void:self_done(PID)),
     ?assert(receive {'DOWN', Mon, process, PID, Reason} when Reason == normal -> true after 1000 -> false end),
     ?assertEqual(false, eproc_fsm:is_online(PID)),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, [[], {event, self_done}, '_'])),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, [[waiting], {entry, []}, '_'])),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, [[waiting], {self, done}, '_'])),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, [[waiting], {exit, [done]}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, [initial, {event, self_done}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, [waiting, {entry, initial}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, [waiting, {self, done}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__void, handle_state, [waiting, {exit, done}, '_'])),
     ?assertEqual(4, meck:num_calls(eproc_fsm__void, handle_state, '_')),
     ?assertEqual(2, meck:num_calls(eproc_store, add_transition, '_')),
     ?assertEqual(1, meck:num_calls(eproc_store, add_transition, ['_', '_', #transition{trn_id = 1, _ = '_'}, '_'])),
@@ -1256,7 +1235,7 @@ sync_send_event_final_state_from_ordinary_test() ->
                 args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1,
-                    sname = [incrementing],
+                    sname = incrementing,
                     sdata = {state, 5},
                     attr_last_nr = 0,
                     attrs_active = []
@@ -1279,8 +1258,8 @@ sync_send_event_final_state_from_ordinary_test() ->
     ?assertEqual({ok, 5}, eproc_fsm:sync_send_event(PID, last, [{source, {test, test}}])),
     ?assert(receive {'DOWN', Mon, process, PID, normal} -> true after 1000 -> false end),
     ?assertEqual(false, eproc_fsm:is_online(PID)),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {sync, '_', last}, '_'])),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {exit, [closed]}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [incrementing, {sync, '_', last}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [incrementing, {exit, closed}, '_'])),
     ?assertEqual(2, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
     ?assertEqual(1, meck:num_calls(eproc_store, add_transition, '_')),
     ?assert(meck:validate([eproc_store, eproc_fsm__seq, eproc_stats])),
@@ -1302,7 +1281,7 @@ sync_send_event_next_state_from_ordinary_test() ->
                 args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1,
-                    sname = [incrementing],
+                    sname = incrementing,
                     sdata = {state, 5},
                     attr_last_nr = 0,
                     attrs_active = []
@@ -1323,9 +1302,9 @@ sync_send_event_next_state_from_ordinary_test() ->
     ?assert(eproc_fsm:is_online(PID)),
     ?assertEqual({ok, 5}, eproc_fsm:sync_send_event(PID, next, [{source, {test, test}}])),
     ?assertEqual(true, eproc_fsm:is_online(PID)),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {sync, '_', next}, '_'])),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {exit, [incrementing]}, '_'])),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {entry, [incrementing]}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [incrementing, {sync, '_', next}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [incrementing, {exit, incrementing}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [incrementing, {entry, incrementing}, '_'])),
     ?assertEqual(3, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
     ?assertEqual(1, meck:num_calls(eproc_store, add_transition, '_')),
     ?assert(meck:validate([eproc_store, eproc_fsm__seq, eproc_stats])),
@@ -1347,7 +1326,7 @@ sync_send_event_same_state_from_ordinary_test() ->
                 args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1,
-                    sname = [incrementing],
+                    sname = incrementing,
                     sdata = {state, 5},
                     attr_last_nr = 0,
                     attrs_active = []
@@ -1368,7 +1347,7 @@ sync_send_event_same_state_from_ordinary_test() ->
     ?assert(eproc_fsm:is_online(PID)),
     ?assertEqual({ok, 5}, eproc_fsm:sync_send_event(PID, get, [{source, {test, test}}])),
     ?assertEqual(true, eproc_fsm:is_online(PID)),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {sync, '_', get}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [incrementing, {sync, '_', get}, '_'])),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
     ?assertEqual(1, meck:num_calls(eproc_store, add_transition, '_')),
     ?assert(meck:validate([eproc_store, eproc_fsm__seq, eproc_stats])),
@@ -1390,7 +1369,7 @@ sync_send_event_reply_test() ->
                 args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1,
-                    sname = [incrementing],
+                    sname = incrementing,
                     sdata = {state, 5},
                     attr_last_nr = 0,
                     attrs_active = []
@@ -1408,7 +1387,7 @@ sync_send_event_reply_test() ->
             {ok, InstId, TrnNr}
     end),
     ok = meck:expect(eproc_fsm__seq, handle_state, fun
-        ([incrementing], {sync, From, get}, StateData) ->
+        (incrementing, {sync, From, get}, StateData) ->
             eproc_fsm:reply(From, {ok, something}),
             {same_state, StateData}
     end),
@@ -1416,7 +1395,7 @@ sync_send_event_reply_test() ->
     ?assert(eproc_fsm:is_online(PID)),
     ?assertEqual({ok, something}, eproc_fsm:sync_send_event(PID, get, [{source, {test, test}}])),
     ?assertEqual(true, eproc_fsm:is_online(PID)),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {sync, '_', get}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [incrementing, {sync, '_', get}, '_'])),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
     ?assertEqual(1, meck:num_calls(eproc_store, add_transition, '_')),
     ?assert(meck:validate([eproc_store, eproc_fsm__seq, eproc_stats])),
@@ -1438,7 +1417,7 @@ unknown_message_test() ->
                 args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
                     stt_id = 1,
-                    sname = [incrementing],
+                    sname = incrementing,
                     sdata = {state, 5},
                     attr_last_nr = 0,
                     attrs_active = []
@@ -1456,14 +1435,14 @@ unknown_message_test() ->
             {ok, InstId, TrnNr}
     end),
     ok = meck:expect(eproc_fsm__seq, handle_state, fun
-        ([incrementing], {info, some_unknown_message}, StateData) ->
+        (incrementing, {info, some_unknown_message}, StateData) ->
             {same_state, StateData}
     end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
     PID ! some_unknown_message,
     ?assertEqual(true, eproc_fsm:is_online(PID)),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {info, some_unknown_message}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [incrementing, {info, some_unknown_message}, '_'])),
     ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
     ?assertEqual(1, meck:num_calls(eproc_store, add_transition, '_')),
     ?assert(meck:validate([eproc_store, eproc_fsm__seq, eproc_stats])),
@@ -1544,7 +1523,7 @@ kill_test() ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__seq,
                 args = {a}, opts = [], status = running, created = os:timestamp(), curr_state = #inst_state{
-                    stt_id = 0, sname = [], sdata = {state, undefined},
+                    stt_id = 0, sname = {}, sdata = {state, undefined},
                     attr_last_nr = 0, attrs_active = []
                 }
             }}
@@ -1586,7 +1565,7 @@ suspend_test() ->
             {ok, #instance{
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__seq,
                 args = {a}, opts = [], status = running, created = os:timestamp(), curr_state = #inst_state{
-                    stt_id = 0, sname = [], sdata = {state, undefined},
+                    stt_id = 0, sname = {}, sdata = {state, undefined},
                     attr_last_nr = 0, attrs_active = []
                 }
             }}
@@ -1657,9 +1636,9 @@ resume_and_start_test() ->
     ok = meck:new(eproc_stats, [stub_all]),
     ok = meck:expect(eproc_store, set_instance_resuming, fun
         (store, {inst, InstId = 101}, unchanged,                         #user_action{}) -> {ok, InstId, {default, []}};
-        (store, {inst, InstId = 102}, {set, [s2], d2, []},               #user_action{}) -> {ok, InstId, {default, []}};
-        (store, {inst, InstId = 103}, {set, [s3], d3, []},               #user_action{}) -> {ok, InstId, {default, []}};
-        (store, {inst, InstId = 104}, {set, [s4], undefined, undefined}, #user_action{}) -> {ok, InstId, {default, []}}
+        (store, {inst, InstId = 102}, {set, s2, d2, []},               #user_action{}) -> {ok, InstId, {default, []}};
+        (store, {inst, InstId = 103}, {set, s3, d3, []},               #user_action{}) -> {ok, InstId, {default, []}};
+        (store, {inst, InstId = 104}, {set, s4, undefined, undefined}, #user_action{}) -> {ok, InstId, {default, []}}
     end),
     ok = meck:expect(eproc_store, load_instance, fun
         (store, {inst, InstId = 101}) ->
@@ -1667,7 +1646,7 @@ resume_and_start_test() ->
                 inst_id = InstId, group = InstId, name = name, module = eproc_fsm__void,
                 args = {a}, opts = [], status = resuming, created = os:timestamp(),
                 curr_state = #inst_state{
-                    stt_id = 1, sname = [some], sdata = {state, b}, attr_last_nr = 2,
+                    stt_id = 1, sname = some, sdata = {state, b}, attr_last_nr = 2,
                     attrs_active = []
                 },
                 interrupt = #interrupt{
@@ -1683,13 +1662,13 @@ resume_and_start_test() ->
                 inst_id = InstId, group = InstId, name = name, module = eproc_fsm__void,
                 args = {a}, opts = [], status = resuming, created = os:timestamp(),
                 curr_state = #inst_state{
-                    stt_id = 1, sname = [some], sdata = {state, b}, attr_last_nr = 2,
+                    stt_id = 1, sname = some, sdata = {state, b}, attr_last_nr = 2,
                     attrs_active = []
                 },
                 interrupt = #interrupt{
                     intr_id = undefined, status = active, suspended = os:timestamp(),
                     resumes = [#resume_attempt{
-                        res_nr = 1, upd_sname = [s2], upd_sdata = d2,
+                        res_nr = 1, upd_sname = s2, upd_sdata = d2,
                         upd_script = [], resumed = #user_action{}
                     }]
                 }
@@ -1699,13 +1678,13 @@ resume_and_start_test() ->
                 inst_id = InstId, group = InstId, name = name, module = eproc_fsm__void,
                 args = {a}, opts = [], status = resuming, created = os:timestamp(),
                 curr_state = #inst_state{
-                    stt_id = 1, sname = [some], sdata = {state, b}, attr_last_nr = 2,
+                    stt_id = 1, sname = some, sdata = {state, b}, attr_last_nr = 2,
                     attrs_active = []
                 },
                 interrupt = #interrupt{
                     intr_id = undefined, status = active, suspended = os:timestamp(),
                     resumes = [#resume_attempt{
-                        res_nr = 1, upd_sname = [s3], upd_sdata = d3,
+                        res_nr = 1, upd_sname = s3, upd_sdata = d3,
                         upd_script = [], resumed = #user_action{}
                     }]
                 }
@@ -1715,13 +1694,13 @@ resume_and_start_test() ->
                 inst_id = InstId, group = InstId, name = name, module = eproc_fsm__void,
                 args = {a}, opts = [], status = resuming, created = os:timestamp(),
                 curr_state = #inst_state{
-                    stt_id = 1, sname = [some], sdata = {state, b}, attr_last_nr = 2,
+                    stt_id = 1, sname = some, sdata = {state, b}, attr_last_nr = 2,
                     attrs_active = []
                 },
                 interrupt = #interrupt{
                     intr_id = undefined, status = active, suspended = os:timestamp(),
                     resumes = [#resume_attempt{
-                        res_nr = 1, upd_sname = [s4], upd_sdata = undefined,
+                        res_nr = 1, upd_sname = s4, upd_sdata = undefined,
                         upd_script = undefined, resumed = #user_action{}
                     }]
                 }
@@ -1746,20 +1725,20 @@ resume_and_start_test() ->
         (4) -> {ok, P} = eproc_fsm:start_link({local, resume_and_start_test_pid4}, {inst, 104}, Opts), unlink(P), P
     end),
     ok = meck:expect(eproc_fsm__void, code_change, fun
-        (state, [some], {state, b}, undefined) -> {ok, [some], {state, b}};
-        (state, [s2],   d2,         undefined) -> {ok, [s2],   d2};
-        (state, [s3],   d3,         undefined) -> meck:exception(error, function_clause);
-        (state, [s4],   {state, b}, undefined) -> {ok, [s4],   {state, b}}
+        (state, some, {state, b}, undefined) -> {ok, some, {state, b}};
+        (state, s2,   d2,         undefined) -> {ok, s2,   d2};
+        (state, s3,   d3,         undefined) -> meck:exception(error, function_clause);
+        (state, s4,   {state, b}, undefined) -> {ok, s4,   {state, b}}
     end),
     ok = meck:expect(eproc_fsm__void, init, fun
-        ([some], {state, b}) -> ok;
-        ([s2],   d2        ) -> ok;
-        ([s4],   {state, b}) -> ok
+        (some, {state, b}) -> ok;
+        (s2,   d2        ) -> ok;
+        (s4,   {state, b}) -> ok
     end),
     {ok, {inst, 101}}      = eproc_fsm:resume(resume_and_start_test_1, [{start, {default, [aaa]}}, {fsm_ref, {inst, 101}}, {state, unchanged} | Opts]),
-    {ok, {inst, 102}}      = eproc_fsm:resume(resume_and_start_test_2, [{start, yes}, {fsm_ref, {inst, 102}}, {state, {set, [s2], d2, []}} | Opts]),
-    {error, resume_failed} = eproc_fsm:resume(resume_and_start_test_3, [{start, yes}, {fsm_ref, {inst, 103}}, {state, {set, [s3], d3, []}} | Opts]),
-    {ok, {inst, 104}}      = eproc_fsm:resume(resume_and_start_test_4, [{start, yes}, {fsm_ref, {inst, 104}}, {state, {set, [s4], undefined, undefined}} | Opts]),
+    {ok, {inst, 102}}      = eproc_fsm:resume(resume_and_start_test_2, [{start, yes}, {fsm_ref, {inst, 102}}, {state, {set, s2, d2, []}} | Opts]),
+    {error, resume_failed} = eproc_fsm:resume(resume_and_start_test_3, [{start, yes}, {fsm_ref, {inst, 103}}, {state, {set, s3, d3, []}} | Opts]),
+    {ok, {inst, 104}}      = eproc_fsm:resume(resume_and_start_test_4, [{start, yes}, {fsm_ref, {inst, 104}}, {state, {set, s4, undefined, undefined}} | Opts]),
     exit(whereis(resume_and_start_test_pid1), normal),
     exit(whereis(resume_and_start_test_pid2), normal),
     exit(whereis(resume_and_start_test_pid4), normal),
@@ -1799,7 +1778,7 @@ register_outgoing_message_test() ->
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__seq,
                 args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
-                    stt_id = 1, sname = [incrementing],
+                    stt_id = 1, sname = incrementing,
                     sdata = {state, 5}, attr_last_nr = 1, attrs_active = []
                 }
             }}
@@ -1822,7 +1801,7 @@ register_outgoing_message_test() ->
             {ok, InstId, TrnNr}
     end),
     ok = meck:expect(eproc_fsm__seq, handle_state, fun
-        ([incrementing], {event, flip}, St) ->
+        (incrementing, {event, flip}, St) ->
             {ok, IID} = eproc_fsm:id(),
             Src = {inst, IID},
             Dst = {some, out},
@@ -1833,17 +1812,17 @@ register_outgoing_message_test() ->
             ?assertEqual({100, 2, 2, sent}, MID1),
             ?assertEqual({100, 2, 3, sent}, MID2),
             ?assertEqual({100, 2, 4, recv}, MID3),
-            {next_state, [decrementing], St};
-        ([incrementing], {exit,  [decrementing]}, St) -> {ok, St};
-        ([decrementing], {entry, [incrementing]}, St) -> {ok, St}
+            {next_state, decrementing, St};
+        (incrementing, {exit,  decrementing}, St) -> {ok, St};
+        (decrementing, {entry, incrementing}, St) -> {ok, St}
     end),
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
     ?assert(eproc_fsm:is_online(PID)),
     ?assertEqual(ok, eproc_fsm:send_event(PID, flip, [{source, {test, test}}])),
     ?assertEqual(true, eproc_fsm:is_online(PID)),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {event, flip}, '_'])),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[incrementing], {exit, [decrementing]}, '_'])),
-    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [[decrementing], {entry, [incrementing]}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [incrementing, {event, flip}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [incrementing, {exit, decrementing}, '_'])),
+    ?assertEqual(1, meck:num_calls(eproc_fsm__seq, handle_state, [decrementing, {entry, incrementing}, '_'])),
     ?assertEqual(3, meck:num_calls(eproc_fsm__seq, handle_state, '_')),
     ?assertEqual(1, meck:num_calls(eproc_store, add_transition, '_')),
     ?assert(meck:validate([eproc_store, eproc_fsm__seq, eproc_stats])),
@@ -1864,7 +1843,7 @@ register_incoming_message_test() ->
                 inst_id = 100, group = 200, name = name, module = eproc_fsm__mock,
                 args = {}, opts = [], status = running, created = os:timestamp(),
                 curr_state = #inst_state{
-                    stt_id = 1, sname = [sa], sdata = {state, 5},
+                    stt_id = 1, sname = sa, sdata = {state, 5},
                     attr_last_nr = 1, attrs_active = []
                 }
             }}
@@ -1907,12 +1886,12 @@ register_incoming_message_test() ->
             {ok, InstId, TrnNr}
     end),
     ok = meck:expect(eproc_fsm__mock, init, 2, ok),
-    ok = meck:expect(eproc_fsm__mock, code_change, 4, {ok, [sa], {state, 5}}),
+    ok = meck:expect(eproc_fsm__mock, code_change, 4, {ok, sa, {state, 5}}),
     ok = meck:expect(eproc_fsm__mock, handle_state, fun
-        ([sa], {sync, _, get}, St) -> {reply_same, res, St};
-        ([sa], {event, set},   St) -> {next_state, [sb], St};
-        ([sa], {exit,  [sb]},  St) -> {ok, St};
-        ([sb], {entry, [sa]},  St) -> {ok, St}
+        (sa, {sync, _, get}, St) -> {reply_same, res, St};
+        (sa, {event, set},   St) -> {next_state, sb, St};
+        (sa, {exit,  sb},  St) -> {ok, St};
+        (sb, {entry, sa},  St) -> {ok, St}
     end),
     %% Execute the test.
     {ok, PID} = eproc_fsm:start_link({inst, 100}, [{store, store}]),
@@ -1967,25 +1946,6 @@ resolve_event_type_const_test_() -> [
         ?_assertEqual(<<"uuz">>, eproc_fsm:resolve_event_type_const(sync,  uuz,       asd)),
         ?_assertEqual(<<"asd">>, eproc_fsm:resolve_event_type_const(reply, <<"uuu">>, asd))
     ].
-
-
-%%
-%%  Check if orthogonal with a trigger of the form `{entry, _}` works.
-%%
-orthogonal_entry_test() ->
-    meck:new(eproc_fsm__mock, [non_strict]),
-    meck:expect(eproc_fsm__mock, handle_state, fun
-        ({orth, a1,  '_'}, {entry, from}, SD) -> {ok,                          [a1 | SD]};
-        ({orth, '_', b1 }, {entry, from}, SD) -> {next_state, {orth, '_', b2}, [b1 | SD]};
-        ({orth, '_', b2 }, {entry, from}, SD) -> {next_state, {orth, '_', b3}, [b2 | SD]};
-        ({orth, '_', b3 }, {entry, from}, SD) -> {same_state,                  [b3 | SD]}
-    end),
-    ?assertEqual(
-        {next_state, {orth, a1, b3}, [b3, b2, b1, a1]},
-        eproc_fsm:orthogonal({orth, a1, b1}, {entry, from}, [], eproc_fsm__mock)
-    ),
-    ?assert(meck:validate(eproc_fsm__mock)),
-    ok = meck:unload(eproc_fsm__mock).
 
 
 % TODO: Test handling of crashes in callbacks in sync and async calls.

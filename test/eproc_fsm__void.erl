@@ -18,7 +18,7 @@
 %%  Void process for testing `eproc_fsm`. Terminates immediatelly after
 %%  creation. The states are the following:
 %%
-%%      [] --- done ---> [done].
+%%      initial --- done ---> done.
 %%
 -module(eproc_fsm__void).
 -behaviour(eproc_fsm).
@@ -37,7 +37,7 @@
 %%
 %%
 create() ->
-    eproc_fsm:create(?MODULE, {}, []).
+    eproc_fsm:create(?MODULE, {}, initial).
 
 
 %%
@@ -51,7 +51,7 @@ create(Name) ->
 %%
 %%
 start_link(FsmRef) ->
-    eproc_fsm:start_link(?REF(FsmRef), FsmRef, []).
+    eproc_fsm:start_link(?REF(FsmRef), FsmRef, initial).
 
 
 %%
@@ -95,7 +95,7 @@ self_done(Pid) when is_pid(Pid) ->
 %%  FSM init.
 %%
 init({}) ->
-    {ok, #state{}}.
+    {ok, initial, #state{}}.
 
 
 %%
@@ -108,31 +108,28 @@ init(_StateName, _StateData) ->
 %%
 %%
 %%
-handle_state([], {event, done}, StateData) ->
-    {final_state, [done], StateData};
+handle_state(initial, {event, done}, StateData) ->
+    {final_state, done, StateData};
 
 
-handle_state([], {event, close}, StateData) ->
-    {next_state, [closing], StateData};
+handle_state(initial, {event, close}, StateData) ->
+    {next_state, closing, StateData};
 
-handle_state([closing], {entry, []}, StateData) ->
-    {next_state, [closing, cleanup], StateData};
-
-handle_state([closing, cleanup], {entry, []}, StateData) ->
-    {final_state, [closed], StateData};
+handle_state(closing, {entry, initial}, StateData) ->
+    {final_state, closed, StateData};
 
 
-handle_state([], {event, self_done}, StateData) ->
+handle_state(initial, {event, self_done}, StateData) ->
     ok = eproc_fsm:self_send_event(done),
-    {next_state, [waiting], StateData};
+    {next_state, waiting, StateData};
 
-handle_state([waiting], {entry, []}, StateData) ->
+handle_state(waiting, {entry, initial}, StateData) ->
     {ok, StateData};
 
-handle_state([waiting], {self, done}, StateData) ->
-    {final_state, [done], StateData};
+handle_state(waiting, {self, done}, StateData) ->
+    {final_state, done, StateData};
 
-handle_state([waiting], {exit, [done]}, StateData) ->
+handle_state(waiting, {exit, done}, StateData) ->
     {ok, StateData}.
 
 

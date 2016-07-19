@@ -19,9 +19,9 @@
 %%
 %%  States:
 %%
-%%    * []       --create--> [open]
-%%    * [open]   --close---> [closed]
-%%    * [closed] --          final
+%%    * {}     --create--> open
+%%    * open   --close---> closed
+%%    * closed --          final
 %%
 -module(eproc_fsm__inquiry).
 -behaviour(eproc_fsm).
@@ -87,22 +87,22 @@ init(_StateName, _StateData) ->
 %%
 %%  The initial state.
 %%
-handle_state([], {event, {create, CustNr, Inquiry}}, StateData) ->
+handle_state({}, {event, {create, CustNr, Inquiry}}, StateData) ->
     ok = eproc_meta:add_tag(CustNr, cust_nr),
-    {next_state, [open], StateData#state{cust_nr = CustNr, inquiry = Inquiry}};
+    {next_state, open, StateData#state{cust_nr = CustNr, inquiry = Inquiry}};
 
 
 %%
 %%  The `open` state.
 %%
-handle_state([open], {entry, _PrevState}, StateData) ->
+handle_state(open, {entry, _PrevState}, StateData) ->
     {ok, StateData};
 
-handle_state([open], {sync, _From, {close, Resolution}}, StateData) ->
+handle_state(open, {sync, _From, {close, Resolution}}, StateData) ->
     ok = eproc_meta:add_tag(Resolution, resolution),
-    {reply_final, ok, [closed], StateData};
+    {reply_final, ok, closed, StateData};
 
-handle_state([open], {exit, _NextState}, StateData) ->
+handle_state(open, {exit, _NextState}, StateData) ->
     {ok, StateData}.
 
 

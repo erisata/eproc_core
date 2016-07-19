@@ -18,7 +18,7 @@
 %%  Sequence-generating process for testing `eproc_fsm`. Terminates never.
 %%  The states are the following:
 %%
-%%      [] --- reset ---> [incrementing] --- flip ---> [decrementing].
+%%      [] --- reset ---> incrementing --- flip ---> decrementing.
 %%
 
 -module(eproc_fsm__seq).
@@ -105,69 +105,69 @@ init(_StateName, _StateData) ->
 %%
 %%  The initial state.
 %%
-handle_state([], {event, reset}, StateData) ->
-    {next_state, [incrementing], StateData#state{seq = 0}};
+handle_state({}, {event, reset}, StateData) ->
+    {next_state, incrementing, StateData#state{seq = 0}};
 
 
 %%
 %%  The `incrementing` state.
 %%
-handle_state([incrementing], {entry, _PrevState}, StateData) ->
+handle_state(incrementing, {entry, _PrevState}, StateData) ->
     {ok, StateData};
 
-handle_state([incrementing], {event, reset}, StateData) ->
-    {next_state, [incrementing], StateData#state{seq = 0}};
+handle_state(incrementing, {event, reset}, StateData) ->
+    {next_state, incrementing, StateData#state{seq = 0}};
 
-handle_state([incrementing], {event, flip}, StateData) ->
-    {next_state, [decrementing], StateData};
+handle_state(incrementing, {event, flip}, StateData) ->
+    {next_state, decrementing, StateData};
 
-handle_state([incrementing], {event, skip}, StateData = #state{seq = Seq}) ->
+handle_state(incrementing, {event, skip}, StateData = #state{seq = Seq}) ->
     {same_state, StateData#state{seq = Seq + 1}};
 
-handle_state([incrementing], {event, close}, StateData) ->
-    {final_state, [closed], StateData};
+handle_state(incrementing, {event, close}, StateData) ->
+    {final_state, closed, StateData};
 
-handle_state([incrementing], {sync, _From, next}, StateData = #state{seq = Seq}) ->
-    {reply_next, {ok, Seq}, [incrementing], StateData#state{seq = Seq + 1}};
+handle_state(incrementing, {sync, _From, next}, StateData = #state{seq = Seq}) ->
+    {reply_next, {ok, Seq}, incrementing, StateData#state{seq = Seq + 1}};
 
-handle_state([incrementing], {sync, _From, get}, StateData = #state{seq = Seq}) ->
+handle_state(incrementing, {sync, _From, get}, StateData = #state{seq = Seq}) ->
     {reply_same, {ok, Seq}, StateData};
 
-handle_state([incrementing], {sync, _From, last}, StateData = #state{seq = Seq}) ->
-    {reply_final, {ok, Seq}, [closed], StateData};
+handle_state(incrementing, {sync, _From, last}, StateData = #state{seq = Seq}) ->
+    {reply_final, {ok, Seq}, closed, StateData};
 
-handle_state([incrementing], {exit, _NextState}, StateData) ->
+handle_state(incrementing, {exit, _NextState}, StateData) ->
     {ok, StateData};
 
 
 %%
 %%  The `decrementing` state.
 %%
-handle_state([decrementing], {entry, _PrevState}, StateData) ->
+handle_state(decrementing, {entry, _PrevState}, StateData) ->
     {ok, StateData};
 
-handle_state([decrementing], {event, reset}, StateData) ->
-    {next_state, [decrementing], StateData#state{seq = 0}};
+handle_state(decrementing, {event, reset}, StateData) ->
+    {next_state, decrementing, StateData#state{seq = 0}};
 
-handle_state([decrementing], {event, flip}, StateData) ->
-    {next_state, [incrementing], StateData};
+handle_state(decrementing, {event, flip}, StateData) ->
+    {next_state, incrementing, StateData};
 
-handle_state([decrementing], {event, skip}, StateData = #state{seq = Seq}) ->
+handle_state(decrementing, {event, skip}, StateData = #state{seq = Seq}) ->
     {same_state, StateData#state{seq = Seq - 1}};
 
-handle_state([decrementing], {event, close}, StateData) ->
-    {final_state, [closed], StateData};
+handle_state(decrementing, {event, close}, StateData) ->
+    {final_state, closed, StateData};
 
-handle_state([decrementing], {sync, _From, next}, StateData = #state{seq = Seq}) ->
-    {reply_next, {ok, Seq}, [decrementing], StateData#state{seq = Seq - 1}};
+handle_state(decrementing, {sync, _From, next}, StateData = #state{seq = Seq}) ->
+    {reply_next, {ok, Seq}, decrementing, StateData#state{seq = Seq - 1}};
 
-handle_state([decrementing], {sync, _From, get}, StateData = #state{seq = Seq}) ->
+handle_state(decrementing, {sync, _From, get}, StateData = #state{seq = Seq}) ->
     {reply_same, {ok, Seq}, StateData};
 
-handle_state([decrementing], {sync, _From, last}, StateData = #state{seq = Seq}) ->
-    {reply_final, {ok, Seq}, [closed], StateData};
+handle_state(decrementing, {sync, _From, last}, StateData = #state{seq = Seq}) ->
+    {reply_final, {ok, Seq}, closed, StateData};
 
-handle_state([decrementing], {exit, _NextState}, StateData) ->
+handle_state(decrementing, {exit, _NextState}, StateData) ->
     {ok, StateData}.
 
 

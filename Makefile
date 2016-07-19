@@ -19,6 +19,10 @@ MIBS=\
     mibs/ERISATA-EPROC-MIB.mib\
     mibs/ERISATA-EPROC-CORE-MIB.mib
 
+EUNIT_ARGS=
+CT_ARGS=
+
+
 all: compile-all
 
 deps:
@@ -40,10 +44,10 @@ smilint:
 
 test: compile
 	mkdir -p logs
-	env ERL_LIBS=deps ERL_AFLAGS='-config test/sys -s lager' $(REBAR) eunit skip_deps=true verbose=1
+	env ERL_LIBS=deps ERL_AFLAGS='-config test/sys -s lager' $(REBAR) eunit skip_deps=true verbose=1 $(EUNIT_ARGS)
 
 itest: compile
-	$(REBAR) ct skip_deps=true || grep Testing logs/raw.log
+	$(REBAR) ct skip_deps=true $(CT_ARGS) || grep Testing logs/raw.log
 
 clean: clean-itest
 	$(REBAR) clean skip_deps=true

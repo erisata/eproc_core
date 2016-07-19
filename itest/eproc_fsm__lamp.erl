@@ -133,17 +133,23 @@ init(_StateName, _StateData) ->
 -spec handle_state(state(), term(), #data{}) -> term().
 
 handle_state(initial, {sync, _From, create}, StateData) ->
-    {reply_next, ok, #operated{broken = no, switch = off}, StateData};
+    {reply_next, ok, #operated{_ = initial}, StateData};
 
 
 %
 %   The `operated` state -- this state is orthogonal.
 %
+handle_state(#operated{switch = initial}, {entry, _PrevSName}, StateData) ->
+    {next_state, #operated{switch = off}, StateData};  % broken = no,
+
 handle_state(#operated{switch = on}, {entry, _PrevSName}, StateData = #data{events = Events}) ->
     {ok, StateData#data{events = [on | Events]}};
 
 handle_state(#operated{switch = off}, {entry, _PrevSName}, StateData = #data{events = Events}) ->
     {ok, StateData#data{events = [off | Events]}};
+
+handle_state(#operated{broken = initial}, {entry, _PrevSName}, StateData) ->
+    {next_state, #operated{broken = no}, StateData};
 
 handle_state(#operated{}, {entry, _PrevSName}, StateData) ->
     % NOTE: We don't handle lamp brokes and fixes.
@@ -172,7 +178,7 @@ handle_state(#operated{broken = Broken, switch = Switch}, {sync, _From, state}, 
     {reply_same, {ok, {Broken, Switch}}, StateData};
 
 handle_state(#operated{}, {sync, _From, recycle}, StateData) ->
-    {reply_final, ok, [recycled], StateData};
+    {reply_final, ok, recycled, StateData};
 
 handle_state(#operated{}, {exit, _NextState}, StateData) ->
     {ok, StateData}.
