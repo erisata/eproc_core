@@ -2846,12 +2846,15 @@ perform_entry(PrevSName, NextSName, SData, State = #state{module = Module, opts 
         {next, NewSName, NewSData} ->
             case proplists:get_bool(state_events, Opts) of
                 true ->
-                    case Module:handle_state(NewSName, state, NewSData) of
+                    {ok, DerivedNewSName} = derive_next_state(NewSName, PrevSName),
+                    case Module:handle_state(DerivedNewSName, state, NewSData) of
                         ok ->
                             {next, NewSName, NewSData};
                         ignore ->
                             {next, NewSName, NewSData};
                         {ok, OtherSData} ->
+                            {next, NewSName, OtherSData};
+                        {same_state, OtherSData} ->
                             {next, NewSName, OtherSData};
                         {next_state, OtherSName, OtherSData} ->
                             perform_entry(PrevSName, OtherSName, OtherSData, State)
