@@ -561,7 +561,7 @@
                        {Type, Source, From, Message} |
                        {exit, NextStateName} |
                        {entry, PrevStateName} |
-                       state,
+                       {entered, PrevStateName},
         StateData   :: state_data()
     ) ->
         {same_state, NewStateData} |
@@ -2847,10 +2847,8 @@ perform_entry(PrevSName, NextSName, SData, State = #state{module = Module, opts 
             case proplists:get_bool(state_events, Opts) of
                 true ->
                     {ok, DerivedNewSName} = derive_next_state(NewSName, PrevSName),
-                    case Module:handle_state(DerivedNewSName, state, NewSData) of
+                    case Module:handle_state(DerivedNewSName, {entered, PrevSName}, NewSData) of
                         ok ->
-                            {next, NewSName, NewSData};
-                        ignore ->
                             {next, NewSName, NewSData};
                         {ok, OtherSData} ->
                             {next, NewSName, OtherSData};
