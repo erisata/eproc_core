@@ -2796,8 +2796,16 @@ perform_event_transition(Trigger, TrnNr, InitAttrActions, State) ->
             {reply, ReplyMsgCId, ReplyMsg, false};
         {true, noreply, {reply, ReplyMsgCId, ReplyMsg}} ->
             {reply, ReplyMsgCId, ReplyMsg, true};
+        {true, noreply, noreply} ->
+            erlang:exit({reply_missing, TriggerMsg});
+        {true, {reply, ReplyMsg}, {reply, _ReplyMsgCId, ReplyMsgExplicit}} ->
+            erlang:exit({already_replied, TriggerMsg, ReplyMsg, ReplyMsgExplicit});
         {false, noreply, noreply} ->
-            noreply
+            noreply;
+        {false, noreply, {reply, _ReplyMsgCId, ReplyMsgExplicit}} ->
+            erlang:exit({unexpected_reply, TriggerMsg, ReplyMsgExplicit});
+        {false, {reply, ReplyMsg}, _} ->
+            erlang:exit({unexpected_reply, TriggerMsg, ReplyMsg})
     end,
     %
     {ProcAction, SNameAfterTrn, SDataAfterTrn} = case TrnMode of
