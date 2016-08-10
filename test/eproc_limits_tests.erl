@@ -26,6 +26,7 @@ main_test_() ->
     Tests = fun (PID) -> [
         test_empty(PID),
         test_series_single(PID),
+        test_series_single_multi_fail(PID),
         test_series_multi(PID),
         test_rate_single(PID),
         test_rate_multi(PID),
@@ -91,6 +92,31 @@ test_series_single(_PID) ->
     ?_assertMatch(
         [ok, ok, ok, {reached, [some]}, ok, ok, ok, {reached, [some]}],
         [R11, R12, R13, R14, R21, R22, R23, R24]
+    ).
+
+
+%%
+%%  Check is single `series` limit works, if there are several fails during NewAfter time.
+%%
+test_series_single_multi_fail(_PID) ->
+    Proc = ?MODULE,
+    Name = ?LINE,
+    ok  = eproc_limits:setup(Proc, Name, {series, some, 3, {150, ms}, notify}),
+    R11 = eproc_limits:notify(Proc, Name, 1),
+    R12 = eproc_limits:notify(Proc, Name, 1),
+    R13 = eproc_limits:notify(Proc, Name, 1),
+    R14 = eproc_limits:notify(Proc, Name, 1),
+    timer:sleep(100),
+    R15 = eproc_limits:notify(Proc, Name, 1),
+    timer:sleep(100),
+    R21 = eproc_limits:notify(Proc, Name, 1),
+    R22 = eproc_limits:notify(Proc, Name, 1),
+    R23 = eproc_limits:notify(Proc, Name, 1),
+    R24 = eproc_limits:notify(Proc, Name, 1),
+    ok  = eproc_limits:cleanup(Proc, Name),
+    ?_assertMatch(
+        [ok, ok, ok, {reached, [some]}, {reached, [some]}, ok, ok, ok, {reached, [some]}],
+        [R11, R12, R13, R14, R15, R21, R22, R23, R24]
     ).
 
 
