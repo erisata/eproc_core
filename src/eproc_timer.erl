@@ -619,7 +619,7 @@ handle_event(_InstId, Attribute, _State, fired) ->
 
 handle_event(InstId, Attribute, AttrState, trigger) ->
     ok = stop_timer(AttrState),
-    lager:info("Forcing triggering of a timer ~p for fsm=~p", [Attribute, InstId]),
+    lager:info("Triggering timer ~p on explicit request for fsm=~p", [Attribute, InstId]),
     handle_event(InstId, Attribute, AttrState, fired).
 
 
