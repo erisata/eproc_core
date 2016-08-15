@@ -916,6 +916,10 @@ is_state_in_scope(State, {Scope}) ->
 is_state_in_scope(State, Scope) when State =:= Scope; Scope =:= {}; Scope =:= '_' ->
     true;
 
+is_state_in_scope(_State, []) ->
+    % TODO: Remove this case. It is here only to migrate old processes, where tags used [] as a scope.
+    true;
+
 is_state_in_scope(State, Scope) when tuple_size(State) > 0 ->
     [StateName | StateRegions] = tuple_to_list(State),
     case Scope of
