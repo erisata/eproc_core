@@ -141,7 +141,7 @@ test_series_multi(_PID) ->
     R24 = eproc_limits:notify(Proc, Name, 1),
     ok  = eproc_limits:cleanup(Proc, Name),
     ?_assertMatch(
-        [ok, ok, ok, {reached, [short]}, ok, {reached, [long]}, {reached, [long]}, {reached, [short, long]}],
+        [ok, ok, ok, {reached, [short]}, ok, ok, {reached, [long]}, {reached, [long]}],
         [R11, R12, R13, R14, R21, R22, R23, R24]
     ).
 
@@ -176,22 +176,25 @@ test_rate_multi(_PID) ->
     Proc = ?MODULE,
     Name = ?LINE,
     ok = eproc_limits:setup(Proc, Name, [
-        {rate, short, 3, {150, ms}, notify},
-        {rate, long,  5, {1, s},    notify}
+        {rate, short, 2, {200, ms}, notify},
+        {rate, long,  5, {  1, s }, notify}
     ]),
-    R1 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60),
-    R2 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60),
-    R3 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60),
-    R4 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60),
-    R5 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60),
-    R6 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60),
-    R7 = eproc_limits:notify(Proc, Name, 1),
-    R8 = eproc_limits:notify(Proc, Name, 1), timer:sleep(200),
-    R9 = eproc_limits:notify(Proc, Name, 1),
+    R01 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60), % a, short: {a}     = 1/200ms - ok,      long: 1/1s - ok
+    R02 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60), % b, short: {a,b}   = 2/200ms - ok,      long: 2/1s - ok
+    R03 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60), % c, short: {a,b,c} = 3/200ms - reached, long: 2/1s - ok
+    R04 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60), % d, short: {a,b,d} = 3/200ms - reached, long: 2/1s - ok
+    R05 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60), % e, short: {b,e}   = 2/200ms - ok,      long: 3/1s - ok
+    R06 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60), % f, short: {e,f}   = 2/200ms - ok,      long: 4/1s - ok
+    R07 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60), % g, short: {e,f,g} = 3/200ms - reached, long: 4/1s - ok
+    R08 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60), % h, short: {e,f,h} = 3/200ms - reached, long: 4/1s - ok
+    R09 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60), % i, short: {f,i}   = 3/200ms - ok,      long: 5/1s - ok
+    R10 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60), % j, short: {i,j}   = 2/200ms - ok,      long: 6/1s - reached
     ok = eproc_limits:cleanup(Proc, Name),
+    S = {reached, [short]},
+    L = {reached, [long]},
     ?_assertMatch(
-        [ok, ok, ok, ok, ok, {reached, [long]}, {reached, [long]}, {reached, [short, long]}, {reached, [long]}],
-        [R1, R2, R3, R4, R5, R6, R7, R8, R9]
+        [ok, ok,   S,   S,   ok,  ok,  S,   S,   ok,  L  ],
+        [R01, R02, R03, R04, R05, R06, R07, R08, R09, R10]
     ).
 
 
@@ -205,20 +208,20 @@ test_mixed_limit(_PID) ->
         {series, short, 3, {150, ms}, notify},
         {rate,   long,  5, {1, s},    notify}
     ]),
-    R1 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60),
-    R2 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60),
-    R3 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60),
-    R4 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60),
-    R5 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60),
-    R6 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60),
-    R7 = eproc_limits:notify(Proc, Name, 1),
-    R8 = eproc_limits:notify(Proc, Name, 1), timer:sleep(200),
-    R9 = eproc_limits:notify(Proc, Name, 1),
+    R1 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60),   % a, {a}       in series - ok;      rate 1/s - ok
+    R2 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60),   % b, {a,b}     in series - ok;      rate 2/s - ok
+    R3 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60),   % c, {a,b,c}   in series - ok;      rate 3/s - ok
+    R4 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60),   % d, {a,b,c,d} in series - reached; rate 3/s - ok
+    R5 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60),   % e, {a,b,c,e} in series - reached; rate 3/s - ok
+    R6 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60),   % f, {f}       in series - ok;      rate 4/s - ok
+    R7 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60),   % g, {f,g}     in series - ok;      rate 5/s - ok
+    R8 = eproc_limits:notify(Proc, Name, 1), timer:sleep(60),   % h, {f,g,h}   in series - ok;      rate 6/s - reached
+    R9 = eproc_limits:notify(Proc, Name, 1),                    % i, {f,g,i}   in series - ok;      rate 6/s - reached
     ok = eproc_limits:cleanup(Proc, Name),
+    S = {reached, [short]},
+    L = {reached, [long]},
     ?_assertMatch(
-        [ok, ok, ok,
-            {reached, [short]}, {reached, [short]}, {reached, [short, long]},
-            {reached, [short, long]}, {reached, [short, long]}, {reached, [long]}],
+        [ok, ok, ok, S,  S,  ok, ok, L,  L ],
         [R1, R2, R3, R4, R5, R6, R7, R8, R9]
     ).
 
@@ -232,17 +235,17 @@ test_multi_limit(_PID) ->
     Name2 = ?LINE,
     ok = eproc_limits:setup(Proc, Name1, {series, some, 1, {150, ms}, notify}),
     ok = eproc_limits:setup(Proc, Name2, {series, some, 3, {150, ms}, notify}),
-    R1 = eproc_limits:notify(Proc, [{Name1, 1}, {Name2, 1}]),
-    R2 = eproc_limits:notify(Proc, [{Name1, 1}, {Name2, 1}]),
-    R3 = eproc_limits:notify(Proc, [{Name1, 1}, {Name2, 1}]),
-    R4 = eproc_limits:notify(Proc, [{Name1, 1}, {Name2, 1}]),
+    R1 = eproc_limits:notify(Proc, [{Name1, 1}, {Name2, 1}]),   % a, n1: 1 - ok,      n2: 1 - ok
+    R2 = eproc_limits:notify(Proc, [{Name1, 1}, {Name2, 1}]),   % b, n1: 2 - reached, n2: 2 - ok
+    R3 = eproc_limits:notify(Proc, [{Name1, 1}, {Name2, 1}]),   % c, n1: 2 - reached, n2: 2 - ok
+    R4 = eproc_limits:notify(Proc, [{Name1, 1}, {Name2, 1}]),   % d, n1: 2 - reached, n2: 2 - ok
     ok = eproc_limits:cleanup(Proc),
     ?_assertMatch(
         [
             ok,
             {reached, [{Name1, [some]}]},
             {reached, [{Name1, [some]}]},
-            {reached, [{Name1, [some]}, {Name2, [some]}]}
+            {reached, [{Name1, [some]}]}
         ],
         [R1, R2, R3, R4]
     ).

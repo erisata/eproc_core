@@ -17,7 +17,7 @@
 %%
 %%  This module allows to manage some reccuring events. Several
 %%  strategies are supported for this. The process that reports the events
-%%  can be delayed with constant and exponentially increasing delays
+%%  can be delayed with constant or exponentially increasing delays
 %%  or can be notified, when some counter limit is reached.
 %%
 %%  This module is used in `eproc_fsm` to limit restart rate as well
@@ -44,6 +44,12 @@
 %%  of delays and event rates/intervals. Without this, the delays would make
 %%  limit conditions to fail, when the limit time intervals are smaller
 %%  than delays (this is the common case).
+%%
+%%  The notifications that trigger reach of some of the limits are dropped
+%%  and leave all the counters unchanged. This is needed to avoid the deadlocks
+%%  that may occur at a notification rate constantly exceeding the configured
+%%  limits. If the rejected events were counted, the limit would be reached
+%%  all the time, and all the notifications would be reported as a limit reach.
 %%
 %%  Several types of counter limits are implemented:
 %%
@@ -265,10 +271,16 @@ notify(ProcessName, CounterName, Count) when Count > 0 ->
                 {ok, L, N, [], D} -> {{delay, D},   L, N, D};
                 {ok, L, N, R, _D} -> {{reached, R}, L, N, 0}
             end,
-            NewNotifs  = [ThisNotif#notif{delay = Delay} | FilteredNotifs],
-            NewCounter = Counter#counter{limits = NewLimits, notifs = NewNotifs},
-            true = ets:insert(?MODULE, NewCounter),
-            Response
+            case Response of
+                {reached, Limits} ->
+                    % Do not count the events, that were rejected.
+                    {reached, Limits};
+                _ ->
+                    NewNotifs  = [ThisNotif#notif{delay = Delay} | FilteredNotifs],
+                    NewCounter = Counter#counter{limits = NewLimits, notifs = NewNotifs},
+                    true = ets:insert(?MODULE, NewCounter),
+                    Response
+            end
     end.
 
 
@@ -331,7 +343,7 @@ notify(ProcessName, Counters) ->
             lists:foldl(SaveCounters, Delay, HandledCounters),
             {delay, Delay};
         {reached, Limits} ->
-            lists:foldl(SaveCounters, 0, HandledCounters),
+            % Do not count the events, that were rejected.
             {reached, Limits};
         {error, Reason} ->
             {error, Reason}
