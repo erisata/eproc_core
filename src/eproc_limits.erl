@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013-2015 Erisata, UAB (Ltd.)
+%| Copyright 2013-2016 Erisata, UAB (Ltd.)
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -14,65 +14,64 @@
 %| limitations under the License.
 %\--------------------------------------------------------------------
 
-%%
-%%  This module allows to manage some reccuring events. Several
-%%  strategies are supported for this. The process that reports the events
-%%  can be delayed with constant or exponentially increasing delays
-%%  or can be notified, when some counter limit is reached.
-%%
-%%  This module is used in `eproc_fsm` to limit restart rate as well
-%%  as transition and message rates. Nevertheless, this module is not
-%%  tied to the `eproc_fsm` and can be used by other modules.
-%%
-%%  This module manages counters, and each of the counters can have
-%%  multiple limits set. Each limit has own action, that is applied
-%%  when the limit is reached. If several actions are fired,
-%%  the following rules apply:
-%%
-%%    * If several limits with delay actions are triggered,
-%%      maximum of all the delays is returned.
-%%    * If delay is triggered together with notification,
-%%      the delays are ignored and the notifications are returned.
-%%
-%%  Each process can have several counters, that can be later notified,
-%%  reset or cleaned up in one go. Altrough process name is an
-%%  arbitraty term and is not related to Erlang process in any way.
-%%
-%%  Delays, returned by this module (as a response to `notify/*`)
-%%  are extracted from the time intervals between the notifications
-%%  when calculating limits. This is done in order to avoid interferrence
-%%  of delays and event rates/intervals. Without this, the delays would make
-%%  limit conditions to fail, when the limit time intervals are smaller
-%%  than delays (this is the common case).
-%%
-%%  The notifications that trigger reach of some of the limits are dropped
-%%  and leave all the counters unchanged. This is needed to avoid the deadlocks
-%%  that may occur at a notification rate constantly exceeding the configured
-%%  limits. If the rejected events were counted, the limit would be reached
-%%  all the time, and all the notifications would be reported as a limit reach.
-%%
-%%  Several types of counter limits are implemented:
-%%
-%%    * `series` - counts events in a series, where events in one
-%%      series have distance not more than specified time interval.
-%%    * `rate` - measures event rate. This is similar to supervisor's
-%%      restart counters.
-%%
-%%  For more details, look at descriptions of the corresponding types.
-%%
-%%  Examples:
-%%
-%%      eproc_limits:setup({eproc_fsm, InstId}, restart, [
-%%          {series, delays, 1,    {10, min}, {delay, {100, ms}, 1.1, {1, hour}}},
-%%          {series, giveup, 1000, {10, min}, notify}
-%%      ]).
-%%
-%%      eproc_limits:setup({eproc_fsm, InstId}, transition, [
-%%          {series, burst, 100,   {200, min}, notify},
-%%          {series, total, 10000, {1, year},  notify}
-%%      ]).
-%%
-%%
+%%%
+%%% This module allows to manage some reccuring events. Several
+%%% strategies are supported for this. The process that reports the events
+%%% can be delayed with constant or exponentially increasing delays
+%%% or can be notified, when some counter limit is reached.
+%%%
+%%% This module is used in `eproc_fsm` to limit restart rate as well
+%%% as transition and message rates. Nevertheless, this module is not
+%%% tied to the `eproc_fsm` and can be used by other modules.
+%%%
+%%% This module manages counters, and each of the counters can have
+%%% multiple limits set. Each limit has own action, that is applied
+%%% when the limit is reached. If several actions are fired,
+%%% the following rules apply:
+%%%
+%%%   * If several limits with delay actions are triggered,
+%%%     maximum of all the delays is returned.
+%%%   * If delay is triggered together with notification,
+%%%     the delays are ignored and the notifications are returned.
+%%%
+%%% Each process can have several counters, that can be later notified,
+%%% reset or cleaned up in one go. Altrough process name is an
+%%% arbitraty term and is not related to Erlang process in any way.
+%%%
+%%% Delays, returned by this module (as a response to `notify/*`)
+%%% are extracted from the time intervals between the notifications
+%%% when calculating limits. This is done in order to avoid interferrence
+%%% of delays and event rates/intervals. Without this, the delays would make
+%%% limit conditions to fail, when the limit time intervals are smaller
+%%% than delays (this is the common case).
+%%%
+%%% The notifications that trigger reach of some of the limits are dropped
+%%% and leave all the counters unchanged. This is needed to avoid the deadlocks
+%%% that may occur at a notification rate constantly exceeding the configured
+%%% limits. If the rejected events were counted, the limit would be reached
+%%% all the time, and all the notifications would be reported as a limit reach.
+%%%
+%%% Several types of counter limits are implemented:
+%%%
+%%%   * `series` - counts events in a series, where events in one
+%%%     series have distance not more than specified time interval.
+%%%   * `rate` - measures event rate. This is similar to supervisor's
+%%%     restart counters.
+%%%
+%%% For more details, look at descriptions of the corresponding types.
+%%%
+%%% Examples:
+%%%
+%%%     eproc_limits:setup({eproc_fsm, InstId}, restart, [
+%%%         {series, delays, 1,    {10, min}, {delay, {100, ms}, 1.1, {1, hour}}},
+%%%         {series, giveup, 1000, {10, min}, notify}
+%%%     ]).
+%%%
+%%%     eproc_limits:setup({eproc_fsm, InstId}, transition, [
+%%%         {series, burst, 100,   {200, min}, notify},
+%%%         {series, total, 10000, {1, year},  notify}
+%%%     ]).
+%%%
 -module(eproc_limits).
 -behaviour(gen_server).
 -export([start_link/0, setup/3, notify/3, notify/2, reset/2, reset/1, cleanup/2, cleanup/1, info/1]).
@@ -156,9 +155,9 @@
 
 
 
-%% =============================================================================
-%%  Internal state of the module.
-%% =============================================================================
+%%% ============================================================================
+%%% Internal state of the module.
+%%% ============================================================================
 
 %%
 %%  State for the governing process.
@@ -201,9 +200,9 @@
 
 
 
-%% =============================================================================
-%%  Public API.
-%% =============================================================================
+%%% ============================================================================
+%%% Public API.
+%%% ============================================================================
 
 %%
 %%  Initializes the restart manager.
@@ -406,9 +405,9 @@ info(count) ->
 
 
 
-%% =============================================================================
-%%  Callbacks for `gen_server`.
-%% =============================================================================
+%%% ============================================================================
+%%% Callbacks for `gen_server`.
+%%% ============================================================================
 
 %%
 %%  The initialization is implemented asynchronously to avoid timeouts when
@@ -458,9 +457,9 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 
-%% =============================================================================
-%%  Internal functions.
-%% =============================================================================
+%%% ============================================================================
+%%% Internal functions.
+%%% ============================================================================
 
 
 %%
@@ -606,9 +605,10 @@ timestamp_ms() ->
 
 
 
-%% =============================================================================
-%%  Unit tests for private functions.
-%% =============================================================================
+%%% ============================================================================
+%%% Unit tests for private functions.
+%%% ============================================================================
+
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 
