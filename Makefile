@@ -53,7 +53,7 @@ clean: clean-itest
 	$(REBAR) clean skip_deps=true
 
 clean-all: clean-itest
-	$(REBAR) clean
+	$(REBAR) clean --recursive
 
 clean-itest:
 	rm -f itest/*.beam
