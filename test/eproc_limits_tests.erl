@@ -30,6 +30,7 @@ main_test_() ->
         test_series_multi(PID),
         test_rate_single(PID),
         test_rate_multi(PID),
+        test_rate_multi_long(PID),
         test_mixed_limit(PID),
         test_multi_limit(PID),
         test_delay_const(PID),
@@ -195,6 +196,42 @@ test_rate_multi(_PID) ->
     ?_assertMatch(
         [ok, ok,   S,   S,   ok,  ok,  S,   S,   ok,  L  ],
         [R01, R02, R03, R04, R05, R06, R07, R08, R09, R10]
+    ).
+
+
+%%
+%%  Check if multiple `rate` limits work after both limits are reached some time.
+%%
+test_rate_multi_long(_PID) ->
+    Proc = ?MODULE,
+    Name = ?LINE,
+    ok = eproc_limits:setup(Proc, Name, [
+        {rate, short, 2, {200, ms}, notify},
+        {rate, long,  5, {600, ms}, notify}
+    ]),
+    R01 = eproc_limits:notify(Proc, Name, 1), timer:sleep(80), % 0000s, a, short: {a}     = 1/200ms - ok,      {a}           = long: 1/600ms - ok
+    R02 = eproc_limits:notify(Proc, Name, 1), timer:sleep(80), % 0080s, b, short: {a,b}   = 2/200ms - ok,      {a,b}         = long: 2/600ms - ok
+    R03 = eproc_limits:notify(Proc, Name, 1), timer:sleep(80), % 0160s, c, short: {a,b,c} = 3/200ms - reached, {a,b,c}       = long: 3/600ms - ok
+    R04 = eproc_limits:notify(Proc, Name, 1), timer:sleep(80), % 0240s, d, short: {b,d}   = 2/200ms - ok,      {a,b,d}       = long: 3/600ms - ok
+    R05 = eproc_limits:notify(Proc, Name, 1), timer:sleep(80), % 0320s, e, short: {d,e}   = 2/200ms - ok,      {a,b,d,e}     = long: 4/600ms - ok
+    R06 = eproc_limits:notify(Proc, Name, 1), timer:sleep(80), % 0400s, f, short: {d,e,f} = 3/200ms - reached, {a,b,d,e,f}   = long: 5/600ms - ok
+    R07 = eproc_limits:notify(Proc, Name, 1), timer:sleep(80), % 0480s, g, short: {e,g}   = 2/200ms - ok,      {a,b,d,e,g}   = long: 5/600ms - ok
+    R08 = eproc_limits:notify(Proc, Name, 1), timer:sleep(80), % 0560s, h, short: {g,h}   = 2/200ms - ok,      {a,b,d,e,g,h} = long: 6/600ms - reached
+    R09 = eproc_limits:notify(Proc, Name, 1), timer:sleep(80), % 0640s, i, short: {g,i}   = 2/200ms - ok,      {b,d,e,g,i}   = long: 5/600ms - ok
+    R10 = eproc_limits:notify(Proc, Name, 1), timer:sleep(80), % 0720s, j, short: {i,j}   = 2/200ms - ok,      {d,e,g,i,j}   = long: 5/600ms - ok
+    R11 = eproc_limits:notify(Proc, Name, 1), timer:sleep(80), % 0800s, k, short: {i,j,k} = 3/200ms - reached, {d,e,g,i,j,k} = long: 6/600ms - reached
+    R12 = eproc_limits:notify(Proc, Name, 1), timer:sleep(80), % 0880s, l, short: {j,l}   = 2/200ms - ok,      {e,g,i,j,l}   = long: 5/600ms - ok
+    R13 = eproc_limits:notify(Proc, Name, 1), timer:sleep(80), % 0960s, m, short: {l,m}   = 2/200ms - ok,      {g,i,j,l,m}   = long: 5/600ms - ok
+    R14 = eproc_limits:notify(Proc, Name, 1), timer:sleep(80), % 1040s, n, short: {l,m,n} = 3/200ms - reached, {g,i,j,l,m,n} = long: 6/600ms - reached
+    R15 = eproc_limits:notify(Proc, Name, 1), timer:sleep(80), % 1120s, o, short: {m,o}   = 2/200ms - ok,      {i,j,l,m,o}   = long: 5/600ms - ok
+    R16 = eproc_limits:notify(Proc, Name, 1), timer:sleep(80), % 1200s, p, short: {o,p}   = 2/200ms - ok,      {i,j,l,m,o,p} = long: 6/600ms - reached
+    ok = eproc_limits:cleanup(Proc, Name),
+    S  = {reached, [short]},
+    L  = {reached, [long]},
+    SL = {reached, [short, long]},
+    ?_assertMatch(
+        [ok,  ok,  S,   ok,  ok,  S,   ok,  L,   ok,  ok,  SL,  ok,  ok,  SL,  ok,  L  ],
+        [R01, R02, R03, R04, R05, R06, R07, R08, R09, R10, R11, R12, R13, R14, R15, R16]
     ).
 
 
