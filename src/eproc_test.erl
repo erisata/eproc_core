@@ -18,7 +18,7 @@
 %%% This module is helpful for testing FSM implementations.
 %%%
 -module(eproc_test).
--export([get_state/1, get_state/2, wait_term/1, wait_term/2]).
+-export([get_running_ref/1, get_state/1, get_state/2, wait_term/1, wait_term/2]).
 -include("eproc.hrl").
 
 -define(WAIT_TERM_REPEAT, 10).
@@ -28,6 +28,21 @@
 %%% ============================================================================
 %%% Public API.
 %%% ============================================================================
+
+
+%%
+%% Function returns fsm reference of process with this name, which is currently running.
+%%
+-spec get_running_ref(Name :: inst_name()) -> {ok, FsmRef :: fsm_ref()} | {error, Reason :: term()}.
+
+get_running_ref(Name) ->
+    case eproc_store:get_instance(undefined, {filter, {1, 2}, [{name, Name}, {status, running}]}, header) of
+        {ok, {0, _, []                           }} -> {error, not_found};
+        {ok, {1, _, [#instance{inst_id = InstId}]}} -> {ok, {inst, InstId}};
+        {ok, {_, _, Multiple                     }} -> {error, {multiple, Multiple}};
+        {error, Reason}                             -> {error, Reason}
+    end.
+
 
 %%
 %% Function return instance status and state name.
