@@ -95,7 +95,7 @@
 %%
 -type event_src() ::
     {inst, inst_id()} |
-    {admin, #user{}} |
+    {admin, #user{} | undefined} |
     {Type :: atom(), Id :: term()} |
     undefined.
 
