@@ -28,6 +28,7 @@
 %%% TODO: Add tests.
 %%%
 -module(eproc_gen_active).
+-compile([{parse_transform, lager_transform}]).
 -export([state/4]).
 
 %%
