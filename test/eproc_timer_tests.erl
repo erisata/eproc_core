@@ -425,12 +425,37 @@ timestamp_parse_test_() ->
     TS3 = eproc_timer:timestamp({{2014,9,02},{14,17,3}},       local),
     TS4 = eproc_timer:timestamp({{2014,9,02},{14,17,3}, 4000}, local),
     TS5 = eproc_timer:timestamp({{2014,9,02},{14,17,3}, 4004}, local),
+    TS6 = {1500, 544052, 000000}, % UTC 20th July 2017, 09:47:32
+    TS7 = {1500, 544052, 004000}, % UTC 20th July 2017, 09:47:32.004
+    TS8 = {1500, 544052, 004004}, % UTC 20th July 2017, 09:47:32.004004
     [
-        ?_assertEqual(TS0, eproc_timer:timestamp_parse(<<"2014-09-02T14:17:03Z">>,        iso8601)),
-        ?_assertEqual(TS1, eproc_timer:timestamp_parse(<<"2014-09-02T14:17:03.004Z">>,    iso8601)),
-        ?_assertEqual(TS2, eproc_timer:timestamp_parse(<<"2014-09-02T14:17:03.004004Z">>, iso8601)),
-        ?_assertEqual(TS3, eproc_timer:timestamp_parse(<<"2014-09-02T14:17:03">>,         iso8601)),
-        ?_assertEqual(TS4, eproc_timer:timestamp_parse(<<"2014-09-02T14:17:03.004">>,     iso8601)),
-        ?_assertEqual(TS5, eproc_timer:timestamp_parse(<<"2014-09-02T14:17:03.004004">>,  iso8601))
-    ].
+        ?_assertEqual(TS0, eproc_timer:timestamp_parse(<<"2014-09-02T14:17:03Z">>,             iso8601)),
+        ?_assertEqual(TS1, eproc_timer:timestamp_parse(<<"2014-09-02T14:17:03.004Z">>,         iso8601)),
+        ?_assertEqual(TS2, eproc_timer:timestamp_parse(<<"2014-09-02T14:17:03.004004Z">>,      iso8601)),
+        ?_assertEqual(TS3, eproc_timer:timestamp_parse(<<"2014-09-02T14:17:03">>,              iso8601)),
+        ?_assertEqual(TS4, eproc_timer:timestamp_parse(<<"2014-09-02T14:17:03.004">>,          iso8601)),
+        ?_assertEqual(TS5, eproc_timer:timestamp_parse(<<"2014-09-02T14:17:03.004004">>,       iso8601)),
+        ?_assertEqual(TS6, eproc_timer:timestamp_parse(<<"2017-07-20T11:47:32+02">>,           iso8601)),
+        ?_assertEqual(TS6, eproc_timer:timestamp_parse(<<"2017-07-20T11:47:32+0200">>,         iso8601)),
+        ?_assertEqual(TS6, eproc_timer:timestamp_parse(<<"2017-07-20T11:47:32+02:00">>,        iso8601)),
+        ?_assertEqual(TS6, eproc_timer:timestamp_parse(<<"2017-07-21T01:47:32+16">>,           iso8601)),
+        ?_assertEqual(TS6, eproc_timer:timestamp_parse(<<"2017-07-21T01:47:32+1600">>,         iso8601)),
+        ?_assertEqual(TS6, eproc_timer:timestamp_parse(<<"2017-07-21T01:47:32+16:00">>,        iso8601)),
+        ?_assertEqual(TS6, eproc_timer:timestamp_parse(<<"2017-07-20T06:47:32-03">>,           iso8601)),
+        ?_assertEqual(TS6, eproc_timer:timestamp_parse(<<"2017-07-20T06:47:32-0300">>,         iso8601)),
+        ?_assertEqual(TS6, eproc_timer:timestamp_parse(<<"2017-07-20T06:47:32-03:00">>,        iso8601)),
+        ?_assertEqual(TS6, eproc_timer:timestamp_parse(<<"2017-07-19T22:47:32-11">>,           iso8601)),
+        ?_assertEqual(TS6, eproc_timer:timestamp_parse(<<"2017-07-19T22:47:32-1100">>,         iso8601)),
+        ?_assertEqual(TS6, eproc_timer:timestamp_parse(<<"2017-07-19T22:47:32-11:00">>,        iso8601)),
+        ?_assertEqual(TS6, eproc_timer:timestamp_parse(<<"2017-07-20T11:17:32+0130">>,         iso8601)),
+        ?_assertEqual(TS6, eproc_timer:timestamp_parse(<<"2017-07-20T11:17:32+01:30">>,        iso8601)),
+        ?_assertEqual(TS6, eproc_timer:timestamp_parse(<<"2017-07-21T03:17:32+1730">>,         iso8601)),
+        ?_assertEqual(TS6, eproc_timer:timestamp_parse(<<"2017-07-21T03:17:32+17:30">>,        iso8601)),
+        ?_assertEqual(TS7, eproc_timer:timestamp_parse(<<"2017-07-20T13:47:32.004+04">>,       iso8601)),
+        ?_assertEqual(TS7, eproc_timer:timestamp_parse(<<"2017-07-20T13:47:32.004+0400">>,     iso8601)),
+        ?_assertEqual(TS7, eproc_timer:timestamp_parse(<<"2017-07-20T13:47:32.004+04:00">>,    iso8601)),
+        ?_assertEqual(TS8, eproc_timer:timestamp_parse(<<"2017-07-20T14:47:32.004004+05">>,    iso8601)),
+        ?_assertEqual(TS8, eproc_timer:timestamp_parse(<<"2017-07-20T14:47:32.004004+0500">>,  iso8601)),
+        ?_assertEqual(TS8, eproc_timer:timestamp_parse(<<"2017-07-20T14:47:32.004004+05:00">>, iso8601))
+   ].
 
