@@ -1137,6 +1137,11 @@ send_create_event(Module, Args, Event, Options) ->
 %%  instead of `send_event/2-3`. Instance name and id will be registered before this
 %%  function returns and therefore can be used safely.
 %%
+%%  TODO: Race condition is present here. If several processes are trying
+%%  "create or call" an FSM, one of them fails, because it finds the FSM
+%%  in the DB (create fails) and then it goes to call the existing FSM,
+%%  and that fails also, because the FSM is not started (or registered) yet.
+%%
 -spec sync_send_create_event(
         Module  :: module(),
         Args    :: term(),
