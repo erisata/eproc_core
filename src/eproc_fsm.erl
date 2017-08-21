@@ -2182,21 +2182,18 @@ resolve_event_type_fun(SendOptions) ->
 %%
 %%  Default implementation for deriving event type from the event message.
 %%
-resolve_event_type(Event, Body) when not is_tuple(Event) ->
-    resolve_event_type({Event, Body}, Body);
+resolve_event_type(_EventRole, Atom) when is_atom(Atom) ->
+    {erlang:atom_to_binary(Atom, utf8), Atom};
 
-resolve_event_type({_EventRole, Atom}, Body) when is_atom(Atom) ->
-    {erlang:atom_to_binary(Atom, utf8), Body};
+resolve_event_type(_EventRole, Binary) when is_binary(Binary) ->
+    {Binary, Binary};
 
-resolve_event_type({_EventRole, Binary}, Body) when is_binary(Binary) ->
-    {Binary, Body};
+resolve_event_type(EventRole, TaggedTuple) when is_tuple(TaggedTuple), is_atom(element(1, TaggedTuple)) ->
+    resolve_event_type(EventRole, element(1, TaggedTuple));
 
-resolve_event_type({EventRole, TaggedTuple}, Body) when is_tuple(TaggedTuple), is_atom(element(1, TaggedTuple)) ->
-    resolve_event_type({EventRole, element(1, TaggedTuple)}, Body);
-
-resolve_event_type({_EventRole, Term}, Body) ->
+resolve_event_type(_EventRole, Term) ->
     IoList = io_lib:format("~W", [Term, 3]),
-    {erlang:iolist_to_binary(IoList), Body}.
+    {erlang:iolist_to_binary(IoList), Term}.
 
 %%
 %%  This function uses supplied type for request messages and
