@@ -1836,7 +1836,7 @@ register_resp_msg({inst, SrcInstId}, Dst, SentMsgCId, RespMsgCId, RespMsgType, R
 %%  This function can be used instead of `register_sent_msg`.
 %%
 registered_send(EventSrc, EventDst, EventTypeFun, Event, SendFun) ->
-    EventType = EventTypeFun(event, Event),
+    {EventType, _Body} = EventTypeFun(event, Event),
     case register_sent_msg(EventSrc, EventDst, undefined, EventType, Event, os:timestamp()) of
         {ok, SentMsgCId} ->
             ok = SendFun(SentMsgCId),
@@ -1852,18 +1852,18 @@ registered_send(EventSrc, EventDst, EventTypeFun, Event, SendFun) ->
 %%  This function can be used instead of `register_sent_msg` and `register_resp_msg`.
 %%
 registered_sync_send(EventSrc, EventDst, EventTypeFun, Event, SendFun) ->
-    EventType = EventTypeFun(sync, Event),
+    {EventType, _Body} = EventTypeFun(sync, Event),
     case register_sent_msg(EventSrc, EventDst, undefined, EventType, Event, os:timestamp()) of
         {ok, SentMsgCId} ->
             {ok, OurRespMsgCId} = case SendFun(SentMsgCId) of
                 {ok, RespMsg, RespMsgCId, UpdatedDst} ->
                     RespTime = os:timestamp(),
-                    RespMsgType = EventTypeFun(resp, RespMsg),
-                    register_resp_msg(EventSrc, UpdatedDst, SentMsgCId, RespMsgCId, RespMsgType, RespMsg, RespTime);
+                    {RespMsgType, RespMsgFormatted} = EventTypeFun({resp, Event}, RespMsg),
+                    register_resp_msg(EventSrc, UpdatedDst, SentMsgCId, RespMsgCId, RespMsgType, RespMsgFormatted, RespTime);
                 {ok, RespMsg} ->
                     RespTime = os:timestamp(),
-                    RespMsgType = EventTypeFun(resp, RespMsg),
-                    register_resp_msg(EventSrc, EventDst, SentMsgCId, undefined, RespMsgType, RespMsg, RespTime)
+                    {RespMsgType, RespMsgFormatted} = EventTypeFun({resp, Event}, RespMsg),
+                    register_resp_msg(EventSrc, EventDst, SentMsgCId, undefined, RespMsgType, RespMsgFormatted, RespTime)
             end,
             {ok, SentMsgCId, OurRespMsgCId, RespMsg};
         {error, not_fsm} ->
@@ -2182,34 +2182,36 @@ resolve_event_type_fun(SendOptions) ->
 %%
 %%  Default implementation for deriving event type from the event message.
 %%
-resolve_event_type(_EventRole, Atom) when is_atom(Atom) ->
-    erlang:atom_to_binary(Atom, utf8);
+resolve_event_type(Event, Body) when not is_tuple(Event) ->
+    resolve_event_type({Event, Body}, Body);
 
-resolve_event_type(_EventRole, Binary) when is_binary(Binary) ->
-    Binary;
+resolve_event_type({_EventRole, Atom}, Body) when is_atom(Atom) ->
+    {erlang:atom_to_binary(Atom, utf8), Body};
 
-resolve_event_type(EventRole, TaggedTuple) when is_tuple(TaggedTuple), is_atom(element(1, TaggedTuple)) ->
-    resolve_event_type(EventRole, element(1, TaggedTuple));
+resolve_event_type({_EventRole, Binary}, Body) when is_binary(Binary) ->
+    {Binary, Body};
 
-resolve_event_type(_EventRole, Term) ->
+resolve_event_type({EventRole, TaggedTuple}, Body) when is_tuple(TaggedTuple), is_atom(element(1, TaggedTuple)) ->
+    resolve_event_type({EventRole, element(1, TaggedTuple)}, Body);
+
+resolve_event_type({_EventRole, Term}, Body) ->
     IoList = io_lib:format("~W", [Term, 3]),
-    erlang:iolist_to_binary(IoList).
-
+    {erlang:iolist_to_binary(IoList), Body}.
 
 %%
 %%  This function uses supplied type for request messages and
 %%  the default implementation for responses and all other.
 %%
-resolve_event_type_const(EventRole, EventTypeConst, _Event) when EventRole =:= event; EventRole =:= sync ->
+resolve_event_type_const(EventRole, EventTypeConst, Event) when EventRole =:= event; EventRole =:= sync ->
     if
         is_binary(EventTypeConst) ->
-            EventTypeConst;
+            {EventTypeConst, Event};
         is_atom(EventTypeConst) ->
-            erlang:atom_to_binary(EventTypeConst, utf8)
+            {erlang:atom_to_binary(EventTypeConst, utf8), Event}
     end;
 
 resolve_event_type_const(EventRole, _EventTypeConst, Event) ->
-    resolve_event_type(EventRole, Event).
+    resolve_event_type({EventRole, Event}, Event).
 
 
 %%
@@ -2631,7 +2633,7 @@ perform_transition(Trigger, TransitionFun, State) ->
         undefined             -> ?MSGCID_REQUEST(InstId, TrnNr);
         ?MSGCID_SENT(I, T, M) -> ?MSGCID_RECV(I, T, M)
     end,
-    RequestMsgType = MessageTypeFun(TriggerType, TriggerMsg),
+    {RequestMsgType, _RequestBody} = MessageTypeFun(TriggerType, TriggerMsg),
     RequestMsgRef = #msg_ref{cid = RequestMsgCId, peer = TriggerSrc, type = RequestMsgType},
     RequestMsg = #message{
         msg_id   = RequestMsgCId,
@@ -2646,7 +2648,7 @@ perform_transition(Trigger, TransitionFun, State) ->
         noreply ->
             {undefined, [RequestMsg | RegisteredMsgs]};
         {reply, ReplyMsgCId, ReplyMsg, _ReplySent} ->
-            ResponseMsgType = MessageTypeFun(reply, ReplyMsg),
+            {ResponseMsgType, _ResponseBody} = MessageTypeFun(reply, ReplyMsg),
             ResponseRef = #msg_ref{cid = ReplyMsgCId, peer = TriggerSrc, type = ResponseMsgType},
             ResponseMsg = #message{
                 msg_id   = ReplyMsgCId,
