@@ -1836,8 +1836,8 @@ register_resp_msg({inst, SrcInstId}, Dst, SentMsgCId, RespMsgCId, RespMsgType, R
 %%  This function can be used instead of `register_sent_msg`.
 %%
 registered_send(EventSrc, EventDst, EventTypeFun, Event, SendFun) ->
-    {EventType, _Body} = EventTypeFun(event, Event),
-    case register_sent_msg(EventSrc, EventDst, undefined, EventType, Event, os:timestamp()) of
+    {EventType, Body} = EventTypeFun(event, Event),
+    case register_sent_msg(EventSrc, EventDst, undefined, EventType, Body, os:timestamp()) of
         {ok, SentMsgCId} ->
             ok = SendFun(SentMsgCId),
             {ok, SentMsgCId};
@@ -1852,8 +1852,8 @@ registered_send(EventSrc, EventDst, EventTypeFun, Event, SendFun) ->
 %%  This function can be used instead of `register_sent_msg` and `register_resp_msg`.
 %%
 registered_sync_send(EventSrc, EventDst, EventTypeFun, Event, SendFun) ->
-    {EventType, _Body} = EventTypeFun(sync, Event),
-    case register_sent_msg(EventSrc, EventDst, undefined, EventType, Event, os:timestamp()) of
+    {EventType, Body} = EventTypeFun(sync, Event),
+    case register_sent_msg(EventSrc, EventDst, undefined, EventType, Body, os:timestamp()) of
         {ok, SentMsgCId} ->
             {ok, OurRespMsgCId} = case SendFun(SentMsgCId) of
                 {ok, RespMsg, RespMsgCId, UpdatedDst} ->
@@ -2633,7 +2633,7 @@ perform_transition(Trigger, TransitionFun, State) ->
         undefined             -> ?MSGCID_REQUEST(InstId, TrnNr);
         ?MSGCID_SENT(I, T, M) -> ?MSGCID_RECV(I, T, M)
     end,
-    {RequestMsgType, _RequestBody} = MessageTypeFun(TriggerType, TriggerMsg),
+    {RequestMsgType, RequestBody} = MessageTypeFun(TriggerType, TriggerMsg),
     RequestMsgRef = #msg_ref{cid = RequestMsgCId, peer = TriggerSrc, type = RequestMsgType},
     RequestMsg = #message{
         msg_id   = RequestMsgCId,
@@ -2642,13 +2642,13 @@ perform_transition(Trigger, TransitionFun, State) ->
         resp_to  = undefined,
         type     = RequestMsgType,
         date     = TrnStart,
-        body     = TriggerMsg
+        body     = RequestBody
     },
     {ResponseMsgRef, TransitionMsgs} = case Reply of
         noreply ->
             {undefined, [RequestMsg | RegisteredMsgs]};
         {reply, ReplyMsgCId, ReplyMsg, _ReplySent} ->
-            {ResponseMsgType, _ResponseBody} = MessageTypeFun(reply, ReplyMsg),
+            {ResponseMsgType, ResponseBody} = MessageTypeFun(reply, ReplyMsg),
             ResponseRef = #msg_ref{cid = ReplyMsgCId, peer = TriggerSrc, type = ResponseMsgType},
             ResponseMsg = #message{
                 msg_id   = ReplyMsgCId,
@@ -2657,7 +2657,7 @@ perform_transition(Trigger, TransitionFun, State) ->
                 resp_to  = RequestMsgCId,
                 type     = ResponseMsgType,
                 date     = TrnEnd,
-                body     = ReplyMsg
+                body     = ResponseBody
             },
             {ResponseRef, [RequestMsg, ResponseMsg | RegisteredMsgs]}
     end,
