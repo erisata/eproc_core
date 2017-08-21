@@ -1931,10 +1931,10 @@ resolve_start_spec_test_() -> [
 %%  Check, if `resolve_event_type/2` works.
 %%
 resolve_event_type_test_() -> [
-        ?_assertEqual(<<"asd">>, eproc_fsm:resolve_event_type(event, asd)),
-        ?_assertEqual(<<"dsd">>, eproc_fsm:resolve_event_type(event, <<"dsd">>)),
-        ?_assertEqual(<<"fsa">>, eproc_fsm:resolve_event_type(event, {fsa, asd, [[]]})),
-        ?_assertEqual(<<"[a]">>, eproc_fsm:resolve_event_type(event, [a]))
+        ?_assertEqual({<<"asd">>, asd}, eproc_fsm:resolve_event_type(event, asd)),
+        ?_assertEqual({<<"dsd">>, <<"dsd">>}, eproc_fsm:resolve_event_type(event, <<"dsd">>)),
+        ?_assertEqual({<<"fsa">>, fsa}, eproc_fsm:resolve_event_type(event, {fsa, asd, [[]]})),
+        ?_assertEqual({<<"[a]">>, [a]}, eproc_fsm:resolve_event_type(event, [a]))
     ].
 
 
@@ -1942,9 +1942,9 @@ resolve_event_type_test_() -> [
 %%  Check, if `resolve_event_type_const/3` works.
 %%
 resolve_event_type_const_test_() -> [
-        ?_assertEqual(<<"uuu">>, eproc_fsm:resolve_event_type_const(sync,  <<"uuu">>, asd)),
-        ?_assertEqual(<<"uuz">>, eproc_fsm:resolve_event_type_const(sync,  uuz,       asd)),
-        ?_assertEqual(<<"asd">>, eproc_fsm:resolve_event_type_const(reply, <<"uuu">>, asd))
+        ?_assertEqual({<<"uuu">>, asd}, eproc_fsm:resolve_event_type_const(sync,  <<"uuu">>, asd)),
+        ?_assertEqual({<<"uuz">>, asd}, eproc_fsm:resolve_event_type_const(sync,  uuz,       asd)),
+        ?_assertEqual({<<"asd">>, asd}, eproc_fsm:resolve_event_type_const(reply, <<"uuu">>, asd))
     ].
 
 

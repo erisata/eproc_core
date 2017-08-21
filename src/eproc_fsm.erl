@@ -3309,9 +3309,9 @@ resolve_event_type_fun_test_() ->
     {ok, Fun2} = resolve_event_type_fun([{type, fun (_R, _M) -> <<"qqq">> end}]),
     {ok, Fun3} = resolve_event_type_fun([]),
     [
-        ?_assertEqual(<<"asd">>, Fun1(event, uuu)),
+        ?_assertEqual({<<"asd">>, uuu}, Fun1(event, uuu)),
         ?_assertEqual(<<"qqq">>, Fun2(event, uuu)),
-        ?_assertEqual(<<"uuu">>, Fun3(event, uuu))
+        ?_assertEqual({<<"uuu">>, uuu}, Fun3(event, uuu))
     ].
 
 

@@ -38,7 +38,7 @@ mocked_set_test() ->
         ({inst, some}, {timer, other},     undefined, _, msg4, {_, _, _}) -> {ok, {i, t, m4, sent}}
     end),
     ok = meck:expect(eproc_fsm, resolve_event_type, fun
-        (timer, _Message) -> <<"timer_msg">>
+        (timer, Message) -> {<<"timer_msg">>, Message}
     end),
     ok = meck:expect(eproc_fsm_attr, action, fun
         (eproc_timer, undefined, {timer, 1000, {_, _, _}, {i, t, m1, sent}, _, msg1}, next) -> ok;
