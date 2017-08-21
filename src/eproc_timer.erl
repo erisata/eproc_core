@@ -360,7 +360,7 @@ timestamp_before(Duration, Timestamp) ->
             calendar:date() |
             {calendar:date(), calendar:time(), USec :: integer()} |
             undefined | null,
-        Timezone :: local | utc
+        Timezone :: local | utc | {ahead | behind, Hours :: integer(), Minutes :: integer()}
     ) ->
         timestamp() |
         undefined.
@@ -383,7 +383,15 @@ timestamp({Date = {_Y, _M, _D}, Time = {_H, _Mi, _S}, USec}, local) ->
 
 timestamp({Date = {_Y, _M, _D}, Time = {_H, _Mi, _S}, USec}, utc) ->
     Seconds = calendar:datetime_to_gregorian_seconds({Date, Time}) - ?UNIX_BIRTH,
-    {Seconds div ?MEGA, Seconds rem ?MEGA, USec}.
+    {Seconds div ?MEGA, Seconds rem ?MEGA, USec};
+
+timestamp({Date = {_Y, _M, _D}, Time = {_H, _Mi, _S}, USec}, {ahead, Hours, Minutes}) ->
+    TSAhead = timestamp({Date, Time, USec}, utc),
+    timestamp_before([{Hours, hour}, {Minutes, min}], TSAhead);
+
+timestamp({Date = {_Y, _M, _D}, Time = {_H, _Mi, _S}, USec}, {behind, Hours, Minutes}) ->
+    TSAhead = timestamp({Date, Time, USec}, utc),
+    timestamp_after([{Hours, hour}, {Minutes, min}], TSAhead).
 
 
 
@@ -483,13 +491,24 @@ timestamp_parse(TimestampBin, iso8601) when is_binary(TimestampBin) ->
         Year:4/binary, "-", Month:2/binary, "-", Day:2/binary, "T",
         Hour:2/binary, ":", Min:2/binary,   ":", Sec:2/binary, Rest/binary
     >> = TimestampBin,
-    {USec, TZone} = case Rest of
-        <<>>                      -> {0, local};
-        <<"Z">>                   -> {0, utc};
-        <<".", US:6/binary>>      -> {binary_to_integer(US), local};
-        <<".", US:6/binary, "Z">> -> {binary_to_integer(US), utc};
-        <<".", MS:3/binary>>      -> {binary_to_integer(MS) * 1000, local};
-        <<".", MS:3/binary, "Z">> -> {binary_to_integer(MS) * 1000, utc}
+    {USec, TZoneToParse} = case Rest of
+        <<>>                                         -> {0, <<>>};
+        <<".", MS:3/binary>>                         -> {binary_to_integer(MS) * 1000, <<>>};
+        <<".", MS:3/binary, "Z">>                    -> {binary_to_integer(MS) * 1000, <<"Z">>};
+        <<".", MS:3/binary, "+", OffsetPart/binary>> -> {binary_to_integer(MS) * 1000, <<"+", OffsetPart/binary>>};
+        <<".", MS:3/binary, "-", OffsetPart/binary>> -> {binary_to_integer(MS) * 1000, <<"-", OffsetPart/binary>>};
+        <<".", US:6/binary, TZonePart/binary>>       -> {binary_to_integer(US), TZonePart};
+        <<TZonePart/binary>>                         -> {0, TZonePart}
+    end,
+    TZone = case TZoneToParse of
+        <<>>                                   -> local;
+        <<"Z">>                                -> utc;
+        <<"+", HH:2/binary>>                   -> {ahead, binary_to_integer(HH), 0};
+        <<"+", HH:2/binary, MM:2/binary>>      -> {ahead,  binary_to_integer(HH), binary_to_integer(MM)};
+        <<"+", HH:2/binary, ":", MM:2/binary>> -> {ahead,  binary_to_integer(HH), binary_to_integer(MM)};
+        <<"-", HH:2/binary>>                   -> {behind, binary_to_integer(HH), 0};
+        <<"-", HH:2/binary, MM:2/binary>>      -> {behind, binary_to_integer(HH), binary_to_integer(MM)};
+        <<"-", HH:2/binary, ":", MM:2/binary>> -> {behind, binary_to_integer(HH), binary_to_integer(MM)}
     end,
     Date = {binary_to_integer(Year), binary_to_integer(Month), binary_to_integer(Day)},
     Time = {binary_to_integer(Hour), binary_to_integer(Min), binary_to_integer(Sec)},

@@ -1,5 +1,6 @@
 {git,
     [
+        {"1.7.3", [{restart_application, eproc_core}]},
         {"1.7.2", [{restart_application, eproc_core}]},
         {"1.7.1", [{restart_application, eproc_core}]},
         {"1.7.0", [{restart_application, eproc_core}]},
@@ -14,6 +15,7 @@
         {"1.4.0", [{restart_application, eproc_core}]}
     ],
     [
+        {"1.7.3", [{restart_application, eproc_core}]},
         {"1.7.2", [{restart_application, eproc_core}]},
         {"1.7.1", [{restart_application, eproc_core}]},
         {"1.7.0", [{restart_application, eproc_core}]},
