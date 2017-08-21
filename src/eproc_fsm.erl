@@ -2180,8 +2180,13 @@ resolve_event_type_fun(SendOptions) ->
 
 
 %%
+%%  @doc
 %%  Default implementation for deriving event type from the event message.
+%%  In normal case, resolve_event_type/ will return a tuple composed from two values with same length.
+%%  If is needed to transform a message in some way (ex. trim, etc.), second tuple value can be used as a new value.
 %%
+-spec resolve_event_type(atom(), term()) -> {Type :: binary(), Body :: term()}.
+
 resolve_event_type(_EventRole, Atom) when is_atom(Atom) ->
     {erlang:atom_to_binary(Atom, utf8), Atom};
 
