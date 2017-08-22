@@ -311,6 +311,13 @@ test_event_type(Config) ->
     false     = eproc_fsm__seq:exists(Seq),
     {ok, #transition{trigger_msg = #msg_ref{type = <<"next">>}}} = eproc_store:get_transition(Store, Seq, 2, all),
     {ok, #transition{trigger_msg = #msg_ref{type = <<"what">>}}} = eproc_store:get_transition(Store, Seq, 3, all),
+    {ok, #transition{
+        trigger_msg = #msg_ref{
+            type = <<"CLOSE">>,
+            cid  = CID4
+        }
+    }} = eproc_store:get_transition(Store, Seq, 4, all),
+    {ok, #message{body = <<"IMMEDIATELLY!">>}} = eproc_store:get_message(Store, CID4, all),
     ok.
 
 

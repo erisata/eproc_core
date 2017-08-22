@@ -64,7 +64,10 @@ skip(FsmRef) ->
     eproc_fsm:send_event(resolve_ref(FsmRef), skip).
 
 close(FsmRef) ->
-    eproc_fsm:send_event(resolve_ref(FsmRef), close).
+    EventTypeFun = fun (event, close) ->
+        {<<"CLOSE">>, <<"IMMEDIATELLY!">>}
+    end,
+    eproc_fsm:send_event(resolve_ref(FsmRef), close, [{type, EventTypeFun}]).
 
 next(FsmRef) ->
     eproc_fsm:sync_send_event(resolve_ref(FsmRef), next).
