@@ -15,15 +15,15 @@
 %\--------------------------------------------------------------------
 
 %%%
-%%% Main behaviour to be implemented by a user of the `eproc`
+%%% Main behaviour to be implemented by a user of the `eproc'
 %%% =========================================================
 %%%
 %%% This module designed by taking into account UML FSM definition
-%%% as well as the Erlang/OTP `gen_fsm`. The following is the list
+%%% as well as the Erlang/OTP `gen_fsm'. The following is the list
 %%% of differences comparing it to `gen_fsm`:
 %%%
 %%%   * State name supports substates and orthogonal states.
-%%%   * Callback `Module:handle_state/3` is used instead of `Module:StateName/2-3`.
+%%%   * Callback `Module:handle_state/3' is used instead of `Module:StateName/2-3'.
 %%%     This allows to have substates and orthogonal states.
 %%%   * Has support for state entry and exit actions.
 %%%     State entry action is convenient for setting up timers and keys.
@@ -39,7 +39,7 @@
 %%%     }).
 %%%
 %%%
-%%% How `eproc_fsm` callbacks are invoked in different scenarios
+%%% How `eproc_fsm' callbacks are invoked in different scenarios
 %%% ------------------------------------
 %%%
 %%% New FSM created, started and an initial event received
@@ -97,14 +97,14 @@
 %%%
 %%% `eproc_registry`
 %%% :   can be used as a process registry, a supervisor and a process loader.
-%%%     This component is used via options: `start_spec` from the create options,
-%%%     `register` from the start options and `registry` from the common options.
-%%%     Functions `send_create_event/3` and `sync_send_create_event/4` can only
+%%%     This component is used via options: `start_spec' from the create options,
+%%%     `register' from the start options and `registry' from the common options.
+%%%     Functions `send_create_event/3' and `sync_send_create_event/4' can only
 %%%     be called if FSM used with the registry.
 %%%
 %%% `eproc_limits`
 %%% :   can be used to limit FSM restarts, transitions or sent messages.
-%%%     This component is only used if start option `limit_*` are provided.
+%%%     This component is only used if start option `limit_*' are provided.
 %%%
 %%%
 %%% Common FSM options
@@ -117,11 +117,11 @@
 %%%
 %%% `{store, StoreRef}`
 %%% :   a store to be used by the FSM. If this option not provided, a store
-%%%     specified in the `eproc_core` application environment is used.
+%%%     specified in the `eproc_core' application environment is used.
 %%%
 %%% `{registry, StoreRef}`
 %%% :   a registry to be used by the instance. If this option not provided, a registry
-%%%     specified in the `eproc_core` application environment is used. `eproc_core` can
+%%%     specified in the `eproc_core' application environment is used. `eproc_core' can
 %%%     have no registry specified. In that case the registry will not be used.
 %%%
 %%% `{timeout, Timeout}`
@@ -137,7 +137,7 @@
 %%%   * Attachment support.
 %%%   * Implement FSM crash listener (`eproc_fsm_mgr`?).
 %%%   * Add support for transient processes, that are not registered to the store.
-%%%   * Add `ignore` handling for `handle_cast` and `handle_call`.
+%%%   * Add `ignore' handling for `handle_cast' and `handle_call'.
 %%%   * Implement persistent process linking. It could work as follows:
 %%%         * Processes are activated only when all linked (related) processes are online.
 %%%         * When becoming online, linked processes start to monitor each other.
@@ -174,7 +174,7 @@
 ]).
 
 %%
-%%  APIs for related `eproc` modules.
+%%  APIs for related `eproc' modules.
 %%
 -export([
     is_fsm_ref/1,
@@ -195,7 +195,7 @@
 ]).
 
 %%
-%%  Callbacks for `gen_server`.
+%%  Callbacks for `gen_server'.
 %%
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3, format_status/2]).
 
@@ -231,7 +231,7 @@
 
 
 %%
-%%  State name describes current state of the FSM. The `eproc_fsm` supports
+%%  State name describes current state of the FSM. The `eproc_fsm' supports
 %%  nested and orthogonal states and state name is used to describe them.
 %%
 %%  State name is always an atom, binary, integer or a tuple (for complex states).
@@ -241,24 +241,24 @@
 %%  than 2 can be used to model orthogonal states. The following are examples
 %%  of valid state names:
 %%
-%%    * `active` -- simple state.
-%%    * `{active, running}` -- the state `active` has substate `running`.
-%%    * `{active, {running, online}}` -- composite states can be nested.
-%%    * `{selling, sale, low_in_stock}` -- orthogonal state `selling` with
-%%      two regions, one have state `sale` and other is `low_in_stock`.
+%%    * `active' -- simple state.
+%%    * `{active, running}' -- the state `active' has substate `running'.
+%%    * `{active, {running, online}}' -- composite states can be nested.
+%%    * `{selling, sale, low_in_stock}' -- orthogonal state `selling' with
+%%      two regions, one have state `sale' and other is `low_in_stock'.
 %%      The regions can also have composite states.
 %%
-%%  The special case is the empty state `{}`. It can only be used for the
+%%  The special case is the empty state `{}'. It can only be used for the
 %%  initial state of the FSM. This state is entered when new FSM is created
 %%  and it is never exited till termination of the FSM. Nevertheless, the
 %%  entry and exit actions are not invoked for this state.
 %%
 %%  The FSM callback can return ortogonal state with some of its regions
-%%  marked as unchanged (`'_'` or `{}` instead of a region state). The corresponding
+%%  marked as unchanged (`'_'' or `{}' instead of a region state). The corresponding
 %%  exit and entry events will be called with the same wildcarded state
 %%  name, although the final state will be derived by replacing wildcards
 %%  with the previous states of the corresponding regions. This allows the
-%%  `handle_state` callback implementation to determine, which state is entered
+%%  `handle_state' callback implementation to determine, which state is entered
 %%  or exited. Wildcarded transition is only allowed within the same orthogonal
 %%  state, i.e. only regions can differ from the previous state.
 %%
@@ -275,29 +275,29 @@
 %%
 %%  The state scope has a structure similar to state name, except that it supports
 %%  wildcarding. Main use case for wildcarding is orthogonal states, but it can
-%%  be used with nested states also. Two wildcard symbols are supported: `'_'` and
-%%  `{}`, but the firts one is preferred as it is more consistent with ETS and Mnesia.
+%%  be used with nested states also. Two wildcard symbols are supported: `'_'' and
+%%  `{}', but the firts one is preferred as it is more consistent with ETS and Mnesia.
 %%
 %%  In general, scope is a state, which is not necessary the leaf state in the
 %%  tree of possible states. For nested states, the scope can be seen as a state
 %%  prefix, for which the specified timer or key is valid. I.e. looking at the
-%%  example provided in the description of `state_name`, all of `{}`, `active`,
-%%  `{active}`, `{active, running}` and `{active, {running, online}}` can be scopes
-%%  and the state `{active, {running, online}}` will be in all of these scopes.
-%%  Similarly, the state `{active, {running, offline}}` will be in scopes `{}`,
-%%  `active` and `{active, running}` but not in `{active, {running, online}}`
+%%  example provided in the description of `state_name', all of `{}', `active',
+%%  `{active}', `{active, running}' and `{active, {running, online}}' can be scopes
+%%  and the state `{active, {running, online}}' will be in all of these scopes.
+%%  Similarly, the state `{active, {running, offline}}' will be in scopes `{}',
+%%  `active' and `{active, running}' but not in `{active, {running, online}}`
 %%  (from the scopes listed above).
 %%
 %%  When used with orthogonal states, scopes can be used to specify one or several
 %%  of its regions. E.g. if the state 'done' should be specified as a scope,
-%%  the following term can be used: `{completed, done, '_'}`. I.e. the second
+%%  the following term can be used: `{completed, done, '_'}'. I.e. the second
 %%  region can be in any substate.
 %%
 %%  Scope for a state, that has orthogonal regions can be expressed in several ways.
 %%  Wildcards can be specified for all of its regions, e.g. `{completed, '_', '_'}`
-%%  or `{completed, {}, {}}`. Additionally, a shortcut notation can be used for
+%%  or `{completed, {}, {}}'. Additionally, a shortcut notation can be used for
 %%  it: only name can be specified in the scope, if all the regions should be ignored.
-%%  I.e. the above mentioned scope can be expressed as `completed` or `{completed}`.
+%%  I.e. the above mentioned scope can be expressed as `completed' or `{completed}'.
 %%
 %%  NOTE: List based scopes are allowed only for legacy purposes. It should not
 %%  be used and will be removed in future.
@@ -307,7 +307,7 @@
 
 %%
 %%  Internal state of the callback module. The state is considered
-%%  opaque by the `eproc_fsm`, but its usually an instance of the
+%%  opaque by the `eproc_fsm', but its usually an instance of the
 %%  #state{} record in the user module.
 %%
 -type state_data() :: term().
@@ -315,11 +315,23 @@
 
 %%
 %%  FSM start specification.
-%%  See `create/3` for more details.
+%%  See `create/3' for more details.
 %%
 -opaque start_spec()  ::
     {default, StartOpts :: list()} |
     {mfa, MFArgs ::mfargs()}.
+
+
+%%  @doc
+%%  This type defines a function that can be passed to `*_send*' as an option,
+%%  or `registered_*' as an argument in order to format message specifically
+%%  before recording it as an FSM event. This can be used to set specific
+%%  event types or transform registered messages (e.g. hide passwords, crop large messages, etc).
+%%
+-type event_type_fun() ::
+    fun((EventRole :: term(), EventBody :: term()) ->
+        {EventType :: binary(), TransformedEventBody :: term()}
+    ).
 
 
 
@@ -328,7 +340,7 @@
 %% =============================================================================
 
 %%
-%%  Internal state of the `eproc_fsm`.
+%%  Internal state of the `eproc_fsm'.
 %%
 -record(state, {
     inst_id     :: inst_id(),       %% Id of the current instance.
@@ -341,7 +353,7 @@
     rt_field    :: integer(),       %% Runtime data field in the sdata.
     rt_default  :: term(),          %% Default value for the runtime field.
     trn_nr      :: trn_nr(),        %% Number of the last processed transition.
-    attrs       :: term(),          %% State for the `eproc_fsm_attr` module.
+    attrs       :: term(),          %% State for the `eproc_fsm_attr' module.
     registry    :: registry_ref(),  %% A registry reference.
     store       :: store_ref(),     %% A store reference.
     lim_res     :: term(),          %% Instance limits: restart counter limit specs.
@@ -385,10 +397,10 @@
 %%  Parameters:
 %%
 %%  `Args`
-%%  :   is the value passed as the `Args` parameter to the `create/3`,
-%%      `send_create_event/5` or `sync_send_create_event/5` function.
+%%  :   is the value passed as the `Args' parameter to the `create/3',
+%%      `send_create_event/5' or `sync_send_create_event/5' function.
 %%
-%%  The function needs to return `StateData` - internal state of the process.
+%%  The function needs to return `StateData' - internal state of the process.
 %%  The created instance will be in state [].
 %%
 -callback init(
@@ -401,7 +413,7 @@
 
 %%
 %%  This function is invoked on each (re)start of the FSM. On the first start
-%%  this callback is always invoked after the `init/1` callback.
+%%  this callback is always invoked after the `init/1' callback.
 %%
 %%  In this function the FSM can initialize its run-time resources:
 %%  start or link to processes, etc. This callback is invoked in the
@@ -411,19 +423,19 @@
 %%
 %%  `StateName`
 %%  :   is the state name loaded from the persistent store or returned
-%%      by the `init/1` callback, if initialization is performed for a new instance.
+%%      by the `init/1' callback, if initialization is performed for a new instance.
 %%  `StateData`
 %%  :   is the corresponding persistent state data.
 %%
-%%  The callback should `{ok, RuntimeField, RuntimeData}` to initialize runtime data
-%%  and `ok` if runtime data functionality is not used. The returned RuntimeData is assigned
+%%  The callback should `{ok, RuntimeField, RuntimeData}' to initialize runtime data
+%%  and `ok' if runtime data functionality is not used. The returned RuntimeData is assigned
 %%  to a field with index RuntimeField. This functionality assumes StateData to be a tuple.
 %%
 %%  The RuntimeField is also used later for rewriting the runtime data field to the default
 %%  value when writing it to a database. The default value is assumed to be a value, that
-%%  was assigned to the corresponding field before `init/2`. Usually it is specified in the
-%%  record definition or the `init/1` function. The RuntimeField can be changed in the
-%%  `code_change` function.
+%%  was assigned to the corresponding field before `init/2'. Usually it is specified in the
+%%  record definition or the `init/1' function. The RuntimeField can be changed in the
+%%  `code_change' function.
 %%
 -callback init(
         StateName :: state_name(),
@@ -449,24 +461,24 @@
 %%      event, timer, state entry or state exit:
 %%
 %%      `{event, Message}`
-%%      :   indicates an event `Message` sent to the FSM asynchronously.
-%%          It is done by calling `send_event/2-3` or corresponding create event.
+%%      :   indicates an event `Message' sent to the FSM asynchronously.
+%%          It is done by calling `send_event/2-3' or corresponding create event.
 %%      `{sync, From, Message}`
-%%      :   indicates an event `Message` sent by `From` to the FSM synchronously.
-%%          It is done by calling `sync_send_event/2-3` or corresponding create event.
+%%      :   indicates an event `Message' sent by `From' to the FSM synchronously.
+%%          It is done by calling `sync_send_event/2-3' or corresponding create event.
 %%      `{info, Message}`
 %%      :   indicates unknown message, received by the FSM. This message is
-%%          similar to the `get_fsm`s `handle_info` callback.
+%%          similar to the `get_fsm`s `handle_info' callback.
 %%          Its an asynchronous message.
 %%      `{timer, Message}`
-%%      :   indicates a time event `Message`, that was fired by a timer.
-%%          This event is generated by the `eproc_timer` module.
+%%      :   indicates a time event `Message', that was fired by a timer.
+%%          This event is generated by the `eproc_timer' module.
 %%      `{exit, NextStateName}`
-%%      :   indicates that a transition was made from the `StateName` to the
-%%          `NextStateName` and now we are exiting the `StateName`.
+%%      :   indicates that a transition was made from the `StateName' to the
+%%          `NextStateName' and now we are exiting the `StateName'.
 %%      `{entry, PrevStateName}`
-%%      :   indicates that a transition was made from the `PrevStateName` to the
-%%          `StateName` and now we are entering the `StateName`. A handler for
+%%      :   indicates that a transition was made from the `PrevStateName' to the
+%%          `StateName' and now we are entering the `StateName'. A handler for
 %%          state entry is a good place to set up timers that shouls be valid in
 %%          that state.
 %%
@@ -504,8 +516,8 @@
 %%      this transition.
 %%
 %%  In the case of *synchronous events* like `{sync, From, Message}', the callback can return all the
-%%  responses listed above, if reply to the caller was sent explicitly using function `reply/2`.
-%%  If the reply was not sent explicitly, the terms tagged with `reply_same`, `reply_next` and `reply_final`
+%%  responses listed above, if reply to the caller was sent explicitly using function `reply/2'.
+%%  If the reply was not sent explicitly, the terms tagged with `reply_same', `reply_next' and `reply_final`
 %%  should be used to send a reply and perform the transition. The meaning of these response terms are
 %%  the same as for the `same_state', `next_state' and `final_state' correspondingly.
 %%
@@ -529,8 +541,8 @@
 %%      will be called after this response.
 %%
 %%  The state exit action is not invoked for the initial transition. The initial transition
-%%  can be recognized by the state entry action, it will be invoked with `[]` as a PrevStateName
-%%  or the state name as returned by the `init/2` callback.
+%%  can be recognized by the state entry action, it will be invoked with `[]' as a PrevStateName
+%%  or the state name as returned by the `init/2' callback.
 %%  Similarly, the entry action is not invoked for the final state.
 %%
 %%  When a transition is made to an orthogonal state, (by returning `{next_state, ...}'),
@@ -538,7 +550,7 @@
 %%  for all the deepest states one-by-one, skipping the wildcard states ('_').
 %%  I.e. if the transition is made to a state `{selling, sale, low_in_stock}',
 %%  the state entries will be invoked for the state `{selling, sale, '_'}' and
-%%  then for `{selling, '_', low_in_stock}`.
+%%  then for `{selling, '_', low_in_stock}'.
 %%
 %%  TODO: XXX: Describe the state event and its options.....
 %%
@@ -546,7 +558,7 @@
 %%      will return a `next_state' for state, that is not a substate of the currently
 %%      processed orthogonal entry?
 %%
-%%  TODO> Add `ignore` response to be able to ignore unknown messages, for example.
+%%  TODO> Add `ignore' response to be able to ignore unknown messages, for example.
 %%
 -callback handle_state(
         StateName   :: state_name(),
@@ -586,7 +598,7 @@
 %%
 %%  Invoked when runtime process terminates. This is the case for both:
 %%  the normal FSM termination and crashes. Parameters and response
-%%  are defined in the same way, as it is done in the `gen_fsm`.
+%%  are defined in the same way, as it is done in the `gen_fsm'.
 %%
 -callback terminate(
         Reason      :: normal | shutdown | {shutdown,term()} | term(),
@@ -598,10 +610,10 @@
 
 %%
 %%  This callback is used to handle code upgrades. Its use is similar to one,
-%%  specified for the `gen_fsm`, except that its use is extended in this module.
+%%  specified for the `gen_fsm', except that its use is extended in this module.
 %%  This callback will be invoked not only on hot code upgrades, but also in the cases,
 %%  when the state can be changed to some new structure. In the case of state changes,
-%%  the callback will be invoked with `state` as a first argument (and `Extra = undefined`).
+%%  the callback will be invoked with `state' as a first argument (and `Extra = undefined`).
 %%
 %%  The state changes will be indicated in the following cases:
 %%
@@ -609,13 +621,13 @@
 %%    * On FSM resume (after being suspended).
 %%
 %%  This function will be invoked on hot code upgrade, as usual. In this case
-%%  the function will be invoked as described in `gen_fsm`.
+%%  the function will be invoked as described in `gen_fsm'.
 %%
 %%  When upgrading the state data, runtime state index can be changed (or introduced).
 %%  The new RuntimeField index in the StateData (assumes StateData to be a tuple)
 %%  can be provided by returning it in result of this function. This is meaningfull
 %%  for hot code upgrades, altrough useless for state upgrades on FSM (re)starts
-%%  as `init/2` is called after this callback and will override the runtime field index.
+%%  as `init/2' is called after this callback and will override the runtime field index.
 %%
 -callback code_change(
         OldVsn      :: (Vsn | {down, Vsn} | state),
@@ -637,17 +649,17 @@
 
 %%
 %%  This function is used to format internal FSM state in some specific way.
-%%  This is extended version of the corresponding function of the `gen_fsm`.
-%%  This module extends that function by adding a case of `Opt = {external, ContentType}`.
+%%  This is extended version of the corresponding function of the `gen_fsm'.
+%%  This module extends that function by adding a case of `Opt = {external, ContentType}'.
 %%  The function with this argument will be invoked when some external process asks
 %%  for the external representation of the FSM state.
 %%
-%%  In the case of `Opt = {external, ContentType}`, the `State` parameter will contain
-%%  a tuple with the StateName and StateData. The `format_status` callback will not be
+%%  In the case of `Opt = {external, ContentType}', the `State' parameter will contain
+%%  a tuple with the StateName and StateData. The `format_status' callback will not be
 %%  called from the FSM process in this case.
 %%
-%%  If the function will be called with `Opt = normal | terminate`, it will behave
-%%  as described in `gen_fsm`. The `State` parameter will contain `[PDict, StateData]`.
+%%  If the function will be called with `Opt = normal | terminate', it will behave
+%%  as described in `gen_fsm'. The `State' parameter will contain `[PDict, StateData]'.
 %%
 -callback format_status(
         Opt         :: normal | terminate | {external, ContentType},
@@ -670,21 +682,21 @@
 %%  Creates new persistent FSM.
 %%
 %%  This function should be considered as a low-level API. The functions
-%%  `send_create_event/*` and `sync_send_create_event/*` should be used
+%%  `send_create_event/*' and `sync_send_create_event/*' should be used
 %%  in an ordinary case.
 %%
 %%  Parameters:
 %%
 %%  `Module`
-%%  :   is a callback module implementing `eproc_fsm` behaviour.
+%%  :   is a callback module implementing `eproc_fsm' behaviour.
 %%  `Args`
-%%  :   is passed to the `Module:init/3` function as the `Args` parameter. This
-%%      is similar to the Args parameter in `gen_fsm` and other OTP behaviours.
+%%  :   is passed to the `Module:init/3' function as the `Args' parameter. This
+%%      is similar to the Args parameter in `gen_fsm' and other OTP behaviours.
 %%  `Options`
 %%  :   Proplist with options for the persistent FSM. The list can have
 %%      common FSM options, FSM create options (listed bellow) as well as
 %%      unknown options that can be used as a metadata for the FSM.
-%%      Only the `store` option is supported from the Common FSM Options. Other
+%%      Only the `store' option is supported from the Common FSM Options. Other
 %%      common FSM options can be provided but will be ignored in this function.
 %%
 %%  On success, this function returns instance id of the newly created FSM.
@@ -699,7 +711,7 @@
 %%  `{name, Name}`
 %%  :   Name of the FSM. It uniquelly identifies the FSM.
 %%      Name is valid for the entire FSM lifecycle, including
-%%      the `completed` state.
+%%      the `completed' state.
 %%
 %%  `{type, Type}`
 %%  :   Type of the FSM. By default, it will match the module of the FSM,
@@ -714,21 +726,21 @@
 %%      callback module.
 %%
 %%  `{start_spec, StartSpec :: start_spec()}`
-%%  :   Tells, how the FSM should be started. Default is `{default, []}`.
-%%      This option is used by `eproc_registry` therefore will be ignored,
+%%  :   Tells, how the FSM should be started. Default is `{default, []}'.
+%%      This option is used by `eproc_registry' therefore will be ignored,
 %%      if the FSM will be used stand-alone, without the registry.
 %%      Possible values for the StartSpec are:
 %%
-%%        * If StartSpec is in form `{default, StartOpts}` the FSM will
-%%          be started using the default `eproc_fsm:start_link/2` function
+%%        * If StartSpec is in form `{default, StartOpts}' the FSM will
+%%          be started using the default `eproc_fsm:start_link/2' function
 %%          with StartOpts as a second parameter.
 %%
-%%        * If `{mfa, {Module, Function, Args}}` is specified as the StartSpec,
+%%        * If `{mfa, {Module, Function, Args}}' is specified as the StartSpec,
 %%          the FSM will be started by calling the provided `Module:Function/?`
-%%          with arguments `Args`. The Args list is preprocessed before passing
+%%          with arguments `Args'. The Args list is preprocessed before passing
 %%          it to the start function by replacing each occurence on `'$fsm_ref'`
 %%          with the actual FSM reference (`{inst, InstId}`). It should be needed
-%%          to call `eproc_fsm:start_link/2` later on.
+%%          to call `eproc_fsm:start_link/2' later on.
 %%
 -spec create(
         Module  :: module(),
@@ -748,71 +760,71 @@ create(Module, Args, Options) ->
 
 
 %%
-%%  Start previously created (using `create/3`) `eproc_fsm` instance.
+%%  Start previously created (using `create/3`) `eproc_fsm' instance.
 %%
 %%  As part of initialization procedure, the FSM registers itself to the
 %%  registry. Registration by InstId and Name is done synchronously or
-%%  asynchronously (default), depending on the `start_sync` option.
+%%  asynchronously (default), depending on the `start_sync' option.
 %%
 %%  This function should be considered as a low-level API. The functions
-%%  `send_create_event/*` and `sync_send_create_event/*` should be used
+%%  `send_create_event/*' and `sync_send_create_event/*' should be used
 %%  in an ordinary case.
 %%
 %%  Parameters:
 %%
 %%  `FsmName`
 %%  :   Name to register the runtime FSM process with. This argument is similar to
-%%      the FsmName in `gen_fsm`. Altrough this name is not related directly to the
+%%      the FsmName in `gen_fsm'. Altrough this name is not related directly to the
 %%      id and name of an instance (as provided when creating it) therefore FsmName
 %%      can be different from them.
 %%  `FsmRef`
 %%  :   Reference of an previously created FSM. If instance id is going to be used
-%%      as a reference, it can be obtained from the `create/3` function. Name or
+%%      as a reference, it can be obtained from the `create/3' function. Name or
 %%      other types of references can also be used here.
 %%  `Options'
 %%  :   Runtime-level options. The options listed bellow are used by this
-%%      FSM implementation and the rest are passed to the `gen_server:start_link/3`.
+%%      FSM implementation and the rest are passed to the `gen_server:start_link/3'.
 %%
 %%  Options supprted by this function:
 %%
 %%  `{store, StoreRef}`
 %%  :   a store to be used by the instance. If this option not provided, a store specified
-%%      in the `eproc_core` application environment is used.
+%%      in the `eproc_core' application environment is used.
 %%  `{registry, StoreRef}`
 %%  :   a registry to be used by the instance. If this option not provided, a registry
-%%      specified in the `eproc_core` application environment is used. `eproc_core` can
+%%      specified in the `eproc_core' application environment is used. `eproc_core' can
 %%      cave no registry specified. In that case the registry will not be used.
 %%  `{register, (none | id | name | both)}`
-%%  :   specifies, what to register to the `eproc_registry` on startup.
+%%  :   specifies, what to register to the `eproc_registry' on startup.
 %%      The registration is performed asynchronously and the id or name are those,
 %%      loaded from the store during startup. These registration options are independent
-%%      from the FsmName parameter. The FSM registers `id` and `name` (if name exists) by default,
-%%      if registry exists. The startup will fail if this option is set to `id`, `name` or `both`,
-%%      and the registry is not configured for the `eproc_core` application (app environment).
+%%      from the FsmName parameter. The FSM registers `id' and `name' (if name exists) by default,
+%%      if registry exists. The startup will fail if this option is set to `id', `name' or `both',
+%%      and the registry is not configured for the `eproc_core' application (app environment).
 %%  `{start_sync, Sync :: boolean() | {Module :: module(), Function :: atom(), Args :: list()}}`
-%%  :   starts FSM synchronously if `Sync = true` and asynchronously otherwise.
-%%      Default is `false` (asynchronously). If FSM is started synchonously,
+%%  :   starts FSM synchronously if `Sync = true' and asynchronously otherwise.
+%%      Default is `false' (asynchronously). If FSM is started synchonously,
 %%      FSM id and name will be registered within the EProc Registry before
-%%      this function exits, if requested. In the case of `{Module, Function, Args}`,
+%%      this function exits, if requested. In the case of `{Module, Function, Args}',
 %%      the fsm will be started asynchronously, and then it will call the specified
 %%      function after loading the instance, but before starting to handle any events.
 %%      It can be used to synchronize the process startup.
 %%  `{limit_restarts, eproc_limits:limit_spec()}`
 %%  :   Limits restarts of the FSM.
 %%      Delays will be effective on process startup.
-%%      The action `notify` will cause the FSM to suspend itself.
-%%      The default is `undefined`. In such case the eproc_limits will not be used.
+%%      The action `notify' will cause the FSM to suspend itself.
+%%      The default is `undefined'. In such case the eproc_limits will not be used.
 %%  `{limit_transitions, eproc_limits:limit_spec()}`
 %%  :   Limits number of transition for the FSM.
 %%      Delays will be effective on transition ends.
-%%      The action `notify` will cause the FSM to suspend itself after processing the transition.
-%%      The default is `undefined`. In such case the eproc_limits will not be used.
+%%      The action `notify' will cause the FSM to suspend itself after processing the transition.
+%%      The default is `undefined'. In such case the eproc_limits will not be used.
 %%  `{limit_sent_msgs, [{all, eproc_limits:limit_spec()} | {dest, Destination, eproc_limits:limit_spec()}]}`
 %%  :   Limits number of messages sent by the FSM.
 %%      The counter will be updated in only on ends of transitions.
 %%      As a consequence, the delays will be effective on transition ends.
-%%      The action `notify` will cause the FSM to suspend itself after processing the transition.
-%%      The default is `undefined`. In such case the eproc_limits will not be used.
+%%      The action `notify' will cause the FSM to suspend itself after processing the transition.
+%%      The default is `undefined'. In such case the eproc_limits will not be used.
 %%  `{max_idle, TimeMS}`
 %%  :   TODO: Suspend process if it is idle for to long.
 %%      TODO: Support for hibernation should be added here.
@@ -830,7 +842,7 @@ start_link(FsmName, FsmRef, Options) ->
 
 
 %%
-%%  Same as `start_link/3`, just without FsmName parameter.
+%%  Same as `start_link/3', just without FsmName parameter.
 %%
 -spec start_link(
         FsmRef      :: fsm_ref(),
@@ -979,7 +991,7 @@ is_scope_valid(Scope) ->
 %%
 %%  Checks if the state name is valid for a transition target.
 %%
-%%  Comparing to the `is_state_valid/1`, the next state cannot be empty,
+%%  Comparing to the `is_state_valid/1', the next state cannot be empty,
 %%  and it can contain '_' in regions of an orthogonal state. The last
 %%  situation is only allowed, if the FSM already was in the orthogonal
 %%  state, that now has the underscores.
@@ -994,7 +1006,7 @@ is_next_state_valid(StateName, PrevStateName) ->
 
 
 %%
-%%  Equivalent to `is_next_state_valid(StateName, undefined | [])`.
+%%  Equivalent to `is_next_state_valid(StateName, undefined | [])'.
 %%  This function can be used instead of the mentioned, if orthogonal
 %%  states are not used or used without wildcarding regions with '_'.
 %%
@@ -1020,7 +1032,7 @@ derive_next_state(StateName, PrevStateName) ->
 
 
 %%
-%%  Internal function for `derive_next_state/2`.
+%%  Internal function for `derive_next_state/2'.
 %%
 % Wildcards are not allowed in the target state, if they were not defined in the prev state.
 derive_next_sub_state(Wildcard, PrevSName, Path, OrigNextSName, OrigPrevSName) when
@@ -1082,31 +1094,31 @@ derive_next_sub_state(State, _PrevSName, Path, OrigNextSName, OrigPrevSName) ->
 %%
 %%  Creates new FSM, starts it and sends first message to it. The startup can be
 %%  performed synchonously or asynchronously (default), depending on the `start_sync`
-%%  option. It could be passed via `start_spec` option in this function.
+%%  option. It could be passed via `start_spec' option in this function.
 %%  If the FSM is started synchonously, FSM instance id and name are registered
 %%  before this function exits, if FSM was requested to register them.
 %%  Nevertheless, the initial message is processed asynchronously.
 %%
-%%  This function should be used instead of calling `create/3`, `start_link/2-3`
-%%  and first `send_event/2-3` in most cases, when using FSM with the `eproc_registry`.
+%%  This function should be used instead of calling `create/3', `start_link/2-3`
+%%  and first `send_event/2-3' in most cases, when using FSM with the `eproc_registry'.
 %%  When the FSM used standalone, this function can be less usefull, because it
-%%  depends on `eproc_registry`.
+%%  depends on `eproc_registry'.
 %%
 %%  Parameters are the following:
 %%
 %%  `Module`
-%%  :   is passed to the `create/3` function (see its description for more details).
+%%  :   is passed to the `create/3' function (see its description for more details).
 %%  `Args`
-%%  :   is passed to the `create/3` function (see its description for more details).
+%%  :   is passed to the `create/3' function (see its description for more details).
 %%  `Event`
 %%  :   stands for the initial event of the FSM, i.e. event that created the FSM.
 %%      This event is used for invoking state transition callbacks for the transition
 %%      from the initial ([]) state.
 %%  `Options`
-%%  :   can contain all options that are supported by the `create/3` and
-%%      `send_event/2-3` functions. Options for `start_link/2-3` can be passed
-%%      via `start_spec` option. Additionally, group is derived from the context
-%%      and passed to the `create/3`, if it was not supplied explicitly.
+%%  :   can contain all options that are supported by the `create/3' and
+%%      `send_event/2-3' functions. Options for `start_link/2-3' can be passed
+%%      via `start_spec' option. Additionally, group is derived from the context
+%%      and passed to the `create/3', if it was not supplied explicitly.
 %%
 -spec send_create_event(
         Module  :: module(),
@@ -1132,9 +1144,9 @@ send_create_event(Module, Args, Event, Options) ->
 
 %%
 %%  Creates new FSM, starts it and sends first message synchonously to it. All the
-%%  parameters and behaviour are similar to ones, described for `send_create_event/4`,
-%%  except that first event is send synchonously, i.e. `sync_send_event/2-3` is used
-%%  instead of `send_event/2-3`. Instance name and id will be registered before this
+%%  parameters and behaviour are similar to ones, described for `send_create_event/4',
+%%  except that first event is send synchonously, i.e. `sync_send_event/2-3' is used
+%%  instead of `send_event/2-3'. Instance name and id will be registered before this
 %%  function returns and therefore can be used safely.
 %%
 %%  TODO: Race condition is present here. If several processes are trying
@@ -1165,21 +1177,21 @@ sync_send_create_event(Module, Args, Event, Options) ->
 
 %%
 %%  Sends an event to the FSM asynchronously.
-%%  This function returns `ok` immediatelly.
+%%  This function returns `ok' immediatelly.
 %%
 %%  Parameters:
 %%
 %%  `FsmRef`
 %%  :   References particular FSM instance.
 %%      Standard OTP reference types can be used to access process, that was
-%%      started with `FsmName` provided when invoking `start_link/3` or registered
+%%      started with `FsmName' provided when invoking `start_link/3' or registered
 %%      explicitly in a standard OTP process registry (like local, global or gproc).
-%%      Additionally FSM reference in form `{inst, InstId}` or `{name, Name}` can
-%%      be used if the FSM was started with the corresponding `register` option.
+%%      Additionally FSM reference in form `{inst, InstId}' or `{name, Name}' can
+%%      be used if the FSM was started with the corresponding `register' option.
 %%      PID (erlang process identifier) can be used to access the process in any case.
 %%  `Event`
 %%  :   Its an event to be sent to the FSM. It can be any term.
-%%      This event is then passed to the `handle_state` callback.
+%%      This event is then passed to the `handle_state' callback.
 %%  `Options`
 %%  :   List of options, that can be specified when sending
 %%      a message for the FSM. They are listed bellow.
@@ -1192,9 +1204,9 @@ sync_send_create_event(Module, Args, Event, Options) ->
 %%      using the following sources (in order):
 %%
 %%       1. Explicitly specified by this option.
-%%       2. Context of the sending process configured using `eproc_event_src` (uses process dictionary).
+%%       2. Context of the sending process configured using `eproc_event_src' (uses process dictionary).
 %%       3. The event is sent by an FSM instance. This case is also resolved from the process dictionary.
-%%  `{type, MsgType :: binary() | atom() | function()}`
+%%  `{type, MsgType :: binary() | atom() | event_type_fun()}'
 %%  :   User defined type of the event message. This type can be used to display
 %%      message in more user-friendly, or to filter messages by it.
 %%
@@ -1203,7 +1215,7 @@ sync_send_create_event(Module, Args, Event, Options) ->
 -spec send_event(
         FsmRef  :: fsm_ref() | fsm_key() | otp_ref(),
         Event   :: term(),
-        Options :: proplist()
+        Options :: [{type, MsgType :: binary() | atom() | event_type_fun()} | (OtherOpt :: term())]
     ) ->
         ok.
 
@@ -1221,8 +1233,8 @@ send_event(FsmRef, Event, Options) ->
 
 
 %%
-%%  Simplified version of the `send_event/3`,
-%%  equivalent to `send_event(FsmRef, Event, [])`.
+%%  Simplified version of the `send_event/3',
+%%  equivalent to `send_event(FsmRef, Event, [])'.
 %%
 -spec send_event(
         FsmRef  :: fsm_ref() | fsm_key() | otp_ref(),
@@ -1239,30 +1251,30 @@ send_event(FsmRef, Event) ->
 %%  the FSM process. This function can be usefull to make checkpoints,
 %%  where the process state should be recorded.
 %%
-%%  The event is delivered to the FSM with type `self`. If this function
-%%  will be called with argument `next`, the trigger in the `handle_state/3`
-%%  will be `{self, next}`.
+%%  The event is delivered to the FSM with type `self'. If this function
+%%  will be called with argument `next', the trigger in the `handle_state/3`
+%%  will be `{self, next}'.
 %%
-%%  This function returns `ok` immediatelly.
+%%  This function returns `ok' immediatelly.
 %%
 %%  Parameters:
 %%
-%%  `Event`
+%%  `Event'
 %%  :   Its an event to be sent to the FSM. It can be any term.
-%%      This event is then passed to the `handle_state` callback.
-%%  `Options`
+%%      This event is then passed to the `handle_state' callback.
+%%  `Options'
 %%  :   List of options, that can be specified when sending
 %%      a message for the FSM. They are listed bellow.
 %%
 %%  Available options:
 %%
-%%  `{type, MsgType :: binary() | atom() | function()}`
+%%  `{type, MsgType :: binary() | atom() | event_type_fun()}'
 %%  :   User defined type of the event message. This type can be used to display
 %%      message in more user-friendly, or to filter messages by it.
 %%
 -spec self_send_event(
         Event   :: term(),
-        Options :: proplist()
+        Options :: [{type, MsgType :: binary() | atom() | event_type_fun()} | (OtherOpt :: term())]
     ) ->
         ok |
         {error, Reason :: not_fsm | term()}.
@@ -1286,8 +1298,8 @@ self_send_event(Event, Options) ->
 
 
 %%
-%%  Simplified version of the `self_send_event/2`,
-%%  equivalent to `self_send_event(Event, [])`.
+%%  Simplified version of the `self_send_event/2',
+%%  equivalent to `self_send_event(Event, [])'.
 %%
 -spec self_send_event(
         Event   :: term()
@@ -1300,24 +1312,24 @@ self_send_event(Event) ->
 
 %%
 %%  Sends an event to the FSM synchronously. The function returns term, provided
-%%  by the FSM callback module, similarly to the corresponding function in `gen_fsm`.
+%%  by the FSM callback module, similarly to the corresponding function in `gen_fsm'.
 %%
 %%  Parameters:
 %%
 %%  `FsmRef`
 %%  :   References particular FSM instance.
-%%      See `send_event/3` for more details.
+%%      See `send_event/3' for more details.
 %%  `Event`
 %%  :   Its an event to be sent to the FSM. It can be any term.
-%%      This event is then passed to the `handle_state` callback.
+%%      This event is then passed to the `handle_state' callback.
 %%  `Options`
 %%  :   List of options, that can be specified when sending a message
-%%      for the FSM. All options supported by `send_event/3` are also
+%%      for the FSM. All options supported by `send_event/3' are also
 %%      supported here.
 %%
 %%  The following options are valid here (additionally to `send_event/3`):
 %%
-%%  `{type, MsgType :: binary() | atom() | function()}`
+%%  `{type, MsgType :: binary() | atom() | event_type_fun()}'
 %%  :   User defined type of the event message. This type can be used to display
 %%      message in more user-friendly, or to filter messages by it.
 %%  `{timeout, Timeout}`
@@ -1327,7 +1339,7 @@ self_send_event(Event) ->
 -spec sync_send_event(
         FsmRef  :: fsm_ref() | fsm_key() | otp_ref(),
         Event   :: term(),
-        Options :: proplist()
+        Options :: [{type, MsgType :: binary() | atom() | event_type_fun()} | (OtherOpt :: term())]
     ) ->
         Reply :: term().
 
@@ -1347,8 +1359,8 @@ sync_send_event(FsmRef, Event, Options) ->
 
 
 %%
-%%  Simplified version of the `sync_send_event/3`,
-%%  equivalent to `sync_send_event(FsmRef, Event, [])`.
+%%  Simplified version of the `sync_send_event/3',
+%%  equivalent to `sync_send_event(FsmRef, Event, [])'.
 %%
 -spec sync_send_event(
         FsmRef  :: fsm_ref() | fsm_key() | otp_ref(),
@@ -1380,20 +1392,20 @@ trigger_event(FsmRef, Type, Event, Options) ->
 %%
 %%  Kills existing FSM instance. The FSM can be either online or offline.
 %%  If FSM is online, it will be stopped. In any case, the FSM will be marked
-%%  as killed. This function also returns `ok` if the FSM was already terminated.
+%%  as killed. This function also returns `ok' if the FSM was already terminated.
 %%
 %%  Parameters:
 %%
 %%  `FsmRef`
 %%  :   References particular FSM instance. The reference must be either
-%%      `{inst, _}` or `{name, _}`. Erlang process ids or names are not
-%%      supported here. See `send_event/3` for more details.
+%%      `{inst, _}' or `{name, _}'. Erlang process ids or names are not
+%%      supported here. See `send_event/3' for more details.
 %%  `Options`
 %%  :   Any of the Common FSM Options can be provided here.
-%%      Only `store`, `registry` and `user` options will be used here
+%%      Only `store', `registry' and `user' options will be used here
 %%      and other options will be ignored.
 %%
-%%  This function depends on `eproc_registry`.
+%%  This function depends on `eproc_registry'.
 %%
 -spec kill(
         FsmRef  :: fsm_ref() | otp_ref(),
@@ -1424,21 +1436,21 @@ kill(FsmRef, Options) ->
 %%
 %%  Suspends existing FSM instance. The FSM can be either online or offline.
 %%  If FSM is online, it will be stopped. In any case, the FSM will be marked
-%%  as suspended. This function also returns `ok` if the FSM was already
+%%  as suspended. This function also returns `ok' if the FSM was already
 %%  suspended, and error if the FSM is already terminated.
 %%
 %%  Parameters:
 %%
 %%  `FsmRef`
 %%  :   References particular FSM instance. The reference must be either
-%%      `{inst, _}` or `{name, _}`. Erlang process ids or names are not
-%%      supported here. See `send_event/3` for more details.
+%%      `{inst, _}' or `{name, _}'. Erlang process ids or names are not
+%%      supported here. See `send_event/3' for more details.
 %%  `Options`
 %%  :   Any of the Common FSM Options can be provided here.
-%%      Only `store`, `registry` and `user` options will be used here
+%%      Only `store', `registry' and `user' options will be used here
 %%      and other options will be ignored.
 %%
-%%  This function depends on `eproc_registry`.
+%%  This function depends on `eproc_registry'.
 %%
 -spec suspend(
         FsmRef  :: fsm_ref(),
@@ -1468,13 +1480,13 @@ suspend(FsmRef, Options) ->
 
 %%
 %%  Suspends the current FSM. This function can only be called
-%%  by the FSM callback module, in the `handle_state/3` function.
+%%  by the FSM callback module, in the `handle_state/3' function.
 %%
 %%  This function does not suspend the FSM immediatelly. It rather
 %%  orders the suspending on the end of the current transition.
 %%
 %%  If this function is called in the beginning of the transition,
-%%  the next callbacks in the transition (`entry` and `exit`)
+%%  the next callbacks in the transition (`entry' and `exit`)
 %%  will be called as usual.
 %%
 -spec suspend(Reason :: term()) -> ok.
@@ -1498,11 +1510,11 @@ suspend(Reason) ->
 %%
 %%  `FsmRef`
 %%  :   References particular FSM instance. The reference must be either
-%%      `{inst, _}` or `{name, _}`. Erlang process ids or names are not
-%%      supported here. See `send_event/3` for more details.
+%%      `{inst, _}' or `{name, _}'. Erlang process ids or names are not
+%%      supported here. See `send_event/3' for more details.
 %%  `Options`
 %%  :   Any of the Common FSM Options can be provided here.
-%%      Only `store`, `registry` and `user` options will be used
+%%      Only `store', `registry' and `user' options will be used
 %%      here, other options will be ignored. Options, specific to
 %%      this function are listed bellow.
 %%
@@ -1512,14 +1524,14 @@ suspend(Reason) ->
 %%  :   When resuming the FSM, its internal state can be changed.
 %%      This option specifies, what state to use in the resumed FSM.
 %%
-%%        * The option `unchanged` indicates to use FSM's original state,
+%%        * The option `unchanged' indicates to use FSM's original state,
 %%          as it was at the moment when the FSM was interrupted.
-%%        * The option `retry_last` indicates to use state of the last resume
+%%        * The option `retry_last' indicates to use state of the last resume
 %%          attempt or the original state, if there was no resume attempts.
 %%          This is the default option.
-%%        * An the option `{set, NewStateName, NewStateData, ResumeScript}` indicates
-%%          to use new state, as provided explicitly. All of the `NewStateName`,
-%%          `NewStateData`, `ResumeScript` can be `undefined`, which means to leave
+%%        * An the option `{set, NewStateName, NewStateData, ResumeScript}' indicates
+%%          to use new state, as provided explicitly. All of the `NewStateName',
+%%          `NewStateData', `ResumeScript' can be `undefined', which means to leave
 %%          the corresponding field unchanged (or script being empty).
 %%
 %%  `{start, (no | yes | start_spec())}`
@@ -1529,7 +1541,7 @@ suspend(Reason) ->
 %%        * The option 'no' indicates, that the FSM should not be started automatically.
 %%          In this case, the application can start the FSM manually afterward.
 %%          EProc registry is not used in this case.
-%%        * If the option `yes` is provided, the EProc Registry will be used to start
+%%        * If the option `yes' is provided, the EProc Registry will be used to start
 %%          the FSM with start specification provided when creating the FSM.
 %%          The is the default case.
 %%        * Third option is to provide the start specification explicitly.
@@ -1539,8 +1551,8 @@ suspend(Reason) ->
 %%
 %%  `{fsm_ref, fsm_ref()}`
 %%  :   This option can be used to provide FSM reference. This is only meaningfull,
-%%      if the `FsmRef` parameter is `otp_ref()`. Altrough FSM cannot be started with
-%%      `FsmRef :: otp_ref()`, one can use this option with standalone FSM, to resume
+%%      if the `FsmRef' parameter is `otp_ref()'. Altrough FSM cannot be started with
+%%      `FsmRef :: otp_ref()', one can use this option with standalone FSM, to resume
 %%      it not using EProc Registry. If this option is provided, the FsmRef parameter
 %%      will only be used to check if the FSM is online or not. All other actions will
 %%      be performed using the reference provided by this option.
@@ -1604,14 +1616,14 @@ resume(FsmRef, Options) ->
 %%  broken processes. This function suspends the FSM and then tries to resume
 %%  it with new state. Additionally, it waits till the FSM will be terminated
 %%  before attempting to resume it. This function will work as resume/2 for
-%%  already suspended processes with `{state, {set, NewStateName, NewStateData, UpdateScript}}` option.
+%%  already suspended processes with `{state, {set, NewStateName, NewStateData, UpdateScript}}' option.
 %%
 %%  Parameters:
 %%
 %%  `FsmRef`
 %%  :   References particular FSM instance. The reference must be either
-%%      `{inst, _}` or `{name, _}`. Erlang process ids or names are not
-%%      supported here. See `send_event/3` for more details.
+%%      `{inst, _}' or `{name, _}'. Erlang process ids or names are not
+%%      supported here. See `send_event/3' for more details.
 %%  `NewStateName`
 %%  :   New state name, or undefined.
 %%  `NewStateData`
@@ -1620,8 +1632,8 @@ resume(FsmRef, Options) ->
 %%  :   Script, to be executed when resuming the FSM.
 %%  `Options`
 %%  :   Any of the Common FSM Options can be provided here as well
-%%      as all options, supported by `suspend/2` and `resume/2` functions.
-%%      Only `store`, `registry` and `user` common options will be used
+%%      as all options, supported by `suspend/2' and `resume/2' functions.
+%%      Only `store', `registry' and `user' common options will be used
 %%      here, other options will be ignored. Options, specific to
 %%      this function are listed bellow.
 %%
@@ -1683,10 +1695,10 @@ update(FsmRef, NewStateName, NewStateData, UpdateScript, Options) ->
 %%
 %%  `FsmRef`
 %%  :   References particular FSM instance.
-%%      See `send_event/3` for more details.
+%%      See `send_event/3' for more details.
 %%  `Options`
 %%  :   Any of the Common FSM Options can be provided here.
-%%      Only the `registry` option will be used, other will be ignored.
+%%      Only the `registry' option will be used, other will be ignored.
 %%
 -spec is_online(
         FsmRef  :: fsm_ref() | otp_ref(),
@@ -1704,7 +1716,7 @@ is_online(FsmRef, Options) ->
 
 
 %%
-%%  Equivalent to `is_online(FsmRef, [])`.
+%%  Equivalent to `is_online(FsmRef, [])'.
 %%
 -spec is_online(
         FsmRef  :: fsm_ref() | otp_ref()
@@ -1717,17 +1729,17 @@ is_online(FsmRef) ->
 
 %%
 %%  To be used by the process implementation to sent response to a synchronous
-%%  request before the `handle_state/3` function completes.
+%%  request before the `handle_state/3' function completes.
 %%
 %%  Parameters:
 %%
 %%  `To`
-%%  :   A recipient, who should receive the reply. The parameter `From` from
-%%      the `handle_state` `{sync, From, Message}`should be passed here.
+%%  :   A recipient, who should receive the reply. The parameter `From' from
+%%      the `handle_state' `{sync, From, Message}' should be passed here.
 %%  `Reply`
 %%  :   The reply message.
 %%
-%%  The function returns `ok` on success.
+%%  The function returns `ok' on success.
 %%
 -spec reply(
         To    :: term(),
@@ -1746,7 +1758,7 @@ reply({InstId, TrnNr, ReplyFun}, Reply) ->
 %%  Register an outgoing message, sent by the FSM. This function is used by
 %%  modules sending outgoing messages from the FSM, like connectors.
 %%
-%%  See also: `registered_send` and `registered_sync_send`.
+%%  See also: `registered_send' and `registered_sync_send'.
 %%
 -spec register_sent_msg(
         Src         :: event_src(),
@@ -1792,9 +1804,9 @@ register_sent_msg(_Src, _Dst, _SentMsgCId, _SentMsgType, _SentMsg, _Timestamp) -
 %%
 %%  Registers response message of the outgoing call made by FSM.
 %%  This function should be called only if corresponding call to
-%%  `register_sent_msg` returned `{ok, SentMsgCId}`.
+%%  `register_sent_msg' returned `{ok, SentMsgCId}'.
 %%
-%%  See also: `registered_sync_send`.
+%%  See also: `registered_sync_send'.
 %%
 -spec register_resp_msg(
         Src         :: event_src(),
@@ -1838,11 +1850,11 @@ register_resp_msg({inst, SrcInstId}, Dst, SentMsgCId, RespMsgCId, RespMsgType, R
 
 %%
 %%  Helper function for registering asynchronous outgoing message.
-%%  This function can be used instead of `register_sent_msg`.
+%%  This function can be used instead of `register_sent_msg'.
 %%
 registered_send(EventSrc, EventDst, EventTypeFun, Event, SendFun) ->
-    EventType = EventTypeFun(event, Event),
-    case register_sent_msg(EventSrc, EventDst, undefined, EventType, Event, os:timestamp()) of
+    {EventType, FormattedBody} = EventTypeFun(event, Event),
+    case register_sent_msg(EventSrc, EventDst, undefined, EventType, FormattedBody, os:timestamp()) of
         {ok, SentMsgCId} ->
             ok = SendFun(SentMsgCId),
             {ok, SentMsgCId};
@@ -1854,21 +1866,21 @@ registered_send(EventSrc, EventDst, EventTypeFun, Event, SendFun) ->
 
 %%
 %%  Helper function for registering synchronous outgoing messages.
-%%  This function can be used instead of `register_sent_msg` and `register_resp_msg`.
+%%  This function can be used instead of `register_sent_msg' and `register_resp_msg'.
 %%
 registered_sync_send(EventSrc, EventDst, EventTypeFun, Event, SendFun) ->
-    EventType = EventTypeFun(sync, Event),
-    case register_sent_msg(EventSrc, EventDst, undefined, EventType, Event, os:timestamp()) of
+    {EventType, FormattedBody} = EventTypeFun(sync, Event),
+    case register_sent_msg(EventSrc, EventDst, undefined, EventType, FormattedBody, os:timestamp()) of
         {ok, SentMsgCId} ->
             {ok, OurRespMsgCId} = case SendFun(SentMsgCId) of
                 {ok, RespMsg, RespMsgCId, UpdatedDst} ->
                     RespTime = os:timestamp(),
-                    RespMsgType = EventTypeFun(resp, RespMsg),
-                    register_resp_msg(EventSrc, UpdatedDst, SentMsgCId, RespMsgCId, RespMsgType, RespMsg, RespTime);
+                    {RespMsgType, RespMsgFormatted} = EventTypeFun({resp, Event}, RespMsg),
+                    register_resp_msg(EventSrc, UpdatedDst, SentMsgCId, RespMsgCId, RespMsgType, RespMsgFormatted, RespTime);
                 {ok, RespMsg} ->
                     RespTime = os:timestamp(),
-                    RespMsgType = EventTypeFun(resp, RespMsg),
-                    register_resp_msg(EventSrc, EventDst, SentMsgCId, undefined, RespMsgType, RespMsg, RespTime)
+                    {RespMsgType, RespMsgFormatted} = EventTypeFun({resp, Event}, RespMsg),
+                    register_resp_msg(EventSrc, EventDst, SentMsgCId, undefined, RespMsgType, RespMsgFormatted, RespTime)
             end,
             {ok, SentMsgCId, OurRespMsgCId, RespMsg};
         {error, not_fsm} ->
@@ -1882,7 +1894,7 @@ registered_sync_send(EventSrc, EventDst, EventTypeFun, Event, SendFun) ->
 
 %%
 %%  Converts FSM start specification to a list of arguments
-%%  for a `eproc_fsm:start_link/2-3` function or an MFA.
+%%  for a `eproc_fsm:start_link/2-3' function or an MFA.
 %%
 -spec resolve_start_spec(
         FsmRef      :: fsm_ref(),
@@ -1907,8 +1919,8 @@ resolve_start_spec(FsmRef, {mfa, {Module, Function, Args}}) when is_atom(Module)
 %%  This function should be called when crash of the fsm is detected.
 %%  It registers it.
 %%
-%%  This function is designed to be used from an `error_logger` handler,
-%%  (`eproc_error_logger`) and is tied to the data, returned by the `format_status/2`.
+%%  This function is designed to be used from an `error_logger' handler,
+%%  (`eproc_error_logger`) and is tied to the data, returned by the `format_status/2'.
 %%
 handle_crash_msg(Pid, Msg, {?MODULE, #state{inst_id = InstId, type = Type, trn_nr = LastTrnNr, store = StoreRef}}, Reason) ->
     lager:debug("FSM crash detected, instId=~p, pid=~p, reason=~p", [InstId, Pid, Reason]),
@@ -1921,7 +1933,7 @@ handle_crash_msg(_Pid, _Msg, _State, _Reason) ->
 
 
 %% =============================================================================
-%%  Callbacks for `gen_server`.
+%%  Callbacks for `gen_server'.
 %% =============================================================================
 
 %%
@@ -2073,8 +2085,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%  Invoked when printing server state.
 %%
 format_status(terminate, [_PDict, State]) ->
-    % This structure is used in the `handle_crash_msg/4` function, to detect crashes.
-    % The `handle_crash_msg/4` is called from the `eproc_error_logger` handler, it
+    % This structure is used in the `handle_crash_msg/4' function, to detect crashes.
+    % The `handle_crash_msg/4' is called from the `eproc_error_logger' handler, it
     % gets more of the context info to register the error properly.
     % This "loop" could be eliminated, if this module would be implemented
     % as a special_process instead of gen_server.
@@ -2141,7 +2153,7 @@ resolve_start_spec(CreateOpts) ->
 
 %%
 %%  Returns either instance id or undefined, if the current process
-%%  is not `eproc_fsm` process.
+%%  is not `eproc_fsm' process.
 %%
 resolve_event_src(SendOptions) ->
     case proplists:lookup(source, SendOptions) of
@@ -2159,7 +2171,7 @@ resolve_event_src(SendOptions) ->
 
 
 %%
-%%  Returns destination FSM reference, used to pass it to `regisrer_out_msg/3`.
+%%  Returns destination FSM reference, used to pass it to `regisrer_out_msg/3'.
 %%
 resolve_event_dst({inst, InstId}) ->
     {ok, {inst, InstId}};
@@ -2169,7 +2181,7 @@ resolve_event_dst(_) ->
 
 
 %%
-%%  Returns a fun, producing message types.
+%%  Returns a fun, producing message types and message bodies to be registered to the `eproc_store'.
 %%
 resolve_event_type_fun(SendOptions) ->
     case proplists:lookup(type, SendOptions) of
@@ -2185,32 +2197,39 @@ resolve_event_type_fun(SendOptions) ->
 
 
 %%
+%%  @doc
 %%  Default implementation for deriving event type from the event message.
+%%  The `resolve_event_type/2' function must return a tuple composed an
+%%  event type and its body to be registered in the `eproc_store'.
+%%  The default implementation will take event tole and convert it to a binary
+%%  to derive the event type. The event body is registered as-is in the default
+%%  implementation.
 %%
+-spec resolve_event_type(atom(), term()) -> {Type :: binary(), Body :: term()}.
+
 resolve_event_type(_EventRole, Atom) when is_atom(Atom) ->
-    erlang:atom_to_binary(Atom, utf8);
+    {erlang:atom_to_binary(Atom, utf8), Atom};
 
 resolve_event_type(_EventRole, Binary) when is_binary(Binary) ->
-    Binary;
+    {Binary, Binary};
 
 resolve_event_type(EventRole, TaggedTuple) when is_tuple(TaggedTuple), is_atom(element(1, TaggedTuple)) ->
     resolve_event_type(EventRole, element(1, TaggedTuple));
 
 resolve_event_type(_EventRole, Term) ->
     IoList = io_lib:format("~W", [Term, 3]),
-    erlang:iolist_to_binary(IoList).
-
+    {erlang:iolist_to_binary(IoList), Term}.
 
 %%
 %%  This function uses supplied type for request messages and
 %%  the default implementation for responses and all other.
 %%
-resolve_event_type_const(EventRole, EventTypeConst, _Event) when EventRole =:= event; EventRole =:= sync ->
+resolve_event_type_const(EventRole, EventTypeConst, Event) when EventRole =:= event; EventRole =:= sync ->
     if
         is_binary(EventTypeConst) ->
-            EventTypeConst;
+            {EventTypeConst, Event};
         is_atom(EventTypeConst) ->
-            erlang:atom_to_binary(EventTypeConst, utf8)
+            {erlang:atom_to_binary(EventTypeConst, utf8), Event}
     end;
 
 resolve_event_type_const(EventRole, _EventTypeConst, Event) ->
@@ -2636,7 +2655,7 @@ perform_transition(Trigger, TransitionFun, State) ->
         undefined             -> ?MSGCID_REQUEST(InstId, TrnNr);
         ?MSGCID_SENT(I, T, M) -> ?MSGCID_RECV(I, T, M)
     end,
-    RequestMsgType = MessageTypeFun(TriggerType, TriggerMsg),
+    {RequestMsgType, RequestBody} = MessageTypeFun(TriggerType, TriggerMsg),
     RequestMsgRef = #msg_ref{cid = RequestMsgCId, peer = TriggerSrc, type = RequestMsgType},
     RequestMsg = #message{
         msg_id   = RequestMsgCId,
@@ -2645,13 +2664,13 @@ perform_transition(Trigger, TransitionFun, State) ->
         resp_to  = undefined,
         type     = RequestMsgType,
         date     = TrnStart,
-        body     = TriggerMsg
+        body     = RequestBody
     },
     {ResponseMsgRef, TransitionMsgs} = case Reply of
         noreply ->
             {undefined, [RequestMsg | RegisteredMsgs]};
         {reply, ReplyMsgCId, ReplyMsg, _ReplySent} ->
-            ResponseMsgType = MessageTypeFun(reply, ReplyMsg),
+            {ResponseMsgType, ResponseBody} = MessageTypeFun(reply, ReplyMsg),
             ResponseRef = #msg_ref{cid = ReplyMsgCId, peer = TriggerSrc, type = ResponseMsgType},
             ResponseMsg = #message{
                 msg_id   = ReplyMsgCId,
@@ -2660,7 +2679,7 @@ perform_transition(Trigger, TransitionFun, State) ->
                 resp_to  = RequestMsgCId,
                 type     = ResponseMsgType,
                 date     = TrnEnd,
-                body     = ReplyMsg
+                body     = ResponseBody
             },
             {ResponseRef, [RequestMsg, ResponseMsg | RegisteredMsgs]}
     end,
@@ -2705,28 +2724,29 @@ perform_transition(Trigger, TransitionFun, State) ->
         inst_status  = InstStatus,
         interrupts   = Interrupts
     },
+    %
     % TODO: add_transition can reply with suggestion to stop the process.
     {ok, InstId, TrnNr} = eproc_store:add_transition(Store, InstId, Transition, TransitionMsgs),
-
-    %% Send a reply, if not sent already
+    %
+    % Send a reply, if not sent already
     case Reply of
         noreply -> ok;
         {reply, _SentReplyMsgCId, _SentReplyMsg, true} ->  ok;
         {reply, ReplyMsgCIdToSend, ReplyMsgToSend, false} ->
             ReplyFun(InstId, ReplyMsgCIdToSend, ReplyMsgToSend)
     end,
-
-    %% Wait a bit, if some limits were reached.
+    %
+    % Wait a bit, if some limits were reached.
     case Delay of
         undefined -> ok;
         _ ->
             lager:debug("FSM id=~p is going to sleep for ~p ms on transition.", [InstId, Delay]),
             timer:sleep(Delay)
     end,
-
+    %
     eproc_stats:add_transition_completed(Type, Duration, RequestMsgType, Reply =/= noreply, OutAsyncCount, OutSyncCount),
-
-    %% Ok, save changes in the state.
+    %
+    % Ok, save changes in the state.
     NewState = State#state{
         sname = NewSName,
         sdata = NewSData,
@@ -3242,7 +3262,7 @@ limits_cleanup(State) ->
 -include_lib("eunit/include/eunit.hrl").
 
 %%
-%%  Unit tests for `resolve_fsm_ref/1`.
+%%  Unit tests for `resolve_fsm_ref/1'.
 %%
 resolve_fsm_ref_test() ->
     ok = meck:new(eproc_router, []),
@@ -3270,7 +3290,7 @@ resolve_fsm_ref_test() ->
     meck:unload([eproc_router, eproc_registry]).
 
 %%
-%%  Unit tests for `resolve_event_src/1`.
+%%  Unit tests for `resolve_event_src/1'.
 %%
 resolve_event_src_test_() -> [
     fun () ->
@@ -3303,21 +3323,21 @@ resolve_event_src_test_() -> [
 
 
 %%
-%%  Unit tests for `resolve_event_type_fun/1`.
+%%  Unit tests for `resolve_event_type_fun/1'.
 %%
 resolve_event_type_fun_test_() ->
     {ok, Fun1} = resolve_event_type_fun([{type, asd}]),
-    {ok, Fun2} = resolve_event_type_fun([{type, fun (_R, _M) -> <<"qqq">> end}]),
+    {ok, Fun2} = resolve_event_type_fun([{type, fun (_R, _M) -> {<<"qqq">>, zzz} end}]),
     {ok, Fun3} = resolve_event_type_fun([]),
     [
-        ?_assertEqual(<<"asd">>, Fun1(event, uuu)),
-        ?_assertEqual(<<"qqq">>, Fun2(event, uuu)),
-        ?_assertEqual(<<"uuu">>, Fun3(event, uuu))
+        ?_assertEqual({<<"asd">>, uuu}, Fun1(event, uuu)),
+        ?_assertEqual({<<"qqq">>, zzz}, Fun2(event, uuu)),
+        ?_assertEqual({<<"uuu">>, uuu}, Fun3(event, uuu))
     ].
 
 
 %%
-%%  Unit tests for `split_options/1`.
+%%  Unit tests for `split_options/1'.
 %%
 split_options_test_() -> [
     ?_assertMatch(
@@ -3339,7 +3359,7 @@ split_options_test_() -> [
     )].
 
 %%
-%%  Unit tests for `limits_action/2`.
+%%  Unit tests for `limits_action/2'.
 %%
 limits_action_test() ->
     State = #state{inst_id = iid, lim_res = r, lim_trn = t, lim_msg_all = ma, lim_msg_dst = [{d1, md1}, {d2, md2}]},
@@ -3356,7 +3376,7 @@ limits_action_test() ->
     ok = meck:unload(eproc_fsm_limits_action_mock).
 
 %%
-%%  Unit tests for `limits_notify_trn/2`.
+%%  Unit tests for `limits_notify_trn/2'.
 %%
 limits_notify_trn_test() ->
     State = #state{inst_id = iid, lim_res = r, lim_trn = t, lim_msg_all = ma, lim_msg_dst = [{d1, md1}, {d2, md2}]},
@@ -3374,7 +3394,7 @@ limits_notify_trn_test() ->
 
 
 %%
-%%  Check if `set_state_region/3` works as expected.
+%%  Check if `set_state_region/3' works as expected.
 %%
 set_state_region_test_() ->
     [
@@ -3386,7 +3406,7 @@ set_state_region_test_() ->
 
 
 %%
-%%  Check if `get_state_region/2` works as expected.
+%%  Check if `get_state_region/2' works as expected.
 %%
 get_state_region_test_() ->
     [

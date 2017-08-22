@@ -656,8 +656,8 @@ set_timer(Name, After, Start, Event, Scope) ->
             {ok, InstId} = eproc_fsm:id(),
             Src = {inst, InstId},
             Dst = {timer, Name},
-            EventMsgType = eproc_fsm:resolve_event_type(timer, Event),
-            {ok, EventMsgCId} = eproc_fsm:register_sent_msg(Src, Dst, undefined, EventMsgType, Event, Start),
+            {EventMsgType, FormattedBody} = eproc_fsm:resolve_event_type(timer, Event),
+            {ok, EventMsgCId} = eproc_fsm:register_sent_msg(Src, Dst, undefined, EventMsgType, FormattedBody, Start),
             eproc_fsm_attr:action(?MODULE, Name, {timer, After, Start, EventMsgCId, EventMsgType, Event}, Scope);
         false ->
             {error, {invalid_scope, Scope}}
