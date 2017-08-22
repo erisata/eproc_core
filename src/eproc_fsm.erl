@@ -1848,8 +1848,8 @@ register_resp_msg({inst, SrcInstId}, Dst, SentMsgCId, RespMsgCId, RespMsgType, R
 %%  This function can be used instead of `register_sent_msg'.
 %%
 registered_send(EventSrc, EventDst, EventTypeFun, Event, SendFun) ->
-    {EventType, Body} = EventTypeFun(event, Event),
-    case register_sent_msg(EventSrc, EventDst, undefined, EventType, Body, os:timestamp()) of
+    {EventType, FormattedBody} = EventTypeFun(event, Event),
+    case register_sent_msg(EventSrc, EventDst, undefined, EventType, FormattedBody, os:timestamp()) of
         {ok, SentMsgCId} ->
             ok = SendFun(SentMsgCId),
             {ok, SentMsgCId};
@@ -1864,8 +1864,8 @@ registered_send(EventSrc, EventDst, EventTypeFun, Event, SendFun) ->
 %%  This function can be used instead of `register_sent_msg' and `register_resp_msg'.
 %%
 registered_sync_send(EventSrc, EventDst, EventTypeFun, Event, SendFun) ->
-    {EventType, Body} = EventTypeFun(sync, Event),
-    case register_sent_msg(EventSrc, EventDst, undefined, EventType, Body, os:timestamp()) of
+    {EventType, FormattedBody} = EventTypeFun(sync, Event),
+    case register_sent_msg(EventSrc, EventDst, undefined, EventType, FormattedBody, os:timestamp()) of
         {ok, SentMsgCId} ->
             {ok, OurRespMsgCId} = case SendFun(SentMsgCId) of
                 {ok, RespMsg, RespMsgCId, UpdatedDst} ->
@@ -2194,8 +2194,11 @@ resolve_event_type_fun(SendOptions) ->
 %%
 %%  @doc
 %%  Default implementation for deriving event type from the event message.
-%%  In normal case, resolve_event_type/ will return a tuple composed from two values with same length.
-%%  If is needed to transform a message in some way (ex. trim, etc.), second tuple value can be used as a new value.
+%%  The `resolve_event_type/2' function must return a tuple composed an
+%%  event type and its body to be registered in the `eproc_store'.
+%%  The default implementation will take event tole and convert it to a binary
+%%  to derive the event type. The event body is registered as-is in the default
+%%  implementation.
 %%
 -spec resolve_event_type(atom(), term()) -> {Type :: binary(), Body :: term()}.
 
@@ -2225,7 +2228,7 @@ resolve_event_type_const(EventRole, EventTypeConst, Event) when EventRole =:= ev
     end;
 
 resolve_event_type_const(EventRole, _EventTypeConst, Event) ->
-    resolve_event_type({EventRole, Event}, Event).
+    resolve_event_type(EventRole, Event).
 
 
 %%
@@ -2716,28 +2719,29 @@ perform_transition(Trigger, TransitionFun, State) ->
         inst_status  = InstStatus,
         interrupts   = Interrupts
     },
+    %
     % TODO: add_transition can reply with suggestion to stop the process.
     {ok, InstId, TrnNr} = eproc_store:add_transition(Store, InstId, Transition, TransitionMsgs),
-
-    %% Send a reply, if not sent already
+    %
+    % Send a reply, if not sent already
     case Reply of
         noreply -> ok;
         {reply, _SentReplyMsgCId, _SentReplyMsg, true} ->  ok;
         {reply, ReplyMsgCIdToSend, ReplyMsgToSend, false} ->
             ReplyFun(InstId, ReplyMsgCIdToSend, ReplyMsgToSend)
     end,
-
-    %% Wait a bit, if some limits were reached.
+    %
+    % Wait a bit, if some limits were reached.
     case Delay of
         undefined -> ok;
         _ ->
             lager:debug("FSM id=~p is going to sleep for ~p ms on transition.", [InstId, Delay]),
             timer:sleep(Delay)
     end,
-
+    %
     eproc_stats:add_transition_completed(Type, Duration, RequestMsgType, Reply =/= noreply, OutAsyncCount, OutSyncCount),
-
-    %% Ok, save changes in the state.
+    %
+    % Ok, save changes in the state.
     NewState = State#state{
         sname = NewSName,
         sdata = NewSData,
