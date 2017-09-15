@@ -2848,11 +2848,9 @@ perform_event_transition(Trigger, TrnNr, InitAttrActions, State) ->
             end,
             case perform_entry(SName, NewSName, SDataAfterExit, State) of
                 {next, SNameAfterEntry, SDataAfterEntry} ->
-                    {ok, DerivedSNameAfterEntry} = derive_next_state(SNameAfterEntry, SName),
-                    {cont, DerivedSNameAfterEntry, SDataAfterEntry};
+                    {cont, SNameAfterEntry, SDataAfterEntry};
                 {stop, SNameAfterEntry, SDataAfterEntry} ->
-                    {ok, DerivedSNameAfterEntry} = derive_next_state(SNameAfterEntry, SName),
-                    {stop, DerivedSNameAfterEntry, SDataAfterEntry}
+                    {stop, SNameAfterEntry, SDataAfterEntry}
             end;
         final ->
             {ok, SDataAfterExit} = case TrnNr of
@@ -2881,24 +2879,28 @@ perform_exit(PrevSName, NextSName, SData, #state{module = Module}) ->
 perform_entry(PrevSName, NextSName, SData, State = #state{module = Module, opts = Opts}) ->
     case perform_entry(PrevSName, NextSName, '_', [], SData, State) of
         {next, NewSName, NewSData} ->
+            {ok, DerivedNewSName} = derive_next_state(NewSName, PrevSName),
             case proplists:get_bool(trigger_entered, Opts) of
                 true ->
-                    {ok, DerivedNewSName} = derive_next_state(NewSName, PrevSName),
                     case Module:handle_state(DerivedNewSName, {entered, PrevSName}, NewSData) of
                         ok ->
-                            {next, NewSName, NewSData};
+                            {next, DerivedNewSName, NewSData};
                         {ok, OtherSData} ->
-                            {next, NewSName, OtherSData};
+                            {next, DerivedNewSName, OtherSData};
                         {same_state, OtherSData} ->
-                            {next, NewSName, OtherSData};
+                            {next, DerivedNewSName, OtherSData};
                         {next_state, OtherSName, OtherSData} ->
-                            perform_entry(PrevSName, OtherSName, OtherSData, State)
+                            % Use this state as the previous state for the following entries.
+                            % This allow to have several transitions between states in a single transaction.
+                            % It is useful for implementing `choice' or `join' constructs.
+                            perform_entry(DerivedNewSName, OtherSName, OtherSData, State)
                     end;
                 false ->
-                    {next, NewSName, NewSData}
+                    {next, DerivedNewSName, NewSData}
             end;
         {stop, NewSName, NewSData} ->
-            {stop, NewSName, NewSData}
+            {ok, DerivedNewSName} = derive_next_state(NewSName, PrevSName),
+            {stop, DerivedNewSName, NewSData}
     end.
 
 
