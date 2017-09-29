@@ -1931,10 +1931,10 @@ resolve_start_spec_test_() -> [
 %%  Check, if `resolve_event_type/2` works.
 %%
 resolve_event_type_test_() -> [
-        ?_assertEqual({<<"asd">>, asd}, eproc_fsm:resolve_event_type(event, asd)),
-        ?_assertEqual({<<"dsd">>, <<"dsd">>}, eproc_fsm:resolve_event_type(event, <<"dsd">>)),
-        ?_assertEqual({<<"fsa">>, fsa}, eproc_fsm:resolve_event_type(event, {fsa, asd, [[]]})),
-        ?_assertEqual({<<"[a]">>, [a]}, eproc_fsm:resolve_event_type(event, [a]))
+        ?_assertEqual({<<"asd">>, asd},              eproc_fsm:resolve_event_type(event, asd)),
+        ?_assertEqual({<<"dsd">>, <<"dsd">>},        eproc_fsm:resolve_event_type(event, <<"dsd">>)),
+        ?_assertEqual({<<"fsa">>, {fsa, asd, [[]]}}, eproc_fsm:resolve_event_type(event, {fsa, asd, [[]]})),
+        ?_assertEqual({<<"[a]">>, [a]},              eproc_fsm:resolve_event_type(event, [a]))
     ].
 
 

@@ -2213,8 +2213,8 @@ resolve_event_type(_EventRole, Atom) when is_atom(Atom) ->
 resolve_event_type(_EventRole, Binary) when is_binary(Binary) ->
     {Binary, Binary};
 
-resolve_event_type(EventRole, TaggedTuple) when is_tuple(TaggedTuple), is_atom(element(1, TaggedTuple)) ->
-    resolve_event_type(EventRole, element(1, TaggedTuple));
+resolve_event_type(_EventRole, TaggedTuple) when is_tuple(TaggedTuple), is_atom(element(1, TaggedTuple)) ->
+    {erlang:atom_to_binary(element(1, TaggedTuple), utf8), TaggedTuple};
 
 resolve_event_type(_EventRole, Term) ->
     IoList = io_lib:format("~W", [Term, 3]),
