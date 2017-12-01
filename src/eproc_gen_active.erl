@@ -103,10 +103,10 @@ state(State, {entry, Prev}, Data, {DoEvent, _DoFun}, Retry, Giveup, _Next, _Erro
         undefined ->
             ok
     end,
-    case {Giveup, Prev} of
-        {_,                                State} -> ok;
-        {{GEvent, GTimeout, GName, _GFun}, _    } -> ok = eproc_timer:set(GName, GTimeout, GEvent, State);
-        {undefined,                        _    } -> ok
+    case {Giveup, eproc_fsm:derive_next_state(State, Prev)} of
+        {_,                                {ok, Prev}} -> ok; % Error is also handled as a first entry to the state.
+        {{GEvent, GTimeout, GName, _GFun}, _         } -> ok = eproc_timer:set(GName, GTimeout, GEvent, State);
+        {undefined,                        _         } -> ok
     end,
     {ok, Data};
 
