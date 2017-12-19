@@ -111,7 +111,7 @@ test_lifecycle_stats(_Config) ->
     ?assertThat(eproc_stats:get_fsm_stats(trn, eproc_fsm__seq, count), is(4)),
     % Suspend,resume with state changed -> transition
     {ok, FsmRef1} = eproc_fsm:suspend(FsmRef1, []),
-    {ok, FsmRef1} = eproc_fsm:resume(FsmRef1, [{state, {set, decrementing, {state, 20}, undefined}}]),
+    {ok, FsmRef1} = eproc_fsm:resume(FsmRef1, [{state, {set, decrementing, {data, 20}, undefined}}]),
     timer:sleep(5),
     ?assertThat(eproc_stats:get_fsm_stats(inst, eproc_fsm__seq, started), is(6)),
     ?assertThat(eproc_stats:get_fsm_stats(trn, eproc_fsm__seq, count), is(5)),
