@@ -190,11 +190,9 @@ state(opening = State, Trigger, StateData) when
 %%  The `waiting` state.
 %%
 state(waiting, {entry, _PrevState}, StateData) ->
-    lager:info("WAITING STATE entry ~p.", [StateData]),
     {next_state, doing, StateData};
 
 state(waiting, {event, read}, StateData = #data{events = Events}) ->
-    lager:info("WAITING STATE Read ~p.", [StateData]),
     {next_state, doing, StateData#data{events = [read | Events], reading = read}};
 
 %%
@@ -215,22 +213,16 @@ state(doing = State, Trigger, StateData) when
     });
 
 state(doing, {event, read}, StateData = #data{events = Events}) ->
-    lager:info("DOING STATE Read ~p.", [StateData]),
     {next_state, wait, StateData#data{events = [read | Events], reading = read}};
 
 %%
 %%  The `wait` state.
 %%
 state(wait, {entry, _PrevState}, StateData) ->
-    lager:info("WAIT STATE entry ~p.", [StateData]),
     {same_state, StateData};
 
 state(wait, {event, read}, StateData = #data{events = Events}) ->
-    lager:info("WAIT STATE Read ~p.", [StateData]),
     {next_state, doing, StateData#data{events = [read | Events], reading = read}};
-
-
-
 
 %
 %   Unknown events.
@@ -272,8 +264,6 @@ opening(StateData = #data{events = Events}) ->
     end.
 
 do_smthng(StateData = #data{reading = Reading}) ->
-    % timer:sleep(1000),
-    % lager:info("WAIT TO DO SOMETHING"),
     case Reading of
         read -> 
             lager:info("DO SOMETHING ~p", [Reading]),

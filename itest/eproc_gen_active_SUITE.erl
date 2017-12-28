@@ -107,25 +107,27 @@ mock_opening(StateData) ->
 %%
 test_active_states(_Config) ->
     % Mocks
-    % StateData = { [], {2, s} },
-    % ok = mock_opening(StateData),
+    ok = meck:new(eproc_timer, [passthrough]),
 
     % test
     {ok, Read} = eproc_fsm_reading:create(),
-    ok = meck:wait(eproc_fsm_reading, opening, [{ok, Read}], 10),
     {ok, doing} = state(Read, 50),
-
-    ok = timer:sleep(550),                      % Wait for giveup.
-    % {ok, wait} = state(eproc_fsm_reading, Read, 50),
-    % ok = eproc_gen_active:state('_', doing, {timer,giveup}, '_'),
+    ok = timer:sleep(500),                  % Wait for doing giveup.
+    {ok, wait} = state(Read, 50),
     ok = eproc_fsm_reading:read(Read),
-    
-    % {ok, '_'} = eproc_test:get_state(Read, [running_only]),
     {ok, wait} = state(Read, 50),
     % ok = timer:sleep(50),  % Wait for doing read.
     ok = eproc_fsm_reading:stop(Read),
-    ok.
 
+    % results: Process sucessfully pass opening state, by setting uo timers, then:
+    %   1) first time doing state retrying and giving up, 
+    %   2) after 'read' event process returns to 'doing' state and sets again timers. 
+    %   3) 'Stop' event finish the process.
+    1 = meck:num_calls(eproc_timer, set, [step_retry, '_', retry, opening]), % 1
+    1 = meck:num_calls(eproc_timer, set, [step_giveup, '_', '_', opening]),  % 1
+    6 = meck:num_calls(eproc_timer, set, [step_retry, '_', retry, doing]), % 5+1
+    2 = meck:num_calls(eproc_timer, set, [step_giveup, '_', '_', doing]),  % 1+1
+    ok.
 
 %%
 %%  TODO: Send msg.
