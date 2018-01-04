@@ -22,18 +22,11 @@
 -module(eproc_fsm_reading).
 -behaviour(eproc_fsm).
 -compile([{parse_transform, lager_transform}]).
--export([create/0, read/1, stop/1]).
+-export([start/0, read/1, stop/1]).
 -export([init/1, init/2, handle_state/3, state/3, terminate/3, code_change/4, format_status/2]).
 -include_lib("eproc_core/include/eproc.hrl").
 
--define(STEP_RETRY,      100).
--define(STEP_GIVEUP,     500).
--define(PROCESS_TIMEOUT, {2, s}).
 -define(ERROR_NO_LOG_FUN(SD), fun(_Reason) -> {same_state, SD} end).
--define(RETRY_EVENT, c).
--define(RETRY_SPEC, {?RETRY_EVENT, ?STEP_RETRY, step_retry}).
--define(GIVEUP_EVENT, giveup).
--define(GIVEUP_SPEC(N), {giveup, 500, step_giveup, N}).
 
 %%% ============================================================================
 %%% Public API.
@@ -42,9 +35,7 @@
 %%
 %%
 %%
-create() ->
-    % lager:debug("Creating new Reading."),
-    % ok.
+start() ->
     StartOpts = [{register, id}],
     CreateOpts = [
         {start_spec, {default, StartOpts}}
@@ -52,7 +43,6 @@ create() ->
     Args = {},
     Event = start,
     {ok, FsmRef, ok} = eproc_fsm:sync_send_create_event(?MODULE, Args, Event, CreateOpts),
-    lager:info("CREATE FsmRef ~p", [FsmRef]),
     {ok, FsmRef}.
 
 %%
@@ -74,9 +64,6 @@ stop(FsmRef) ->
     initial |
     opening |
     waiting |
-    % {reading, waiting} |
-    % {reading, notifying} |
-    % {reading, receiving} |
     doing |
     wait |
     timeouted |
@@ -166,7 +153,6 @@ state(AnyState, {event, stop}, StateData) ->
 %%  The `initial` state.
 %%
 state(initial, {sync, _From, start}, StateData = #data{events = Events}) ->
-    lager:warning("INITIAL STATE ~p.", [StateData]),
     {reply_next, ok, opening, StateData#data{events = [start | Events]}};
 
 %%
@@ -186,17 +172,18 @@ state(opening = State, Trigger, StateData) when
         error  => ?ERROR_NO_LOG_FUN(StateData)
     });
 
+% ------------------------------------------------------------------------------
 %%
 %%  The `waiting` state.
 %%
 state(waiting, {entry, _PrevState}, StateData) ->
     {next_state, doing, StateData};
 
-state(waiting, {event, read}, StateData = #data{events = Events}) ->
+state({waiting, SubState}, {sync, _From, {event, read}}, StateData = #data{events = Events}) ->
     {next_state, doing, StateData#data{events = [read | Events], reading = read}};
 
 %%
-%%  The `doing_timeout` state.
+%%  The `doing` state.
 %%
 state(doing = State, Trigger, StateData) when
         element(1, Trigger) =:= entry;
