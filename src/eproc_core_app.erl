@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013-2015 Erisata, UAB (Ltd.)
+%| Copyright 2013-2018 Erisata, UAB (Ltd.)
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -18,20 +18,23 @@
 %%  OTP Application module for eproc_core.
 %%
 %%  The following options can/should be provided for the
-%%  `eproc_core` application:
+%%  `eproc_core' application:
 %%
-%%  `store`
+%%  `store'
 %%  :   [mandatory] specifies store implementation to be used.
 %%      Value for this option is MFA, used to get store reference.
-%%      Example value: `{eproc_store_ets, ref, []}`.
-%%  `registry`
+%%      Example value: `{eproc_store_ets, ref, []}'.
+%%  `registry'
 %%  :   [optional] specifies registry implementation to be used.
 %%      Value for this option is MFA, used to get registry reference.
-%%      Example value: `{eproc_reg_gproc, ref, []}`.
+%%      Example value: `{eproc_reg_gproc, ref, []}'.
+%%  `startup_after'
+%%  :   [optional] specifies what should happed before starting the FSMs.
+%%      Example value: `[{applications, [app_1, app_2]}]'.
 %%
 -module(eproc_core_app).
 -behaviour(application).
--export([store_cfg/0, registry_cfg/0]).
+-export([store_cfg/0, registry_cfg/0, startup_after/0]).
 -export([start/2, stop/1]).
 
 -define(APP, eproc_core).
@@ -60,6 +63,15 @@ store_cfg() ->
 
 registry_cfg() ->
     application:get_env(?APP, registry).
+
+
+%%  @doc
+%%  Returns what should happen before starting the FSMs.
+%%
+-spec startup_after() -> {ok, [{applications, [atom()]}]}.
+
+startup_after() ->
+    {ok, application:get_env(?APP, startup_after, [])}.
 
 
 

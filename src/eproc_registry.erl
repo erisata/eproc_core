@@ -33,7 +33,7 @@
 %%%
 -module(eproc_registry).
 -compile([{parse_transform, lager_transform}]).
--export([supervisor_child_specs/1, ref/0, ref/2]).
+-export([supervisor_child_specs/1, ref/0, ref/2, wait_for_startup/0]).
 -export([wait_for/3, make_new_fsm_ref/3, make_fsm_ref/2, register_fsm/3, whereis_fsm/2]).
 -export_type([ref/0, registry_fsm_ref/0]).
 -include("eproc.hrl").
@@ -172,6 +172,42 @@ ref() ->
 
 ref(Module, Args) ->
     {ok, {Module, Args}}.
+
+
+%%  @doc
+%%  Waits until all startup conditions are met.
+%%  This synchronization was introduced to wait for bussiness
+%%  application to start before running the FSMs that require
+%%  some services from that application.
+%%
+wait_for_startup() ->
+    case eproc_core_app:startup_after() of
+        {ok, []} ->
+            ok;
+        {ok, StartupAfter} ->
+            lager:debug("Startup will be performed after: ~p", [StartupAfter]),
+            wait_for_startup(StartupAfter)
+    end.
+
+
+wait_for_startup(_StartupAfter = []) ->
+    lager:debug("Startup condition is reached."),
+    ok;
+
+wait_for_startup(StartupAfter = [{applications, Applications} | Other]) ->
+    StartedApps = [ AppName || {AppName, _AppDesc, _AppVsn} <- application:which_applications() ],
+    AppNotStarted = fun (App) ->
+        not lists:member(App, StartedApps)
+    end,
+    case lists:filter(AppNotStarted, Applications) of
+        [] ->
+            lager:debug("Startup: all required applications are started: ~p", [Applications]),
+            wait_for_startup(Other);
+        NotStartedApps ->
+            lager:debug("Startup: still waiting for applications: ~p", [NotStartedApps]),
+            timer:sleep(1000),
+            wait_for_startup(StartupAfter)
+    end.
 
 
 %%

@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013-2016 Erisata, UAB (Ltd.)
+%| Copyright 2013-2018 Erisata, UAB (Ltd.)
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 %| limitations under the License.
 %\--------------------------------------------------------------------
 
-%%%
+%%% @doc
 %%% GProc based registry. This registry is not dedesigned to work
 %%% in clusters. It can be used for tests or single node deploymens.
 %%%
@@ -41,28 +41,28 @@
 %%% Public API.
 %%% ============================================================================
 
-%%
+%%  @doc
 %%  Start the registry.
 %%
 start_link(Name, Load) ->
     gen_server:start_link(Name, ?MODULE, {Load}, []).
 
 
-%%
+%%  @doc
 %%  Create reference to this registry.
 %%
 ref() ->
-    eproc_store:ref(?MODULE, []).
+    eproc_registry:ref(?MODULE, []).
 
 
-%%
+%%  @doc
 %%  Create reference to this registry.
 %%
 ref(Args) ->
-    eproc_store:ref(?MODULE, Args).
+    eproc_registry:ref(?MODULE, Args).
 
 
-%%
+%%  @doc
 %%  Load FSM instances.
 %%
 load() ->
@@ -229,6 +229,7 @@ handle_info('eproc_reg_gproc$load', State = #state{loaded = Loaded}) ->
         true ->
             {noreply, State};
         false ->
+            ok = eproc_registry:wait_for_startup(),
             ok = start_all(),
             {noreply, State}
     end.
