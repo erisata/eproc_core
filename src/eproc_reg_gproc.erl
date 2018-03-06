@@ -231,7 +231,10 @@ handle_info('eproc_reg_gproc$load', State = #state{loaded = Loaded}) ->
         false ->
             ok = eproc_registry:wait_for_startup(),
             ok = start_all(),
-            {noreply, State}
+            NewState = State#state{
+                loaded = true
+            },
+            {noreply, NewState}
     end.
 
 
