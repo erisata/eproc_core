@@ -21,7 +21,6 @@
 -compile([{parse_transform, lager_transform}]).
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 -export([
-    test_active_states/1,
     test_orthogonal_states/1
 ]).
 -include_lib("common_test/include/ct.hrl").
@@ -32,7 +31,6 @@
 %%  CT API.
 %%
 all() -> [
-    test_active_states,
     test_orthogonal_states
     ].
 
@@ -105,34 +103,7 @@ mock_opening(StateData) ->
 %% =============================================================================
 
 %%
-%%  Test active states.
-%%
-%%   1) Process sucessfully pass opening state, by setting up timers, then:
-%%   2) first time doing state retrying and giving up, 
-%%   3) after 'read' event process returns to 'doing' state and sets again timers. 
-%%   4) 'Stop' event finish the process.
-%%
-test_active_states(_Config) ->
-    % Mocks
-    ok = meck:new(eproc_timer, [passthrough]),
-    % Test
-    {ok, Read} = eproc_fsm_reading:start(),
-    {ok, doing} = state(Read, 50),
-    ok = timer:sleep(500),                  % Wait for doing giveup.
-    {ok, wait} = state(Read, 50),
-    ok = eproc_fsm_reading:read(Read),
-    {ok, wait} = state(Read, 50),
-    ok = eproc_fsm_reading:stop(Read),
-    % Test results
-    1 = meck:num_calls(eproc_timer, set, [step_retry, '_', retry, opening]), % 1
-    1 = meck:num_calls(eproc_timer, set, [step_giveup, '_', '_', opening]),  % 1
-    6 = meck:num_calls(eproc_timer, set, [step_retry, '_', retry, doing]), % 5+1
-    2 = meck:num_calls(eproc_timer, set, [step_giveup, '_', '_', doing]),  % 1+1
-    ok = meck:unload([eproc_timer]),
-    ok.
-
-%%
-%%  Test orthogonal states.
+%%  Test orthogonal active states.
 %%
 %%   1) Lamp-2 process sucessfully pass gen_active initializing state and creates 
 %%      2 initial orthogonal states: {operated, condition = waiting, switch = off}
@@ -145,21 +116,18 @@ test_orthogonal_states(_Config) ->
     % Mocks
     ok = meck:new(eproc_timer, [passthrough]),
     % Test    
-    {ok, Lamp}      = eproc_fsm__lamp2:create(),        % It is turned off, when created.
+    {ok, Lamp}          = eproc_fsm__lamp2:create(),        % It is turned off, when created.
     {ok, {operated, waiting, off}} = state(Lamp, 50),
-    ok              = eproc_fsm__lamp2:toggle(Lamp),    % Switching on.
+    ok                  = eproc_fsm__lamp2:toggle(Lamp),    % Switching on.
     {ok, {operated, waiting, switching}} = state(Lamp, 50),
-    ok              = timer:sleep(500),                 % Wait for switching giveup.
+    ok                  = timer:sleep(500),                 % Wait for switching giveup.
     {ok, {waiting, off}}  = eproc_fsm__lamp2:state(Lamp),
-    ok              = eproc_fsm__lamp2:fix(Lamp),       % Switch state does not change here.
+    ok                  = eproc_fsm__lamp2:fix(Lamp),       % Switch state does not change here.
     {ok, {working, off}}  = eproc_fsm__lamp2:state(Lamp),
-    ok              = eproc_fsm__lamp2:toggle(Lamp),    % Switching on 2.
+    ok                  = eproc_fsm__lamp2:toggle(Lamp),    % Switching on 2.
     {ok, {working, on}}  = eproc_fsm__lamp2:state(Lamp),
-    ok              = eproc_fsm__lamp2:check(Lamp),     % Checking at the same time
+    ok                  = eproc_fsm__lamp2:check(Lamp),     % Checking at the same time
     {ok, {working, on}}  = eproc_fsm__lamp2:state(Lamp),
-    ok              = eproc_fsm__lamp2:break(Lamp),
-    {ok, {broken, off}}  = eproc_fsm__lamp2:state(Lamp),
-    ok              = eproc_fsm__lamp2:recycle(Lamp),
     % Test results
     6 = meck:num_calls(eproc_timer, set, [step_retry, '_', retry, {operated,'_',switching}]),
     2 = meck:num_calls(eproc_timer, set, [step_giveup, '_', '_', {operated,'_',switching}]),
@@ -167,11 +135,6 @@ test_orthogonal_states(_Config) ->
     1 = meck:num_calls(eproc_timer, set, [step_giveup, '_', '_', {operated, checking, '_'}]),
     ok = meck:unload([eproc_timer]),
     ok.
-
-
-%%
-%%  TODO: Send msg.
-%%
 
 
 %%

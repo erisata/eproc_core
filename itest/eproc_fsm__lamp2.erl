@@ -15,12 +15,12 @@
 %\--------------------------------------------------------------------
 
 %%%
-%%% Example FSM implementation, that uses orthogonal states.
+%%% Example FSM implementation, that uses orthogonal active states.
 %%%
 -module(eproc_fsm__lamp2).
 -behaviour(eproc_fsm).
 -compile([{parse_transform, lager_transform}]).
--export([create/0, break/1, fix/1, check/1, toggle/1, state/1, recycle/1]).
+-export([create/0, fix/1, check/1, toggle/1, state/1]).
 -export([init/1, init/2, handle_state/3, terminate/3, code_change/4, format_status/2]).
 -include_lib("eproc_core/include/eproc.hrl").
 
@@ -47,13 +47,6 @@ create() ->
 %%
 %%
 %%
-break(FsmRef) ->
-    eproc_fsm:sync_send_event(FsmRef, break).
-
-
-%%
-%%
-%%
 fix(FsmRef) ->
     eproc_fsm:sync_send_event(FsmRef, fix).
 
@@ -70,27 +63,11 @@ check(FsmRef) ->
 toggle(FsmRef) ->
     eproc_fsm:sync_send_event(FsmRef, toggle).
 
-
-%%
-%%
-%%
-% events(FsmRef) ->
-%     eproc_fsm:sync_send_event(FsmRef, events).
-
-
 %%
 %%
 %%
 state(FsmRef) ->
     eproc_fsm:sync_send_event(FsmRef, state).
-
-
-%%
-%%
-%%
-recycle(FsmRef) ->
-    eproc_fsm:sync_send_event(FsmRef, recycle).
-
 
 
 %%% ============================================================================
@@ -104,8 +81,7 @@ recycle(FsmRef) ->
 
 -type state() ::
     initial |
-    #operated{} |
-    recycled.
+    #operated{}.
 
 -record(data, {
     events, 
@@ -179,12 +155,6 @@ format_status(_Opt, State) ->
 -spec state(state(), term(), #data{}) -> term().
 
 % ------------------------------------------------------------------------------
-%   All state events.
-%
-state(AnyState, {event, stop}, StateData) ->
-    lager:warning("Force stopping process @~p.", [AnyState]),
-    {final_state, stopped, StateData};
-
 %
 %   The initial state.
 %
@@ -203,7 +173,7 @@ state(initializing = State, Trigger, StateData) when
     eproc_gen_active:state(State, Trigger, StateData, #{
         do     => {do_initialize, fun configure/1},
         retry  => {retry, 100, step_retry},
-        giveup => {giveup, 500, step_giveup, recycled},
+        giveup => {giveup, 500, step_giveup, initial},
         next   => operated,
         error  => ?ERROR_NO_LOG_FUN(StateData)
     });
@@ -215,11 +185,6 @@ state(initializing = State, Trigger, StateData) when
 state(operated, {entry, _PrevSName}, StateData) ->
     {next_state, #operated{condition = waiting, switch = off}, StateData};
 
-state(#operated{}, {sync, _From, break}, StateData = #data{events = Events, condition = C}) ->
-    {reply_next, ok, #operated{condition = broken, switch = off}, StateData#data{events = [off | Events], condition = [broken | C]}};   % NOTE: Both changed.
-
-state(#operated{}, {sync, _From, recycle}, StateData) ->
-    {reply_final, ok, recycled, StateData};
 
 state(#operated{}, {exit, _NextState}, StateData) ->
     {ok, StateData};
@@ -338,20 +303,16 @@ state(AnyState, {info, Unknown}, StateData) ->
 switching(StateData = #data{condition = Cond}) ->
     case hd(Cond) of
         working -> 
-            lager:info("LAMP IS SWITCHING-ON, Condition= ~p", [Cond]),
             {ok, StateData};
         _ -> 
-            lager:error("LAMP IS BROKEN, Condition= ~p", [Cond]),
             {error, Cond}
     end.
 
 checking(StateData = #data{events = Events}) ->
     case hd(Events) of
         on -> 
-            lager:info("LAMP IS WORKING, Events= ~p", [Events]),
             {ok, StateData};
         _ -> 
-            lager:error("LAMP IS OFF, Events= ~p", [Events]),
             {error, Events}
     end.
 
@@ -360,6 +321,5 @@ configure(StateData = #data{condition = Cond, events = Events}) ->
         condition = [],
         events    = []
     },
-    lager:info("CONFIGURE NewStateData ~p", [NewStateData]),
     {ok, NewStateData}.
 
