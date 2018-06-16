@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2015-2016 Erisata, UAB (Ltd.)
+%| Copyright 2015-2018 Erisata, UAB (Ltd.)
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -14,8 +14,8 @@
 %| limitations under the License.
 %\--------------------------------------------------------------------
 
-%%%
-%%% Implementation of the SNMP metrics, as described in the `mibs/ERISATA-EPROC-CORE-MIB.mib`.
+%%% @doc
+%%% Implementation of the SNMP metrics, as described in the `mibs/ERISATA-EPROC-CORE-MIB.mib'.
 %%%
 -module(eproc_snmp).
 -export([
@@ -29,6 +29,13 @@
 ]).
 
 -define(ANY, '_').
+-define(MIN_Gauge32,          0).
+-define(MAX_Gauge32, 4294967295).
+
+
+%%% ============================================================================
+%%% SNMP callback functions.
+%%% ============================================================================
 
 %%
 %%
@@ -54,34 +61,49 @@ ot_registry_module(get) ->
 %%
 %%
 ot_limit_count(get) ->
-    {value, eproc_limits:info(count)}.
+    gauge32_value(eproc_limits:info(count)).
 
 
 %%
 %%
 %%
 ot_inst_stats(get, StatType) ->
-    {value, erlang:round(eproc_stats:get_fsm_stats(inst, ?ANY, StatType))}.
+    gauge32_value(eproc_stats:get_fsm_stats(inst, ?ANY, StatType)).
 
 
 %%
 %%
 %%
 ot_trn_stats(get, StatType) ->
-    {value, erlang:round(eproc_stats:get_fsm_stats(trn, ?ANY, StatType))}.
+    gauge32_value(eproc_stats:get_fsm_stats(trn, ?ANY, StatType)).
 
 
 %%
 %%
 %%
 ot_msg_stats(get, StatType) ->
-    {value, erlang:round(eproc_stats:get_fsm_stats(msg, ?ANY, StatType))}.
+    gauge32_value(eproc_stats:get_fsm_stats(msg, ?ANY, StatType)).
 
 
 %%
 %%
 %%
 ot_store_stats(get, Operation, StatType) ->
-    {value, erlang:round(eproc_stats:get_store_stats(Operation, StatType))}.
+    gauge32_value(eproc_stats:get_store_stats(Operation, StatType)).
+
+
+
+%%% ============================================================================
+%%% Private functions.
+%%% ============================================================================
+
+%%  @private
+%%  Format the value as a Gauge32.
+%%
+gauge32_value(Value) when is_integer(Value) ->
+    {value, erlang:min(?MAX_Gauge32, erlang:max(?MIN_Gauge32, Value))};
+
+gauge32_value(Value) when is_float(Value) ->
+    gauge32_value(erlang:round(Value)).
 
 
