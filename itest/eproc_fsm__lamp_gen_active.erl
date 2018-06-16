@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013-2015 Erisata, UAB (Ltd.)
+%| Copyright 2013-2018 Erisata, UAB (Ltd.)
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -15,9 +15,9 @@
 %\--------------------------------------------------------------------
 
 %%%
-%%% Example FSM implementation, that uses orthogonal active states.
+%%% Example FSM implementation, that uses orthogonal `gen_active' states.
 %%%
--module(eproc_fsm__lamp2).
+-module(eproc_fsm__lamp_gen_active).
 -behaviour(eproc_fsm).
 -compile([{parse_transform, lager_transform}]).
 -export([create/0, fix/1, check/1, toggle/1, state/1]).
@@ -25,6 +25,7 @@
 -include_lib("eproc_core/include/eproc.hrl").
 
 -define(ERROR_NO_LOG_FUN(SD), fun(_Reason) -> {same_state, SD} end).
+
 
 %%% ============================================================================
 %%% Public API.
@@ -70,13 +71,14 @@ state(FsmRef) ->
     eproc_fsm:sync_send_event(FsmRef, state).
 
 
+
 %%% ============================================================================
 %%% Internal data structures.
 %%% ============================================================================
 
 -record(operated, {
     condition = '_' :: '_' | waiting | checking | broken | working,
-    switch = '_'    :: '_' | on | switching | off
+    switch    = '_' :: '_' | on | switching | off
 }).
 
 -type state() ::
@@ -296,6 +298,7 @@ state(AnyState, {info, Unknown}, StateData) ->
     {same_state, StateData}.
 
 
+
 %%% ============================================================================
 %%% Internal functions.
 %%% ============================================================================
@@ -322,4 +325,5 @@ configure(StateData = #data{condition = Cond, events = Events}) ->
         events    = []
     },
     {ok, NewStateData}.
+
 

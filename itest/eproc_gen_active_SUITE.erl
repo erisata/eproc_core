@@ -1,5 +1,5 @@
 %/--------------------------------------------------------------------
-%| Copyright 2013-2015 Erisata, UAB (Ltd.)
+%| Copyright 2013-2018 Erisata, UAB (Ltd.)
 %|
 %| Licensed under the Apache License, Version 2.0 (the "License");
 %| you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 %\--------------------------------------------------------------------
 
 %%
-%%  Testcases for `eproc_fsm`.
+%%  Testcases for `eproc_gen_active'.
 %%
 -module(eproc_gen_active_SUITE).
 -compile([{parse_transform, lager_transform}]).
@@ -105,7 +105,7 @@ mock_opening(StateData) ->
 %%
 %%  Test orthogonal active states.
 %%
-%%   1) Lamp-2 process sucessfully pass gen_active initializing state and creates 
+%%   1) Lamp process sucessfully pass gen_active initializing state and creates
 %%      2 initial orthogonal states: {operated, condition = waiting, switch = off}
 %%   2) first time Lamp 'switching' state doesn't meet condition 'working' retrying and giving up, 
 %%   3) after 'fix' event change Lamp condition to 'working', 'switching' pass to 'on',
@@ -115,19 +115,19 @@ mock_opening(StateData) ->
 test_orthogonal_states(_Config) ->
     % Mocks
     ok = meck:new(eproc_timer, [passthrough]),
-    % Test    
-    {ok, Lamp}          = eproc_fsm__lamp2:create(),        % It is turned off, when created.
+    % Test
+    {ok, Lamp}                     = eproc_fsm__lamp_gen_active:create(),           % It is turned off, when created.
     {ok, {operated, waiting, off}} = state(Lamp, 50),
-    ok                  = eproc_fsm__lamp2:toggle(Lamp),    % Switching on.
+    ok                                   = eproc_fsm__lamp_gen_active:toggle(Lamp), % Switching on.
     {ok, {operated, waiting, switching}} = state(Lamp, 50),
-    ok                  = timer:sleep(500),                 % Wait for switching giveup.
-    {ok, {waiting, off}}  = eproc_fsm__lamp2:state(Lamp),
-    ok                  = eproc_fsm__lamp2:fix(Lamp),       % Switch state does not change here.
-    {ok, {working, off}}  = eproc_fsm__lamp2:state(Lamp),
-    ok                  = eproc_fsm__lamp2:toggle(Lamp),    % Switching on 2.
-    {ok, {working, on}}  = eproc_fsm__lamp2:state(Lamp),
-    ok                  = eproc_fsm__lamp2:check(Lamp),     % Checking at the same time
-    {ok, {working, on}}  = eproc_fsm__lamp2:state(Lamp),
+    ok                   = timer:sleep(500),                            % Wait for switching giveup.
+    {ok, {waiting, off}} = eproc_fsm__lamp_gen_active:state(Lamp),
+    ok                   = eproc_fsm__lamp_gen_active:fix(Lamp),        % Switch state does not change here.
+    {ok, {working, off}} = eproc_fsm__lamp_gen_active:state(Lamp),
+    ok                   = eproc_fsm__lamp_gen_active:toggle(Lamp),     % Switching on 2.
+    {ok, {working, on}}  = eproc_fsm__lamp_gen_active:state(Lamp),
+    ok                   = eproc_fsm__lamp_gen_active:check(Lamp),      % Checking at the same time
+    {ok, {working, on}}  = eproc_fsm__lamp_gen_active:state(Lamp),
     % Test results
     6 = meck:num_calls(eproc_timer, set, [step_retry, '_', retry, {operated,'_',switching}]),
     2 = meck:num_calls(eproc_timer, set, [step_giveup, '_', '_', {operated,'_',switching}]),
@@ -136,12 +136,4 @@ test_orthogonal_states(_Config) ->
     ok = meck:unload([eproc_timer]),
     ok.
 
-
-%%
-%%  Clear msg inbox.
-%%
-flush_msgs() ->
-    receive _ -> flush_msgs()
-    after 0 -> ok
-    end.
 
